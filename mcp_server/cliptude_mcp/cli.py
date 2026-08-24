@@ -63,7 +63,17 @@ def _run_auth(auth_cmd: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="cliptude", description="Cliptude jobs CLI")
+    parser = argparse.ArgumentParser(
+        prog="cliptude",
+        description="Cliptude jobs CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "example:\n"
+            '  cliptude generate --template "Finance vector weekly" --title "Why index funds win" '
+            '--prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" '
+            '--duration 3-4'
+        ),
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     auth = sub.add_parser("auth", help="Sign in with a browser")
@@ -76,16 +86,35 @@ def main(argv: list[str] | None = None) -> None:
     t.add_argument("--limit", type=int, default=20)
     t.add_argument("--offset", type=int, default=0)
 
-    g = sub.add_parser("generate", help="Start a job")
+    g = sub.add_parser(
+        "generate",
+        help="Start a job",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "example:\n"
+            '  cliptude generate --template "Finance vector weekly" --title "Why index funds win" '
+            '--prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" '
+            '--duration 3-4'
+        ),
+    )
     g.add_argument("--template", required=True, help="Template name or UUID")
     g.add_argument("--title", required=True)
-    g.add_argument("--prompt", default="")
+    g.add_argument(
+        "--prompt",
+        default="",
+        help='Topic or brief, e.g. "why most retail traders underperform the S&P over 10 years, keep it for beginners"',
+    )
     g.add_argument("--script", default="")
     g.add_argument("--script-file", default="")
     g.add_argument(
         "--faceless-coding",
         default="",
         help="external = you author Faceless storyboard/HTML; omit for Cliptude coding",
+    )
+    g.add_argument(
+        "--duration",
+        default="",
+        help="Wizard duration bucket, e.g. 3-4 or 6-8. Default: template duration (or estimated from --script)",
     )
 
     k = sub.add_parser("kit", help="Download Faceless coding kit zip")
@@ -129,6 +158,7 @@ def main(argv: list[str] | None = None) -> None:
                 prompt=args.prompt or None,
                 script=script or None,
                 faceless_coding=(args.faceless_coding or None),
+                duration=(args.duration or None),
             ))
         elif args.cmd == "kit":
             dest = Path(args.out)

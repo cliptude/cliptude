@@ -53,6 +53,18 @@ def resolve_base_url() -> str:
     return desktop or DEFAULT_SAAS_URL
 
 
+def django_proxy_headers(base_url: str) -> dict[str, str]:
+    """Mark docker-internal HTTP as HTTPS so Django skips SECURE_SSL_REDIRECT.
+
+    Production Django 301s ``http://web:5021`` to ``https://web:5021``. That
+    handshake times out inside the compose network, so MCP token verification
+    always failed after a successful OAuth exchange.
+    """
+    if (base_url or "").strip().lower().startswith("http://"):
+        return {"X-Forwarded-Proto": "https"}
+    return {}
+
+
 class CliptudeApiError(Exception):
     def __init__(self, message: str, status: int | None = None, payload: Any = None):
         super().__init__(message)
@@ -87,6 +99,7 @@ class CliptudeClient:
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
             "Content-Type": "application/json",
+            **django_proxy_headers(self.base_url),
         }
 
     def _maybe_refresh(self) -> bool:
@@ -144,6 +157,7 @@ class CliptudeClient:
         prompt: str | None = None,
         script: str | None = None,
         faceless_coding: str | None = None,
+        duration: str | None = None,
     ) -> Any:
         body: dict[str, Any] = {"template_id": template_id, "title": title}
         if prompt:
@@ -152,6 +166,8 @@ class CliptudeClient:
             body["script"] = script
         if faceless_coding:
             body["faceless_coding"] = faceless_coding
+        if duration:
+            body["duration"] = duration
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
     def get_job(self, job_id: str) -> Any:
@@ -174,6 +190,7 @@ class CliptudeClient:
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Accept": "application/zip, application/json",
+                    **django_proxy_headers(self.base_url),
                 },
                 timeout=self.timeout,
                 follow_redirects=True,
@@ -205,6 +222,7 @@ class CliptudeClient:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
+            **django_proxy_headers(self.base_url),
         }
         try:
             with path.open("rb") as fh:
