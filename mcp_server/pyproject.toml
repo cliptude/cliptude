@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cliptude-mcp"
+version = "0.1.1"
+description = "Cliptude jobs CLI and MCP server (thin client of /api/v1)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Cliptude" }]
+dependencies = [
+  "httpx>=0.28.1",
+  "mcp>=2.0.0",
+  "pydantic>=2.0",
+]
+[project.scripts]
+cliptude = "cliptude_mcp.cli:main"
+cliptude-mcp = "cliptude_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cliptude_mcp"]

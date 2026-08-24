@@ -1,0 +1,27 @@
+{
+  "name": "@cliptude/cli",
+  "version": "0.1.1",
+  "description": "Cliptude CLI — generate videos from saved templates.",
+  "homepage": "https://github.com/cliptude/cliptude#readme",
+  "bin": {
+    "cliptude": "./npm/bin/cliptude.js"
+  },
+  "files": [
+    "cliptude_mcp",
+    "pyproject.toml",
+    "README.md",
+    "npm"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cliptude/cliptude.git",
+    "directory": "mcp_server"
+  }
+}
