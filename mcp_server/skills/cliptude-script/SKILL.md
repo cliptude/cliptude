@@ -110,5 +110,3 @@ If the user asked **Cliptude** to write a script and stop (no video), skip this 
 
 If the user gave a **voiceover file**, skip steps 1–3. Hand off with `--voiceover` / `voiceover_path` only.
 If the user gave a **talking-head video**, skip steps 1–3. Hand off with `--talking-head` / `talking_head_path` only.
-
-Faceless BYO is the CLI/MCP default for Faceless Explainer (`faceless_coding=external`). Still write this script first when the user only gave a topic. Phase A voices **this** narration, then you author HTML against the kit. Pass `--faceless-coding cliptude` only if they want Cliptude to code.

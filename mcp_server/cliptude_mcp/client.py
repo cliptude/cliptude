@@ -13,9 +13,6 @@ import httpx
 from cliptude_mcp.credentials import stored_access_token
 
 DEFAULT_SAAS_URL = "https://cliptude.com"
-FACELESS_EXPLAINER_FORMAT = "faceless_explainer"
-FACELESS_CODING_EXTERNAL = "external"
-FACELESS_CODING_CLIPTUDE = "cliptude"
 TALKING_HEAD_EXTS = {".mp4", ".mov", ".webm", ".avi"}
 _request_token: ContextVar[str | None] = ContextVar("cliptude_request_token", default=None)
 
@@ -260,26 +257,6 @@ class CliptudeClient:
             params["language"] = language
         return self.request("GET", "/api/v1/voices", params=params)
 
-    def _template_format(self, template_id: str) -> str:
-        try:
-            tmpl = self.get_template(template_id)
-        except CliptudeApiError:
-            return ""
-        if not isinstance(tmpl, dict):
-            return ""
-        return str(tmpl.get("format") or "").strip().lower()
-
-    def _resolve_faceless_coding(self, template_id: str, faceless_coding: str | None) -> str | None:
-        """CLI/MCP default is external for Faceless Explainer. Other formats omit the field."""
-        raw = (faceless_coding or "").strip().lower() or None
-        if raw == FACELESS_CODING_CLIPTUDE:
-            return FACELESS_CODING_CLIPTUDE
-        if raw not in (None, FACELESS_CODING_EXTERNAL):
-            return raw
-        if self._template_format(template_id) == FACELESS_EXPLAINER_FORMAT:
-            return FACELESS_CODING_EXTERNAL
-        return None
-
     def create_job(
         self,
         *,
@@ -287,7 +264,6 @@ class CliptudeClient:
         title: str,
         prompt: str | None = None,
         script: str | None = None,
-        faceless_coding: str | None = None,
         duration: str | None = None,
         voiceover_path: str | Path | None = None,
         talking_head_path: str | Path | None = None,
@@ -318,7 +294,6 @@ class CliptudeClient:
             excluded_transition_kinds=excluded_transition_kinds,
             as_strings=True,
         )
-        coding = self._resolve_faceless_coding(template_id, faceless_coding)
         th_path = (str(talking_head_path).strip() if talking_head_path else "") or None
         vo_path = (str(voiceover_path).strip() if voiceover_path else "") or None
         output_kind = (output or "").strip().lower() or None
@@ -344,7 +319,6 @@ class CliptudeClient:
             return self._create_job_talking_head(
                 template_id=template_id,
                 title=title,
-                faceless_coding=coding,
                 talking_head_path=th_path,
                 avatar_intro_only=avatar_intro_only,
                 avatar_ai_footage=avatar_ai_footage,
@@ -364,7 +338,6 @@ class CliptudeClient:
             return self._create_job_multipart(
                 template_id=template_id,
                 title=title,
-                faceless_coding=coding,
                 duration=duration,
                 file_field="voiceover",
                 file_path=vo_path,
@@ -376,8 +349,6 @@ class CliptudeClient:
             body["prompt"] = prompt
         if script:
             body["script"] = script
-        if coding:
-            body["faceless_coding"] = coding
         if duration:
             body["duration"] = duration
         if output_kind and output_kind != "video":
@@ -406,7 +377,6 @@ class CliptudeClient:
         *,
         template_id: str,
         title: str,
-        faceless_coding: str | None,
         duration: str | None,
         file_field: str,
         file_path: str | Path,
@@ -418,8 +388,6 @@ class CliptudeClient:
         if not path.is_file():
             raise CliptudeApiError(missing_message)
         data: dict[str, str] = {"template_id": str(template_id), "title": title}
-        if faceless_coding:
-            data["faceless_coding"] = faceless_coding
         if duration:
             data["duration"] = duration
         if extra_data:
@@ -441,7 +409,6 @@ class CliptudeClient:
             return self._create_job_multipart(
                 template_id=template_id,
                 title=title,
-                faceless_coding=faceless_coding,
                 duration=duration,
                 file_field=file_field,
                 file_path=file_path,
@@ -474,7 +441,6 @@ class CliptudeClient:
         *,
         template_id: str,
         title: str,
-        faceless_coding: str | None,
         talking_head_path: str | Path,
         avatar_intro_only: bool | None = None,
         avatar_ai_footage: bool | None = None,
@@ -521,7 +487,6 @@ class CliptudeClient:
             return self._create_job_multipart(
                 template_id=template_id,
                 title=title,
-                faceless_coding=faceless_coding,
                 duration=None,
                 file_field="talking_head",
                 file_path=path,
@@ -539,7 +504,6 @@ class CliptudeClient:
             return self._create_job_multipart(
                 template_id=template_id,
                 title=title,
-                faceless_coding=faceless_coding,
                 duration=None,
                 file_field="talking_head",
                 file_path=path,
@@ -562,8 +526,6 @@ class CliptudeClient:
             "talking_head_r2_key": key,
             "talking_head_duration": str(duration),
         }
-        if faceless_coding:
-            body["faceless_coding"] = faceless_coding
         body.update(_avatar_job_fields(avatar_intro_only, avatar_ai_footage))
         body.update(
             _motion_control_job_fields(
@@ -613,12 +575,9 @@ class CliptudeClient:
     def get_job(self, job_id: str) -> Any:
         return self.request("GET", f"/api/v1/jobs/{job_id}")
 
-    def continue_job(self, job_id: str, *, faceless_coding: str | None = None) -> Any:
+    def continue_job(self, job_id: str) -> Any:
         """Queue a completed script/voiceover job, or a plan job with a locked plan, as a full video."""
-        body: dict[str, Any] = {}
-        if faceless_coding:
-            body["faceless_coding"] = faceless_coding
-        return self.request("POST", f"/api/v1/jobs/{job_id}/continue", json_body=body or None)
+        return self.request("POST", f"/api/v1/jobs/{job_id}/continue")
 
     # Agent-planned videos -------------------------------------------------------------------------
 
@@ -667,47 +626,6 @@ class CliptudeClient:
         """The built design, beat by beat and graphic by graphic, with links to the media (review before render)."""
         return self.request("GET", f"/api/v1/jobs/{job_id}/plan/review")
 
-    def download_coding_kit(self, job_id: str) -> Any:
-        """Return coding_kit url/path from get_job. Never downloads zip bytes."""
-        job = self.get_job(job_id)
-        kit = job.get("coding_kit") if isinstance(job, dict) else None
-        if not kit:
-            raise CliptudeApiError("Coding kit is not ready yet. Poll until status is awaiting_project.")
-        return kit
-
-    def download_coding_kit_file(self, job_id: str, dest: Path) -> Path:
-        url = f"{self.base_url}/api/v1/jobs/{job_id}/coding-kit"
-        try:
-            with httpx.stream(
-                "GET",
-                url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Accept": "application/zip, application/json",
-                    **django_proxy_headers(self.base_url),
-                },
-                timeout=self.timeout,
-                follow_redirects=True,
-            ) as resp:
-                if resp.status_code >= 400:
-                    try:
-                        payload = resp.read()
-                        data = json.loads(payload)
-                    except Exception:
-                        data = {"error": resp.reason_phrase}
-                    message = data.get("error") if isinstance(data, dict) else str(data)
-                    raise CliptudeApiError(message or f"HTTP {resp.status_code}", status=resp.status_code, payload=data)
-                dest = Path(dest)
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with dest.open("wb") as fh:
-                    for chunk in resp.iter_bytes():
-                        fh.write(chunk)
-        except CliptudeApiError:
-            raise
-        except httpx.HTTPError as exc:
-            raise CliptudeApiError(str(exc)) from exc
-        return dest
-
     def download_voiceover_file(self, job_id: str, dest: Path) -> Path:
         url = f"{self.base_url}/api/v1/jobs/{job_id}/voiceover"
         try:
@@ -740,35 +658,6 @@ class CliptudeClient:
         except httpx.HTTPError as exc:
             raise CliptudeApiError(str(exc)) from exc
         return dest
-
-    def submit_faceless_project(self, job_id: str, zip_path: str | Path) -> Any:
-        path = Path(zip_path)
-        if not path.is_file():
-            raise CliptudeApiError(f"Project zip not found: {path}")
-        url = f"{self.base_url}/api/v1/jobs/{job_id}/project"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Accept": "application/json",
-            **django_proxy_headers(self.base_url),
-        }
-        try:
-            with path.open("rb") as fh:
-                resp = httpx.post(
-                    url,
-                    headers=headers,
-                    files={"zip": (path.name, fh, "application/zip")},
-                    timeout=max(self.timeout, 120.0),
-                )
-        except httpx.HTTPError as exc:
-            raise CliptudeApiError(str(exc)) from exc
-        try:
-            payload = resp.json()
-        except ValueError:
-            payload = {"error": resp.text}
-        if resp.status_code >= 400:
-            message = payload.get("error") if isinstance(payload, dict) else str(payload)
-            raise CliptudeApiError(message or f"HTTP {resp.status_code}", status=resp.status_code, payload=payload)
-        return payload
 
     def list_jobs(self, *, status: str | None = None, limit: int = 20, offset: int = 0) -> Any:
         params: dict[str, Any] = {"limit": limit, "offset": offset}

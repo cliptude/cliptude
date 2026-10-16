@@ -105,9 +105,7 @@ def build_server(*, with_http_auth: bool = False):
         "If they provide a voiceover file, pass voiceover_path and omit prompt/script. "
         "If they provide a talking-head recording, pass talking_head_path and omit "
         "prompt/script/voiceover_path (template format must be talking_head). "
-        "Faceless Explainer jobs default to faceless_coding=external (this session "
-        "authors HTML). Pass faceless_coding=cliptude only if the user wants Cliptude "
-        "to code the visuals. Avatar Video templates may include avatar_intro_only "
+        "Avatar Video templates may include avatar_intro_only "
         "(Avatar Intro Only) and avatar_ai_footage (AI Image + AI Video); pass those "
         "on create_job to override the template, or omit them to keep the template. "
         "AGENT-PLANNED VIDEOS (Faceless Documentary, Top 10, Avatar Video): you plan every visual "
@@ -227,15 +225,6 @@ def build_server(*, with_http_auth: bool = False):
                 ),
             ),
         ] = None,
-        faceless_coding: Annotated[
-            str | None,
-            Field(
-                description=(
-                    'Faceless Explainer only. Default "external": this session authors HTML. '
-                    'Pass "cliptude" to let Cliptude code. Other formats ignore this field.'
-                ),
-            ),
-        ] = "external",
         duration: Annotated[
             str | None,
             Field(description="Wizard duration bucket such as 3-4 or 6-8. Omit to use the template (or estimate from script). Ignored when voiceover_path or talking_head_path is set — duration comes from the file."),
@@ -283,7 +272,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description="Transition slugs to exclude from auto-selection, e.g. 'flip-horizontal', 'film-burn'. Omit to use the saved template."),
         ] = None,
     ) -> dict[str, Any]:
-        """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Faceless Explainer defaults to faceless_coding=external; pass cliptude only if the user wants Cliptude to code. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
+        """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
         try:
             vo = (voiceover_path or "").strip() or None
             th = (talking_head_path or "").strip() or None
@@ -302,7 +291,6 @@ def build_server(*, with_http_auth: bool = False):
                 title=title,
                 prompt=prompt,
                 script=script,
-                faceless_coding=faceless_coding,
                 duration=duration,
                 voiceover_path=vo,
                 talking_head_path=th,
@@ -369,19 +357,10 @@ def build_server(*, with_http_auth: bool = False):
     @mcp.tool(title="Continue job into video")
     def continue_job(
         job_id: Annotated[str, Field(min_length=8, description="Completed script or voiceover job UUID, or a plan job with a locked plan")],
-        faceless_coding: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "Faceless Explainer only. Omit to let Cliptude code. "
-                    'Pass "external" if this session will author HTML.'
-                ),
-            ),
-        ] = None,
     ) -> dict[str, Any]:
         """Queue a completed script or voiceover job, or a plan job whose plan is locked, as a full video on the same id. Poll get_job until completed. Do not create a second job with the script or audio."""
         try:
-            return _client().continue_job(job_id, faceless_coding=faceless_coding)
+            return _client().continue_job(job_id)
         except Exception as exc:
             return _err(exc)
 
@@ -514,30 +493,6 @@ def build_server(*, with_http_auth: bool = False):
         """Job status, progress, error, output url (SaaS) or path (Desktop), and script / voiceover when this was a partial job. can_continue is true when continue_job can turn it into a video."""
         try:
             return _client().get_job(job_id)
-        except Exception as exc:
-            return _err(exc)
-
-    @mcp.tool(
-        title="Download coding kit",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
-    )
-    def download_coding_kit(
-        job_id: Annotated[str, Field(min_length=8, description="Job UUID")],
-    ) -> dict[str, Any]:
-        """Return coding_kit url or path after awaiting_project. Never returns zip bytes. Do not wait for the MP4."""
-        try:
-            return _client().download_coding_kit(job_id)
-        except Exception as exc:
-            return _err(exc)
-
-    @mcp.tool(title="Submit Faceless project")
-    def submit_faceless_project(
-        job_id: Annotated[str, Field(min_length=8, description="Job UUID")],
-        zip_path: Annotated[str, Field(min_length=1, description="Local path to the project zip")],
-    ) -> dict[str, Any]:
-        """Upload a local Faceless project zip (storyboard.json + frames). Returns 202. Poll get_job. Do not wait for the MP4."""
-        try:
-            return _client().submit_faceless_project(job_id, zip_path)
         except Exception as exc:
             return _err(exc)
 
@@ -696,7 +651,6 @@ def build_server(*, with_http_auth: bool = False):
             "with title plus prompt (topic), script (full narration), "
             "voiceover_path (local audio file), or talking_head_path "
             "(presenter video on a Talking Head template). Poll get_job. "
-            "Faceless Explainer defaults to faceless_coding=external. "
             "Avatar Video templates expose avatar_intro_only and avatar_ai_footage; "
             "pass them on create_job to override the template."
         )

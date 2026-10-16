@@ -65,49 +65,12 @@ class ClientTests(TestCase):
         with self.assertRaises(CliptudeApiError):
             _parse_set_args(["novalue"])
 
-    def test_create_job_defaults_external_for_faceless_explainer(self):
+    def test_faceless_explainer_job_lets_cliptude_code(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "get_template", return_value={"format": "faceless_explainer"}):
             with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
                 client.create_job(template_id="tmpl", title="T", script="Spoken words.")
-        self.assertEqual(req.call_args.kwargs["json_body"]["faceless_coding"], "external")
-
-    def test_create_job_omits_external_on_other_formats(self):
-        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
-        with patch.object(client, "get_template", return_value={"format": "youtube"}):
-            with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
-                client.create_job(
-                    template_id="tmpl",
-                    title="T",
-                    prompt="topic",
-                    faceless_coding="external",
-                )
         self.assertNotIn("faceless_coding", req.call_args.kwargs["json_body"])
-
-    def test_create_job_posts_explicit_cliptude(self):
-        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
-        with patch.object(client, "get_template") as get_tmpl:
-            with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
-                client.create_job(
-                    template_id="tmpl",
-                    title="T",
-                    prompt="topic",
-                    faceless_coding="cliptude",
-                )
-        get_tmpl.assert_not_called()
-        self.assertEqual(req.call_args.kwargs["json_body"]["faceless_coding"], "cliptude")
-
-    def test_create_job_posts_faceless_coding(self):
-        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
-        with patch.object(client, "get_template", return_value={"format": "faceless_explainer"}):
-            with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
-                client.create_job(
-                    template_id="tmpl",
-                    title="T",
-                    prompt="topic",
-                    faceless_coding="external",
-                )
-        self.assertEqual(req.call_args.kwargs["json_body"]["faceless_coding"], "external")
 
     def test_create_job_posts_avatar_overrides(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
@@ -179,11 +142,11 @@ class ClientTests(TestCase):
         self.assertEqual(args[1], "/api/v1/jobs/abc/continue")
         self.assertIsNone(kwargs.get("json_body"))
 
-    def test_continue_job_posts_faceless_coding(self):
+    def test_continue_job_posts_to_continue(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
-            client.continue_job("abc", faceless_coding="external")
-        self.assertEqual(req.call_args.kwargs["json_body"]["faceless_coding"], "external")
+            client.continue_job("abc")
+        self.assertEqual(req.call_args.args, ("POST", "/api/v1/jobs/abc/continue"))
 
     def test_create_job_multipart_voiceover(self):
         import tempfile
@@ -298,17 +261,6 @@ class ClientTests(TestCase):
             self.assertNotIn("prompt", body)
         finally:
             path.unlink(missing_ok=True)
-
-    def test_download_coding_kit_returns_url_not_bytes(self):
-        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
-        with patch.object(
-            client,
-            "get_job",
-            return_value={"coding_kit": {"url": "https://cdn.example/kit.zip", "voice_duration_s": 12}},
-        ):
-            kit = client.download_coding_kit("job-1")
-        self.assertEqual(kit["url"], "https://cdn.example/kit.zip")
-        self.assertNotIn("bytes", kit)
 
     def test_missing_auth_asks_for_login(self):
         with patch.dict("os.environ", {"CLIPTUDE_API_KEY": ""}, clear=False):

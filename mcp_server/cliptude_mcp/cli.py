@@ -184,14 +184,6 @@ def main(argv: list[str] | None = None) -> None:
         help="Path to a talking-head presenter video (MP4, MOV, WEBM, AVI). Requires a Talking Head template. Transcribed; skips TTS. Do not combine with --prompt, --script, or --voiceover.",
     )
     g.add_argument(
-        "--faceless-coding",
-        default="external",
-        help=(
-            "Faceless Explainer: default external (this session authors HTML). "
-            "Pass cliptude to let Cliptude code. Ignored on other formats."
-        ),
-    )
-    g.add_argument(
         "--duration",
         default="",
         help="Wizard duration bucket, e.g. 3-4 or 6-8. Default: template duration (or estimated from --script)",
@@ -297,19 +289,10 @@ def main(argv: list[str] | None = None) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "example:\n"
-            "  cliptude continue <job-id>\n"
-            "  cliptude continue <job-id> --faceless-coding external"
+            "  cliptude continue <job-id>"
         ),
     )
     cont.add_argument("job_id")
-    cont.add_argument(
-        "--faceless-coding",
-        default="",
-        help=(
-            "Faceless Explainer only. Omit to let Cliptude code the visuals. "
-            "Pass external if this session will author HTML (same as generate default)."
-        ),
-    )
 
     pj = sub.add_parser(
         "plan-job",
@@ -354,14 +337,6 @@ def main(argv: list[str] | None = None) -> None:
     pv.add_argument("job_id")
     pr = sub.add_parser("plan-report", help="What sourcing used for each media request of the locked plan")
     pr.add_argument("job_id")
-
-    k = sub.add_parser("kit", help="Download Faceless coding kit zip")
-    k.add_argument("job_id")
-    k.add_argument("--out", default="kit.zip")
-
-    sp = sub.add_parser("submit-project", help="Upload Faceless project zip")
-    sp.add_argument("job_id")
-    sp.add_argument("zip_path")
 
     ed = sub.add_parser("editor", help="Open the timeline editor project for a completed job (prints the timeline)")
     ed.add_argument("job_id")
@@ -461,7 +436,6 @@ def main(argv: list[str] | None = None) -> None:
                 title=args.title,
                 prompt=args.prompt or None,
                 script=script or None,
-                faceless_coding=args.faceless_coding,
                 duration=(args.duration or None),
                 voiceover_path=voiceover or None,
                 talking_head_path=talking_head or None,
@@ -539,14 +513,7 @@ def main(argv: list[str] | None = None) -> None:
             client.download_voiceover_file(args.job_id, dest)
             _print({"ok": True, "path": str(dest.resolve())})
         elif args.cmd == "continue":
-            coding = (args.faceless_coding or "").strip() or None
-            _print(client.continue_job(args.job_id, faceless_coding=coding))
-        elif args.cmd == "kit":
-            dest = Path(args.out)
-            client.download_coding_kit_file(args.job_id, dest)
-            _print({"ok": True, "path": str(dest.resolve())})
-        elif args.cmd == "submit-project":
-            _print(client.submit_faceless_project(args.job_id, args.zip_path))
+            _print(client.continue_job(args.job_id))
         elif args.cmd == "editor":
             _print(client.open_editor_project(args.job_id))
         elif args.cmd == "agent":

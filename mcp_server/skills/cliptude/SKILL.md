@@ -13,14 +13,6 @@ sources and renders your plan.
 
 Style lives in a **saved template** (voice, model, format). Either the user finishes the Cliptude wizard once and clicks **Save as template**, or you create one with `cliptude template-create` / MCP `create_template` (see `template-options` / `get_template_options` for fields and `voices` / `list_voices` for voice_id).
 
-## Faceless Explainer — who codes the visuals
-
-CLI/MCP **default is this session** (`faceless_coding=external`). After `list_templates`, if the chosen template `format` is `faceless_explainer`, follow **cliptude-faceless**. Do not omit the field and do not ask unless they want Cliptude to code.
-
-Pass `--faceless-coding cliptude` / `faceless_coding=cliptude` **only** if they explicitly want Cliptude to write the HTML (Economy / Ultra). Other formats: the flag is ignored.
-
-REST omit still means Cliptude codes. CLI/MCP omit on a Faceless template means **external**.
-
 ## Before generate — prompt vs script vs voiceover vs talking head
 
 Same modes as create.html. **Exactly one narration source.** Prompt and script may be sent together (script is voiced; prompt is extra context). A voiceover or talking-head file cannot be combined with prompt, script, or each other.
