@@ -39,14 +39,6 @@ cliptude plan-review <job-id>                     # review the build, then revis
 cliptude editor <job-id> && cliptude render <project-id> --wait
 ```
 
-Faceless bring-your-own coding:
-
-```bash
-cliptude generate --template "My Faceless" --title "Why index funds win" --script-file script.txt --faceless-coding external
-cliptude kit <job-id> --out ./kit.zip
-cliptude submit-project <job-id> ./project.zip
-```
-
 ## MCP
 
 Remote Streamable HTTP: `https://mcp.cliptude.com/mcp` (OAuth or Bearer).
