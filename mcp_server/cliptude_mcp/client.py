@@ -13,6 +13,10 @@ import httpx
 from cliptude_mcp.credentials import stored_access_token
 
 DEFAULT_SAAS_URL = "https://cliptude.com"
+FACELESS_EXPLAINER_FORMAT = "faceless_explainer"
+FACELESS_CODING_EXTERNAL = "external"
+FACELESS_CODING_CLIPTUDE = "cliptude"
+TALKING_HEAD_EXTS = {".mp4", ".mov", ".webm", ".avi"}
 _request_token: ContextVar[str | None] = ContextVar("cliptude_request_token", default=None)
 
 
@@ -72,6 +76,48 @@ class CliptudeApiError(Exception):
         self.payload = payload
 
 
+def _talking_head_content_type(ext: str) -> str:
+    return {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".webm": "video/webm",
+        ".avi": "video/x-msvideo",
+    }.get((ext or "").lower(), "video/mp4")
+
+
+def _probe_local_video_duration_seconds(path: Path) -> float | None:
+    """Return duration via ffprobe when available; None if ffprobe is missing or fails."""
+    import shutil
+    import subprocess
+
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        value = float((result.stdout or "").strip())
+        if value > 0:
+            return value
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    return None
+
+
 def _resolve_token(explicit: str | None) -> str:
     return (
         (explicit or "").strip()
@@ -79,6 +125,54 @@ def _resolve_token(explicit: str | None) -> str:
         or (os.environ.get("CLIPTUDE_API_KEY") or "").strip()
         or stored_access_token()
     )
+
+
+def _avatar_job_fields(
+    avatar_intro_only: bool | None,
+    avatar_ai_footage: bool | None,
+    *,
+    as_strings: bool = False,
+) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    if avatar_intro_only is not None:
+        fields["avatar_intro_only"] = (
+            ("true" if avatar_intro_only else "false") if as_strings else bool(avatar_intro_only)
+        )
+    if avatar_ai_footage is not None:
+        fields["avatar_ai_footage"] = (
+            ("true" if avatar_ai_footage else "false") if as_strings else bool(avatar_ai_footage)
+        )
+    return fields
+
+
+def _motion_control_job_fields(
+    *,
+    disable_animations: bool | None = None,
+    disable_overlays: bool | None = None,
+    disable_effects: bool | None = None,
+    disable_transitions: bool | None = None,
+    excluded_animation_types: list[str] | None = None,
+    excluded_transition_kinds: list[str] | None = None,
+    as_strings: bool = False,
+) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    bool_fields = {
+        "disable_animations": disable_animations,
+        "disable_overlays": disable_overlays,
+        "disable_effects": disable_effects,
+        "disable_transitions": disable_transitions,
+    }
+    for key, value in bool_fields.items():
+        if value is not None:
+            fields[key] = ("true" if value else "false") if as_strings else bool(value)
+    list_fields = {
+        "excluded_animation_types": excluded_animation_types,
+        "excluded_transition_kinds": excluded_transition_kinds,
+    }
+    for key, value in list_fields.items():
+        if value is not None:
+            fields[key] = ",".join(value) if as_strings else list(value)
+    return fields
 
 
 class CliptudeClient:
@@ -92,15 +186,17 @@ class CliptudeClient:
             or (os.environ.get("CLIPTUDE_API_KEY") or "").strip()
         )
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, json_content: bool = True) -> dict[str, str]:
         if not self.api_key:
             raise CliptudeApiError("Not authenticated. Run: cliptude auth login")
-        return {
+        headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
-            "Content-Type": "application/json",
             **django_proxy_headers(self.base_url),
         }
+        if json_content:
+            headers["Content-Type"] = "application/json"
+        return headers
 
     def _maybe_refresh(self) -> bool:
         if not self._session_file:
@@ -149,6 +245,41 @@ class CliptudeClient:
     def get_template(self, template_id: str) -> Any:
         return self.request("GET", f"/api/v1/templates/{template_id}")
 
+    def create_template(self, *, name: str, format: str, settings: dict[str, Any]) -> Any:
+        """Create a ready-to-use template from settings (no create wizard)."""
+        return self.request(
+            "POST", "/api/v1/templates", json_body={"name": name, "format": format, "settings": settings}
+        )
+
+    def template_options(self, format: str) -> Any:
+        return self.request("GET", "/api/v1/templates/options", params={"format": format})
+
+    def list_voices(self, *, provider: str = "elevenlabs", language: str | None = None) -> Any:
+        params = {"provider": provider}
+        if language:
+            params["language"] = language
+        return self.request("GET", "/api/v1/voices", params=params)
+
+    def _template_format(self, template_id: str) -> str:
+        try:
+            tmpl = self.get_template(template_id)
+        except CliptudeApiError:
+            return ""
+        if not isinstance(tmpl, dict):
+            return ""
+        return str(tmpl.get("format") or "").strip().lower()
+
+    def _resolve_faceless_coding(self, template_id: str, faceless_coding: str | None) -> str | None:
+        """CLI/MCP default is external for Faceless Explainer. Other formats omit the field."""
+        raw = (faceless_coding or "").strip().lower() or None
+        if raw == FACELESS_CODING_CLIPTUDE:
+            return FACELESS_CODING_CLIPTUDE
+        if raw not in (None, FACELESS_CODING_EXTERNAL):
+            return raw
+        if self._template_format(template_id) == FACELESS_EXPLAINER_FORMAT:
+            return FACELESS_CODING_EXTERNAL
+        return None
+
     def create_job(
         self,
         *,
@@ -158,20 +289,383 @@ class CliptudeClient:
         script: str | None = None,
         faceless_coding: str | None = None,
         duration: str | None = None,
+        voiceover_path: str | Path | None = None,
+        talking_head_path: str | Path | None = None,
+        output: str | None = None,
+        avatar_intro_only: bool | None = None,
+        avatar_ai_footage: bool | None = None,
+        disable_animations: bool | None = None,
+        disable_overlays: bool | None = None,
+        disable_effects: bool | None = None,
+        disable_transitions: bool | None = None,
+        excluded_animation_types: list[str] | None = None,
+        excluded_transition_kinds: list[str] | None = None,
     ) -> Any:
+        motion_fields = _motion_control_job_fields(
+            disable_animations=disable_animations,
+            disable_overlays=disable_overlays,
+            disable_effects=disable_effects,
+            disable_transitions=disable_transitions,
+            excluded_animation_types=excluded_animation_types,
+            excluded_transition_kinds=excluded_transition_kinds,
+        )
+        motion_fields_str = _motion_control_job_fields(
+            disable_animations=disable_animations,
+            disable_overlays=disable_overlays,
+            disable_effects=disable_effects,
+            disable_transitions=disable_transitions,
+            excluded_animation_types=excluded_animation_types,
+            excluded_transition_kinds=excluded_transition_kinds,
+            as_strings=True,
+        )
+        coding = self._resolve_faceless_coding(template_id, faceless_coding)
+        th_path = (str(talking_head_path).strip() if talking_head_path else "") or None
+        vo_path = (str(voiceover_path).strip() if voiceover_path else "") or None
+        output_kind = (output or "").strip().lower() or None
+        if output_kind and output_kind not in ("video", "script", "voiceover", "plan"):
+            raise CliptudeApiError('output must be "video", "script", "voiceover", or "plan".')
+        if output_kind in ("script", "voiceover") and (th_path or vo_path):
+            raise CliptudeApiError(
+                "Script and voiceover jobs cannot upload a voiceover or talking-head file."
+            )
+        if th_path and vo_path:
+            raise CliptudeApiError("Upload either a talking head video or a voiceover — not both.")
+        if th_path and (prompt or script):
+            raise CliptudeApiError(
+                "Upload a talking head video, or send a prompt / custom script — not both. "
+                "An uploaded talking head is transcribed and used as the narration."
+            )
+        if vo_path and (prompt or script):
+            raise CliptudeApiError(
+                "Upload a voiceover, or send a prompt / custom script — not both. "
+                "An uploaded file is transcribed and used as the narration."
+            )
+        if th_path:
+            return self._create_job_talking_head(
+                template_id=template_id,
+                title=title,
+                faceless_coding=coding,
+                talking_head_path=th_path,
+                avatar_intro_only=avatar_intro_only,
+                avatar_ai_footage=avatar_ai_footage,
+                disable_animations=disable_animations,
+                disable_overlays=disable_overlays,
+                disable_effects=disable_effects,
+                disable_transitions=disable_transitions,
+                excluded_animation_types=excluded_animation_types,
+                excluded_transition_kinds=excluded_transition_kinds,
+            )
+        if vo_path:
+            extra_data = {
+                **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
+                **motion_fields_str,
+                **({"output": output_kind} if output_kind == "plan" else {}),
+            }
+            return self._create_job_multipart(
+                template_id=template_id,
+                title=title,
+                faceless_coding=coding,
+                duration=duration,
+                file_field="voiceover",
+                file_path=vo_path,
+                missing_message=f"Voiceover file not found: {vo_path}",
+                extra_data=extra_data or None,
+            )
         body: dict[str, Any] = {"template_id": template_id, "title": title}
         if prompt:
             body["prompt"] = prompt
         if script:
             body["script"] = script
-        if faceless_coding:
-            body["faceless_coding"] = faceless_coding
+        if coding:
+            body["faceless_coding"] = coding
         if duration:
             body["duration"] = duration
+        if output_kind and output_kind != "video":
+            body["output"] = output_kind
+        body.update(_avatar_job_fields(avatar_intro_only, avatar_ai_footage))
+        body.update(motion_fields)
         return self.request("POST", "/api/v1/jobs", json_body=body)
+
+    def _raise_http(self, resp, *, payload=None) -> None:
+        if payload is None:
+            try:
+                payload = resp.json()
+            except ValueError:
+                payload = {"error": resp.text}
+        message = payload.get("error") if isinstance(payload, dict) else str(payload)
+        if resp.status_code == 401:
+            message = message or "Not authenticated. Run: cliptude auth login"
+        raise CliptudeApiError(
+            message or f"HTTP {resp.status_code}",
+            status=resp.status_code,
+            payload=payload,
+        )
+
+    def _create_job_multipart(
+        self,
+        *,
+        template_id: str,
+        title: str,
+        faceless_coding: str | None,
+        duration: str | None,
+        file_field: str,
+        file_path: str | Path,
+        missing_message: str,
+        extra_data: dict[str, str] | None = None,
+        _retried: bool = False,
+    ) -> Any:
+        path = Path(file_path)
+        if not path.is_file():
+            raise CliptudeApiError(missing_message)
+        data: dict[str, str] = {"template_id": str(template_id), "title": title}
+        if faceless_coding:
+            data["faceless_coding"] = faceless_coding
+        if duration:
+            data["duration"] = duration
+        if extra_data:
+            data.update(extra_data)
+        url = f"{self.base_url}/api/v1/jobs"
+        headers = self._headers(json_content=False)
+        try:
+            with path.open("rb") as fh:
+                resp = httpx.post(
+                    url,
+                    headers=headers,
+                    data=data,
+                    files={file_field: (path.name, fh, "application/octet-stream")},
+                    timeout=max(self.timeout, 300.0),
+                )
+        except httpx.HTTPError as exc:
+            raise CliptudeApiError(str(exc)) from exc
+        if resp.status_code == 401 and not _retried and self._maybe_refresh():
+            return self._create_job_multipart(
+                template_id=template_id,
+                title=title,
+                faceless_coding=faceless_coding,
+                duration=duration,
+                file_field=file_field,
+                file_path=file_path,
+                missing_message=missing_message,
+                extra_data=extra_data,
+                _retried=True,
+            )
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {"error": resp.text}
+        if resp.status_code >= 400:
+            self._raise_http(resp, payload=payload)
+        return payload
+
+    def _abort_talking_head_upload(self, key: str | None, upload_id: str | None) -> None:
+        if not key or not upload_id:
+            return
+        try:
+            self.request(
+                "POST",
+                "/api/v1/uploads/talking-head/abort",
+                json_body={"key": key, "upload_id": upload_id},
+            )
+        except Exception:
+            pass
+
+    def _create_job_talking_head(
+        self,
+        *,
+        template_id: str,
+        title: str,
+        faceless_coding: str | None,
+        talking_head_path: str | Path,
+        avatar_intro_only: bool | None = None,
+        avatar_ai_footage: bool | None = None,
+        disable_animations: bool | None = None,
+        disable_overlays: bool | None = None,
+        disable_effects: bool | None = None,
+        disable_transitions: bool | None = None,
+        excluded_animation_types: list[str] | None = None,
+        excluded_transition_kinds: list[str] | None = None,
+    ) -> Any:
+        motion_extra = _motion_control_job_fields(
+            disable_animations=disable_animations,
+            disable_overlays=disable_overlays,
+            disable_effects=disable_effects,
+            disable_transitions=disable_transitions,
+            excluded_animation_types=excluded_animation_types,
+            excluded_transition_kinds=excluded_transition_kinds,
+            as_strings=True,
+        )
+        path = Path(talking_head_path)
+        if not path.is_file():
+            raise CliptudeApiError(f"Talking head file not found: {path}")
+        ext = path.suffix.lower()
+        if ext not in TALKING_HEAD_EXTS:
+            raise CliptudeApiError(
+                f'Unsupported file type "{ext}". Please upload MP4, MOV, WEBM, or AVI.'
+            )
+        size = path.stat().st_size
+        duration = _probe_local_video_duration_seconds(path)
+        init = self.request(
+            "POST",
+            "/api/v1/uploads/talking-head/init",
+            json_body={
+                "filename": path.name,
+                "size": size,
+                "content_type": _talking_head_content_type(ext),
+            },
+        )
+        if not isinstance(init, dict) or init.get("fallback"):
+            extra_data = {
+                **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
+                **motion_extra,
+            }
+            return self._create_job_multipart(
+                template_id=template_id,
+                title=title,
+                faceless_coding=faceless_coding,
+                duration=None,
+                file_field="talking_head",
+                file_path=path,
+                missing_message=f"Talking head file not found: {path}",
+                extra_data=extra_data or None,
+            )
+        key = str(init.get("key") or "").strip()
+        upload_id = str(init.get("upload_id") or "").strip()
+        if duration is None:
+            self._abort_talking_head_upload(key, upload_id)
+            extra_data = {
+                **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
+                **motion_extra,
+            }
+            return self._create_job_multipart(
+                template_id=template_id,
+                title=title,
+                faceless_coding=faceless_coding,
+                duration=None,
+                file_field="talking_head",
+                file_path=path,
+                missing_message=f"Talking head file not found: {path}",
+                extra_data=extra_data or None,
+            )
+        try:
+            self._upload_talking_head_parts(path, init)
+            self.request(
+                "POST",
+                "/api/v1/uploads/talking-head/complete",
+                json_body={"key": key, "upload_id": upload_id},
+            )
+        except Exception:
+            self._abort_talking_head_upload(key, upload_id)
+            raise
+        body: dict[str, Any] = {
+            "template_id": str(template_id),
+            "title": title,
+            "talking_head_r2_key": key,
+            "talking_head_duration": str(duration),
+        }
+        if faceless_coding:
+            body["faceless_coding"] = faceless_coding
+        body.update(_avatar_job_fields(avatar_intro_only, avatar_ai_footage))
+        body.update(
+            _motion_control_job_fields(
+                disable_animations=disable_animations,
+                disable_overlays=disable_overlays,
+                disable_effects=disable_effects,
+                disable_transitions=disable_transitions,
+                excluded_animation_types=excluded_animation_types,
+                excluded_transition_kinds=excluded_transition_kinds,
+            )
+        )
+        return self.request("POST", "/api/v1/jobs", json_body=body)
+
+    def _upload_talking_head_parts(self, path: Path, init: dict[str, Any]) -> None:
+        key = str(init.get("key") or "").strip()
+        upload_id = str(init.get("upload_id") or "").strip()
+        part_size = int(init.get("part_size") or 0)
+        part_count = int(init.get("part_count") or 0)
+        if not key or not upload_id or part_size <= 0 or part_count <= 0:
+            raise CliptudeApiError("Talking head upload init returned an incomplete plan.")
+        with path.open("rb") as fh:
+            for start in range(0, part_count, 50):
+                nums = list(range(start + 1, min(start + 50, part_count) + 1))
+                signed = self.request(
+                    "POST",
+                    "/api/v1/uploads/talking-head/sign-parts",
+                    json_body={"key": key, "upload_id": upload_id, "part_numbers": nums},
+                )
+                urls = (signed or {}).get("urls") if isinstance(signed, dict) else None
+                if not isinstance(urls, dict):
+                    raise CliptudeApiError("Could not sign talking head upload parts.")
+                for num in nums:
+                    url = urls.get(str(num))
+                    if not url:
+                        raise CliptudeApiError(f"Could not sign part {num}.")
+                    chunk = fh.read(part_size)
+                    try:
+                        resp = httpx.put(url, content=chunk, timeout=max(self.timeout, 300.0))
+                    except httpx.HTTPError as exc:
+                        raise CliptudeApiError(str(exc)) from exc
+                    if resp.status_code >= 400:
+                        raise CliptudeApiError(
+                            f"Failed to upload talking head part {num}.",
+                            status=resp.status_code,
+                        )
 
     def get_job(self, job_id: str) -> Any:
         return self.request("GET", f"/api/v1/jobs/{job_id}")
+
+    def continue_job(self, job_id: str, *, faceless_coding: str | None = None) -> Any:
+        """Queue a completed script/voiceover job, or a plan job with a locked plan, as a full video."""
+        body: dict[str, Any] = {}
+        if faceless_coding:
+            body["faceless_coding"] = faceless_coding
+        return self.request("POST", f"/api/v1/jobs/{job_id}/continue", json_body=body or None)
+
+    # Agent-planned videos -------------------------------------------------------------------------
+
+    def get_narration(self, job_id: str) -> Any:
+        """Numbered sentences (with word timings), digest, pricing and template flags of a plan job."""
+        return self.request("GET", f"/api/v1/jobs/{job_id}/narration")
+
+    def get_kind_catalog(
+        self,
+        *,
+        format: str | None = None,
+        theme: str | None = None,
+        compact: bool = False,
+        types: list[str] | None = None,
+        premium: bool = False,
+    ) -> Any:
+        """Every graphic an agent can place. compact: one summary line each; types: full entries for those;
+        premium: only the premium boards."""
+        params = {k: v for k, v in (("format", format), ("theme", theme)) if v}
+        if compact:
+            params["compact"] = "1"
+        if premium:
+            params["premium"] = "1"
+        if types:
+            params["types"] = ",".join(types)
+        return self.request("GET", "/api/v1/catalog/kinds", params=params or None)
+
+    def put_plan(self, job_id: str, plan: dict[str, Any], *, dry_run: bool = True) -> Any:
+        """Check a plan (dry_run) or lock it. A failing check returns its report, not an exception."""
+        path = f"/api/v1/jobs/{job_id}/plan" + ("?dry_run=1" if dry_run else "")
+        try:
+            return self.request("PUT", path, json_body=plan)
+        except CliptudeApiError as exc:
+            if exc.status in (400, 409, 413) and isinstance(exc.payload, dict) and "errors" in exc.payload:
+                return {**exc.payload, "http_status": exc.status}
+            raise
+
+    def get_plan(self, job_id: str) -> Any:
+        return self.request("GET", f"/api/v1/jobs/{job_id}/plan")
+
+    def get_plan_report(self, job_id: str) -> Any:
+        """What sourcing used for each media request of the locked plan, and every fallback."""
+        return self.request("GET", f"/api/v1/jobs/{job_id}/plan/report")
+
+    def get_plan_review(self, job_id: str) -> Any:
+        """The built design, beat by beat and graphic by graphic, with links to the media (review before render)."""
+        return self.request("GET", f"/api/v1/jobs/{job_id}/plan/review")
 
     def download_coding_kit(self, job_id: str) -> Any:
         """Return coding_kit url/path from get_job. Never downloads zip bytes."""
@@ -190,6 +684,39 @@ class CliptudeClient:
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Accept": "application/zip, application/json",
+                    **django_proxy_headers(self.base_url),
+                },
+                timeout=self.timeout,
+                follow_redirects=True,
+            ) as resp:
+                if resp.status_code >= 400:
+                    try:
+                        payload = resp.read()
+                        data = json.loads(payload)
+                    except Exception:
+                        data = {"error": resp.reason_phrase}
+                    message = data.get("error") if isinstance(data, dict) else str(data)
+                    raise CliptudeApiError(message or f"HTTP {resp.status_code}", status=resp.status_code, payload=data)
+                dest = Path(dest)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with dest.open("wb") as fh:
+                    for chunk in resp.iter_bytes():
+                        fh.write(chunk)
+        except CliptudeApiError:
+            raise
+        except httpx.HTTPError as exc:
+            raise CliptudeApiError(str(exc)) from exc
+        return dest
+
+    def download_voiceover_file(self, job_id: str, dest: Path) -> Path:
+        url = f"{self.base_url}/api/v1/jobs/{job_id}/voiceover"
+        try:
+            with httpx.stream(
+                "GET",
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Accept": "audio/mpeg, application/json",
                     **django_proxy_headers(self.base_url),
                 },
                 timeout=self.timeout,
@@ -251,6 +778,60 @@ class CliptudeClient:
 
     def cancel_job(self, job_id: str) -> Any:
         return self.request("POST", f"/api/v1/jobs/{job_id}/cancel")
+
+    # --- Timeline editor + Cliptude Agent -------------------------------------------------
+
+    def open_editor_project(self, job_id: str) -> Any:
+        """Open (or create) the editor project for a completed video job; includes a compact timeline."""
+        return self.request("GET", f"/api/v1/jobs/{job_id}/editor-project")
+
+    def get_editor_project(self, project_id: int | str, *, design: bool = False) -> Any:
+        params = {"design": "1"} if design else None
+        return self.request("GET", f"/api/v1/editor-projects/{project_id}", params=params)
+
+    def agent_tiers(self) -> Any:
+        return self.request("GET", "/api/v1/agent/tiers")
+
+    def run_agent(
+        self,
+        project_id: int | str,
+        *,
+        prompt: str,
+        tier: str = "fast",
+        referenced_item_ids: list[str] | None = None,
+        chat_id: str | None = None,
+        expected_revision: int | None = None,
+        idempotency_key: str | None = None,
+    ) -> Any:
+        """Ask Cliptude Agent to edit the timeline. Uses the project's current revision unless given."""
+        import uuid
+
+        if expected_revision is None:
+            project = self.get_editor_project(project_id).get("project") or {}
+            expected_revision = int(project.get("revision") or 0)
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "tier": tier,
+            "referenced_item_ids": list(referenced_item_ids or []),
+            "expected_revision": expected_revision,
+            "idempotency_key": idempotency_key or uuid.uuid4().hex,
+        }
+        if chat_id:
+            body["chat_id"] = chat_id
+        return self.request("POST", f"/api/v1/editor-projects/{project_id}/agent/runs", json_body=body)
+
+    def get_agent_run(self, project_id: int | str, run_id: str) -> Any:
+        return self.request("GET", f"/api/v1/editor-projects/{project_id}/agent/runs/{run_id}")
+
+    def cancel_agent_run(self, project_id: int | str, run_id: str) -> Any:
+        return self.request("POST", f"/api/v1/editor-projects/{project_id}/agent/runs/{run_id}/cancel")
+
+    def render_project(self, project_id: int | str) -> Any:
+        """Render the edited timeline to a new MP4 (charged like an editor export)."""
+        return self.request("POST", f"/api/v1/editor-projects/{project_id}/render")
+
+    def get_render(self, render_id: int | str) -> Any:
+        return self.request("GET", f"/api/v1/editor-renders/{render_id}")
 
     def get_account(self) -> Any:
         return self.request("GET", "/api/v1/account")

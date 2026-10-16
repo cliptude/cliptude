@@ -1,6 +1,6 @@
 ---
 name: cliptude-script
-description: Research current facts with web search and write a Cliptude spoken narration (custom script). Use when creating a Cliptude video from a topic or title, drafting a YouTube script for Cliptude, or when the user has not pasted a full script. Never pass the video title as the prompt.
+description: Research current facts with web search and write a Cliptude spoken narration (custom script). Use when creating a Cliptude video from a topic or title, or when the user has not pasted a full script and has not given a voiceover audio file or talking-head video. Skip this skill if they uploaded narration audio — use --voiceover / voiceover_path instead. Skip if they uploaded a presenter clip — use --talking-head / talking_head_path with a Talking Head template. Never pass the video title as the prompt.
 ---
 
 # Cliptude script (research → spoken narration)
@@ -16,6 +16,8 @@ Cliptude production does **not** voice the title. It web-researches, then writes
 | Full narration (paragraphs they want spoken) | `script` / `--script-file` unchanged |
 | Topic, title, or “make a video about X” | This skill → `script` / `--script-file` |
 | Explicit “let Cliptude write it” | `--prompt` = researched **brief** (audience, angle, must-include facts). Still not the title. |
+| A voiceover audio file | **Stop.** Do not write a script. Use `--voiceover` / `voiceover_path` and omit prompt/script. |
+| A talking-head presenter video | **Stop.** Do not write a script. Use `--talking-head` / `talking_head_path` with a Talking Head template. |
 
 Then generate:
 
@@ -71,6 +73,7 @@ Word budget (hard max — never exceed):
 | `10-12` | 1550–1850 |
 | `18-20` | 2800–3090 |
 | `30-40` | 4700–6180 |
+| `50-60` | 7800–9270 |
 
 If duration is omitted, use the template’s bucket if you know it; otherwise `3-4` for short explainers and `6-8` for documentary templates.
 
@@ -97,10 +100,15 @@ Output **only** what the voiceover should say. Start on the first spoken word.
 
 **TTS spelling (required):** years and numbers in full words (`twenty twenty-six`, `five hundred fifty dollars`, `sixty-five inch`). Expand abbreviations that contain periods (`United States` not `U.S.`, `Doctor` not `Dr.`, `versus` not `vs.`, `Saint Petersburg` not `St. Petersburg`).
 
+If the user asked **Cliptude** to write a script and stop (no video), skip this skill. Use `cliptude script` / MCP `create_script` instead, then poll `get_job` for `script`. If they later want the MP4, `cliptude continue` / `continue_job` on that job id.
+
 ## Step 4 — Hand off
 
 1. Write `script.txt` (plain text, spoken words only).
 2. Generate with `--script-file` (or MCP `create_job` `script=`). Do **not** also dump the same text into `prompt`.
 3. `generate` / `create_job` returns immediately. Poll status. Do not wait for the MP4.
 
-Faceless BYO (`--faceless-coding external`): still write this script first when the user only gave a topic. Phase A voices **this** narration, then you author HTML against the kit.
+If the user gave a **voiceover file**, skip steps 1–3. Hand off with `--voiceover` / `voiceover_path` only.
+If the user gave a **talking-head video**, skip steps 1–3. Hand off with `--talking-head` / `talking_head_path` only.
+
+Faceless BYO is the CLI/MCP default for Faceless Explainer (`faceless_coding=external`). Still write this script first when the user only gave a topic. Phase A voices **this** narration, then you author HTML against the kit. Pass `--faceless-coding cliptude` only if they want Cliptude to code.

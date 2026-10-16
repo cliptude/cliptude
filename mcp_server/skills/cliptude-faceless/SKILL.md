@@ -1,13 +1,20 @@
 ---
 name: cliptude-faceless
-description: Author Faceless Explainer storyboard and frame HTML against a Cliptude coding kit, then submit a zip. Use when the user wants Claude Code / Cursor / Codex to code Faceless visuals (faceless_coding=external). If they only gave a topic or title, write the narration with cliptude-script first — never pass the title as --prompt.
+description: Author Faceless Explainer storyboard and frame HTML against a Cliptude coding kit, then submit a zip. CLI/MCP default Faceless jobs to faceless_coding=external — use this skill unless the user asked Cliptude to code the HTML. Narration is prompt, script, or an uploaded voiceover file. If they only gave a topic or title, write the narration with cliptude-script first — never pass the title as --prompt. If they have audio, pass --voiceover and skip cliptude-script.
 ---
 
 # Cliptude Faceless bring-your-own coding
 
-You plan **storyboard.json** and one HTML file per frame. Cliptude owns TTS, word rail, music, `hyperframes check` (no Claude repair), and render.
+You plan **storyboard.json** and one HTML file per frame. Cliptude owns TTS (or transcription of an uploaded voiceover), word rail, music, `hyperframes check` (no Claude repair), and render.
 
-If the user only gave a **topic or title**, write the narration first with **cliptude-script** (web search → spoken script) and pass `--script-file`. Do **not** put the title in `--prompt`. If they already pasted a full script, use that. Only use `--prompt` when they explicitly want Cliptude to write the VO — and the prompt must be a brief, not the title.
+CLI/MCP default Faceless Explainer jobs to `faceless_coding=external`. Continue on this path unless they explicitly asked Cliptude to code (`faceless_coding=cliptude`).
+
+Narration for `create_job` / `generate` is one of:
+
+- **topic/title only** → **cliptude-script** then `--script-file`. Never put the title in `--prompt`.
+- **pasted full script** → `--script-file` as-is.
+- **“let Cliptude write the VO”** → `--prompt` = a brief, not the title.
+- **voiceover audio file** → `--voiceover path` / `voiceover_path`. Phase A transcribes that file (no TTS). Do not also pass prompt/script. Do not run **cliptude-script**.
 
 Do **not** start storyboard or frames until `status=awaiting_project` and `coding_kit` is present. Cue times must come from that kit’s `word_rail.json` for that specific `voice.mp3`. Do not invent timings.
 
@@ -40,13 +47,18 @@ cliptude auth login
 2. Create the job (returns in seconds, `queued`). Nothing is voiced yet.
 
 ```bash
-# After cliptude-script (topic/title only) or a user-pasted script:
+# Faceless Explainer: omit --faceless-coding (defaults to external) or pass it explicitly:
+cliptude generate --template "My Faceless" --title "Why index funds win" --script-file script.txt
 cliptude generate --template "My Faceless" --title "Why index funds win" --script-file script.txt --faceless-coding external
 # Only if the user asked Cliptude to write the VO — brief, never the title:
-cliptude generate --template "My Faceless" --title "Why index funds win" --prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" --faceless-coding external
+cliptude generate --template "My Faceless" --title "Why index funds win" --prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners"
+# Uploaded narration (transcribed; skips TTS):
+cliptude generate --template "My Faceless" --title "Why index funds win" --voiceover narration.mp3
+# Only if they asked Cliptude to code the HTML:
+cliptude generate --template "My Faceless" --title "Why index funds win" --script-file script.txt --faceless-coding cliptude
 ```
 
-3. Poll `cliptude status <job-id>` until `awaiting_project` / `coding_kit` (Phase A: script if prompt-only, then TTS, word rail, kit zip). Current step may show `Writing script...` then `Generating voiceover...`.
+3. Poll `cliptude status <job-id>` until `awaiting_project` / `coding_kit` (Phase A: script if prompt-only, or transcribe `--voiceover`, then word rail, kit zip). Current step may show `Writing script...` then `Generating voiceover...` (or transcription for an uploaded file).
 4. Download the kit. **Wait for this kit.** Do not author HTML before it exists.
 
 ```bash
@@ -76,4 +88,4 @@ cliptude status <job-id>
 
 If `get_job.qa` is present and the job `failed`, fix frames locally and submit again. Cliptude will not rewrite your HTML.
 
-MCP: `create_job` with `faceless_coding=external`, `download_coding_kit` (URL/path only — never zip bytes), `submit_faceless_project(job_id, zip_path)` reading a **local path**. Never `wait_for_job` until MP4.
+MCP: `create_job` defaults `faceless_coding=external` on Faceless Explainer templates. Pass `voiceover_path` for uploaded narration (local path, same as `--voiceover`). `download_coding_kit` (URL/path only — never zip bytes), `submit_faceless_project(job_id, zip_path)` reading a **local path**. Never `wait_for_job` until MP4.
