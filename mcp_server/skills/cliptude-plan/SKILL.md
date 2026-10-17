@@ -74,7 +74,9 @@ the presenter seconds you plan.
   "chapters": [{"title": "The bet", "from_sentence": 0, "to_sentence": 21}],
   "beats": [
     {"id": "b0", "sentence_id": 0, "media": {"query": "Hsinchu Science Park aerial", "alts": ["TSMC fab exterior"],
-     "negatives": ["stock chart"], "prefer": "video", "query_kind": "place"}, "camera": "zoom_in", "treatment": "grain"},
+     "negatives": ["stock chart"], "prefer": "video", "query_kind": "place",
+     "intent": "Aerial view of Hsinchu Science Park with TSMC fab buildings, Taiwan, 1990s", "era": "1990s"},
+     "camera": "zoom_in", "treatment": "grain"},
     {"id": "b1", "sentence_id": 3, "phrase": "Morris Chang", "media": {"person": "Morris Chang", "prefer": "image"},
      "transition_in": "film-burn", "transition_sound": "el_join_film_burn",
      "reveal_next": "crash_zoom", "reveal_sound": "cue_deep_impact"},
@@ -125,7 +127,24 @@ the presenter seconds you plan.
 - `media`: one entry per picture slot from the catalog's `media_slots`:
   `{"slot": "<slot>", "query": "…"}`, `{"slot": …, "person": "Full Name"}` (portrait search), or
   `{"slot": …, "url": "https://…", "fallback_query": "…"}`. A board with no picture found gets an AI still and
-  the report says so.
+  the report says so. A media item may also carry `intent` (one sentence describing the picture) and `era`, as on
+  beats.
+
+### Plates under boards
+- Types with `plate_capable: true` in the catalog (charts, stat cards, lists, timelines, article and social cards)
+  read well as an inset card: the board shrinks to ~80% with a shadow over a dimmed, slowly pushing-in picture, so
+  the viewer keeps seeing real footage or a real document. By default that picture is the beat's own footage under
+  the board.
+- `plate` on such a graphic picks the picture instead (exactly one of):
+  `{"beat": true}` (the beat's footage, the default made explicit),
+  `{"query": "TSMC 2023 annual report revenue page", "kind": "document"}` (a real primary document: report, filing,
+  law, official page; `"kind": "photo"`, the default, searches for a photograph),
+  `{"url": "https://…"}` (a picture or clip you checked).
+  A plate that cannot be found falls back to the beat's footage (a document query first tries a photo search); the
+  report's `slot: "plate"` entry says what was used. `check_plan` refuses `plate` on a type that is not
+  plate-capable, or with an unknown field, more than one source, a `kind` other than document/photo, or a bad URL.
+- When more than ~40% of graphics are boards, `check_plan` warns (`board_share_high`) and names the boards that can
+  sit over a picture; plate them or turn others into overlays.
 
 ### Premium boards
 - Catalog entries with `premium: true` (about 190, mostly full-frame boards: maps, data charts, comparisons, lists,
@@ -148,10 +167,23 @@ One of: `query` (+ `alts`, `negatives`, `query_kind` such as object, place or pe
 `url` (+ `fallback_query`; public http(s) images ≤15 MB or videos ≤300 MB), or `auto: true` (Cliptude writes the
 query). Your query is searched verbatim first, then your `alts`; if nothing usable is found Cliptude uses its normal
 fallbacks (an AI still or a plate), and the report shows it.
+
+Give every beat an `intent` too (optional, recommended; up to 300 characters): **one concrete sentence describing the
+picture you want** — the subject, what is visible, the era and the place, plus the medium when it matters (news
+footage, archival photo, document). Add `era` (`"1999"`, `"1980s"`, `"present-day"`) when the narration is dated.
+Why: Cliptude's media library is searched by meaning, not by keywords, so a sentence that says what a camera saw
+finds the right picture, and `era` keeps a 1999 line from getting a 2020 photo. Keywords still go in `query`/`alts`:
+the intent is used beside them and never changes them.
+- Good: `"Taiwan Chi-Chi earthquake 1999 utility crews restoring power at night, news footage"`, `"Morris Chang
+  speaking at a TSMC press conference, Hsinchu, late 1980s, archival photo"`, `"Rows of ASML EUV lithography machines
+  inside a TSMC fab cleanroom, present-day"`.
+- Bad: `"the earthquake showed how fragile the supply chain is"` (an argument, not a picture), `"TSMC"` (a keyword),
+  `"cinematic, 4k, dramatic lighting"` (style words; nothing to find).
+- `auto: true` beats take an `intent` too: Cliptude writes the query and searches the library with your sentence.
 `camera`: `zoom_in, zoom_out, zoom_in_left, zoom_in_right, pan_left, pan_right, tilt_left, tilt_right, slant_left,
 slant_right, inset_wiggle`, or a look such as `bokeh_overlay`, `retro_film_overlay`, `smoke_fog_overlay` (an invalid
 value's error hint lists them all).
-`treatment`: `kenBurns, grain, flicker8mm, grayscaleIn, paper, dust, lightLeak, godRays, smoke, sparkles, lensFlare,
+`treatment`: `kenBurns, grain, flicker8mm, grayscaleIn, paper, dust, lightLeak, godRays, smoke, lensFlare,
 scanLine, cctv, colorChange, footageReveal`.
 
 ### Cuts and reveals
@@ -205,6 +237,9 @@ Graphics/min ≈ 4.9 (3.6–6.7); ~46% of runtime covered; ≥80% of graphics st
 ≤ 6 s; ≥ 9 visuals in the first minute; longest gap ≲ 30 s; no kind more than twice in a row; ≥ 16 distinct kinds per
 10 minutes; ~40% boards; every spoken date, ~50% of years and ~60% of money figures on screen. Warnings also flag
 numbers on cards that are not spoken nearby and sample text left in props.
+Pictures: about one beat per sentence, each on screen 4–6 s on average (`avg_picture_s`); `slow_pictures` warns
+above 6 s on average or for any picture held over 12 s, naming the beats to split. `few_graphics` warns below 3.6
+graphics a minute, `few_boards` when boards are under 15% of graphics (videos over 3 minutes).
 
 ## What Cliptude still decides
 Joins on cuts you leave at `"auto"`, the direction and timing details inside a reveal (a locked plan gets no

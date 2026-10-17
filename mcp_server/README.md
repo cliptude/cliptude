@@ -6,7 +6,7 @@ Generate videos from a saved template. Same account and credits as cliptude.com.
 
 1. Install the CLI: run `npm i -g @cliptude/cli`.
 2. Authenticate: run `cliptude auth login` and complete the sign-in in the browser it opens.
-3. Install the companion skills: run `npx skills add cliptude/cliptude --path mcp_server/skills`.
+3. Install the companion skills: run `npx skills add cliptude/cliptude`.
 
 From this repo without npm:
 

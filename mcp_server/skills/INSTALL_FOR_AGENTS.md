@@ -4,7 +4,7 @@ The user asked to set up Cliptude so they can generate videos from this session.
 
 1. Install the CLI: run `npm i -g @cliptude/cli`.
 2. Authenticate: ask the user to run `cliptude auth login` and complete the sign-in in the browser it opens.
-3. Install the companion skills: run `npx skills add cliptude/cliptude --path mcp_server/skills` (includes **cliptude**, **cliptude-script** and **cliptude-plan**).
+3. Install the companion skills: run `npx skills add cliptude/cliptude` (includes **cliptude**, **cliptude-script** and **cliptude-plan**).
 
 If npm global install is not available in this repo checkout:
 
