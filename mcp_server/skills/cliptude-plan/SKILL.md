@@ -130,7 +130,13 @@ the presenter seconds you plan.
   `{"slot": "<slot>", "query": "…"}`, `{"slot": …, "person": "Full Name"}` (portrait search), or
   `{"slot": …, "url": "https://…", "fallback_query": "…"}`. A board with no picture found gets an AI still and
   the report says so. A media item may also carry `intent` (one sentence describing the picture) and `era`, as on
-  beats.
+  beats. A `url` can be any public http(s) picture or clip; Cliptude downloads and keeps a copy.
+- **Rule: fill every picture slot.** For each graphic, read its `media_slots` and give each slot as many pictures
+  as its `min` (a two-picture comparison takes two). `check_plan` refuses a plan that gives fewer
+  (`missing_media`). A board with picture slots but no `media` (and no `plate`) shows whatever picture is under
+  its sentence, which is rarely the one it needs: `check_plan` warns (`borrowed_picture`, naming that beat).
+  Give it its own picture unless that beat's picture is what you want there. After the build, `get_plan_review`
+  shows `pictures: "n of m"` on each such graphic; anything below m is dropped from the video, never drawn empty.
 
 ### Plates under boards
 - Types with `plate_capable: true` in the catalog (charts, stat cards, lists, timelines, article and social cards)
