@@ -34,7 +34,9 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`. Not availabl
 9. **Review the build, not a render.** `get_plan_review` returns every picture or clip in order (beat, time, the
    sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and
    the props it will be drawn with, or why it is missing). `get_plan_report` adds every media request's fallback.
-   Look at the media links: a search can return a wrong picture that still counts as found.
+   Look at the media links: a search can return a wrong picture that still counts as found. `used.source` is one of
+   `your URL`, `stock footage`, `stock photo`, `web video`, `web image`, `AI still`, `reused` (a file another beat
+   also shows) or `text card` (a last-resort plate); both endpoints list them in `source_labels`.
 10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
    `get_narration` still works), then `continue_job` again. Cliptude rebuilds from the new plan, reuses every
    picture or clip whose request did not change, and charges nothing more. Repeat 9–10 as needed.
@@ -166,7 +168,8 @@ the presenter seconds you plan.
 One of: `query` (+ `alts`, `negatives`, `query_kind` such as object, place or person, `prefer`: video|image), `person`,
 `url` (+ `fallback_query`; public http(s) images ≤15 MB or videos ≤300 MB), or `auto: true` (Cliptude writes the
 query). Your query is searched verbatim first, then your `alts`; if nothing usable is found Cliptude uses its normal
-fallbacks (an AI still or a plate), and the report shows it.
+fallbacks (an AI still or a plate), and the report shows it. The same `url` may sit on several beats: each one
+plays that file.
 
 Give every beat an `intent` too (optional, recommended; up to 300 characters): **one concrete sentence describing the
 picture you want** — the subject, what is visible, the era and the place, plus the medium when it matters (news
@@ -184,7 +187,12 @@ the intent is used beside them and never changes them.
 slant_right, inset_wiggle`, or a look such as `bokeh_overlay`, `retro_film_overlay`, `smoke_fog_overlay` (an invalid
 value's error hint lists them all).
 `treatment`: `kenBurns, grain, flicker8mm, grayscaleIn, paper, dust, lightLeak, godRays, smoke, lensFlare,
-scanLine, cctv, colorChange, footageReveal`.
+scanLine, cctv, colorChange, footageReveal`, or `"none"`.
+- A beat gets a treatment **only when it sets `treatment`**; Cliptude adds none (no grain, smoke, light leak or
+  colour change of its own). The theme's colour grade still applies to every picture.
+- `camera` unset: a beat that plays your `url` holds still (a finished clip, capture or screenshot is shown as
+  sent); any other beat gets a plain slow move (zoom or pan, never an overlay or frame). `"camera": "none"` holds
+  any beat still.
 
 ### Cuts and reveals
 - `transition_in` on a beat is the join on the cut into it: a `slug` from the catalog's `transitions` (e.g. `fade`,
@@ -243,7 +251,8 @@ graphics a minute, `few_boards` when boards are under 15% of graphics (videos ov
 
 ## What Cliptude still decides
 Joins on cuts you leave at `"auto"`, the direction and timing details inside a reveal (a locked plan gets no
-collages or reveals you did not ask for), which provider a clip comes from (YouTube, Pexels, Pixabay; you choose video vs still), the
+collages or reveals you did not ask for), where a searched picture or clip comes from (you choose video vs still), the
+plain camera move on a searched beat without a `camera`, the
 voice, caption styling, and fallbacks when your media cannot be found. The report (`get_plan_report`) lists every
 graphic, transition, reveal and free sound effect you planned against what was rendered, with the reason for anything
 dropped.

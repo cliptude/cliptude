@@ -242,7 +242,7 @@ def build_server(*, with_http_auth: bool = False):
             bool | None,
             Field(
                 description=(
-                    "Avatar Video only: AI Image + AI Video instead of stock/YouTube. "
+                    "Avatar Video only: AI Image + AI Video instead of stock and web footage. "
                     "Omit to use the saved template. Other formats reject this field."
                 ),
             ),

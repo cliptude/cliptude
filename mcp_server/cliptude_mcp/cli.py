@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> None:
         action=argparse.BooleanOptionalAction,
         default=None,
         help=(
-            "Avatar Video: AI Image + AI Video instead of stock/YouTube. "
+            "Avatar Video: AI Image + AI Video instead of stock and web footage. "
             "Omit to use the template. Only valid for Avatar Video templates."
         ),
     )
