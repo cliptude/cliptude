@@ -59,7 +59,7 @@ cliptude account
 
 If the user asked **only for a script** or **only for narration audio**, use `cliptude script` / MCP `create_script` or `cliptude voiceover` / MCP `create_voiceover`. Do not call `create_job`. Poll `get_job` until `completed`, then read `script` or `voiceover.url`. If they then want the MP4, call `cliptude continue` / MCP `continue_job` on that job id (`can_continue` is true). Do not start a second job.
 
-If `templates` is empty, tell the user to finish the wizard in Cliptude and Save as template.
+If `templates` is empty, or none fits the video, create one: `get_template_options` (CLI `template-options`) for the format's fields and defaults, `list_voices` (CLI `voices`) for a voice, then `create_template` (CLI `template-create`) with the user's preferences. Send the user to the wizard only if they want to pick the look themselves.
 
 Custom script formatting: spoken words only (no Scene 1, no [Music plays]). See https://cliptude.com/docs/custom-script/
 
