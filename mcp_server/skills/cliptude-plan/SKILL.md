@@ -21,7 +21,8 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`. Not availabl
    have). Needs the full website price in credits; charges only the narration now.
 3. **Wait.** Poll `get_job` until `status` is `plan_ready` (`narration_url` is set). Plans expire after 14 days.
 4. **Read.** `get_narration`: `sentences[]` (`id`, `start`, `end`, `text`, `words[]`), `narration_digest`,
-   `suggested_chapters`, `template` (theme, switched-off graphics), `pricing`.
+   `suggested_chapters`, `template` (theme, switched-off graphics, and `look`: the template's style pack,
+   colours and music now), `pricing`.
 5. **Choose graphics.** `get_kind_catalog(format, compact=true)` for one line per graphic, then
    `get_kind_catalog(types=[...])` for the full entries you will use: description (when to use / not for),
    `prop_schema` (required props), `media_slots`, durations, cap, and a preview video URL.
@@ -228,6 +229,8 @@ scanLine, cctv, colorChange, footageReveal`, or `"none"`.
 Same names and values as `create_template` (see `get_template_options`): themes `standard, crime, history, modern,
 minimalist, sports`; styles `default, news, yellow, maroon, investigative, dramatic`; primary = headline text colour
 over footage (keep it light), secondary = accent. The **voice cannot change** here (the narration is recorded).
+Leave out any field you are happy with: `get_narration`'s `template.look` shows what the template has now, and a
+`look` field you set replaces it for this video.
 
 ### Format-specific
 - `ranked_items` (Top 10 only): one title per entry, unique ranks, titles may not overlap each other or a board.
