@@ -70,6 +70,8 @@ Before a long or costly job, or when the user asks what it will cost, call `esti
 
 402 = not enough credits (nothing queued). 403 = need a paid plan (SaaS).
 
+Avatar Video needs an avatar: `list_avatars` (CLI `avatars`, `--section mine` for the user's own) gives ids. Put one in `create_template` settings as `avatar_profile_id` with a voice of the same gender, or pass `avatar_profile_id` (CLI `--avatar`) on `create_job` to use a different avatar for one video.
+
 Avatar Video templates store **Avatar Intro Only** and **AI Image + AI Video**. `list_templates` / `get_template` include `avatar_intro_only` and `avatar_ai_footage` for that format. Override per job with `--avatar-intro-only` / `--no-avatar-intro-only` and `--avatar-ai-footage` / `--no-avatar-ai-footage` (MCP: `avatar_intro_only`, `avatar_ai_footage`). Omit to keep the template. Other formats reject those fields.
 
 ## Review, revise and render a finished video
