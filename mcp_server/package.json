@@ -4,7 +4,7 @@
   "description": "Cliptude CLI — generate videos from saved templates.",
   "homepage": "https://github.com/cliptude/cliptude#readme",
   "bin": {
-    "cliptude": "npm/bin/cliptude.js"
+    "cliptude": "./npm/bin/cliptude.js"
   },
   "files": [
     "cliptude_mcp",

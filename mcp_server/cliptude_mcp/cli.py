@@ -1,4 +1,4 @@
-"""Tiny CLI wrapping /api/v1: auth | templates | template-create | template-options | voices | generate | editor | agent | render | script | voiceover | continue | status | jobs | account | cancel."""
+"""Tiny CLI wrapping /api/v1: auth | templates | template-create | template-options | voices | avatars | estimate | generate | editor | agent | render | script | voiceover | continue | status | jobs | account | cancel."""
 
 from __future__ import annotations
 
@@ -147,6 +147,35 @@ def main(argv: list[str] | None = None) -> None:
     vc.add_argument("--provider", default="elevenlabs", help="elevenlabs, minimax, cartesia, inworld, voicetory")
     vc.add_argument("--language", default="")
 
+    av = sub.add_parser("avatars", help="List avatars for Avatar Video (id for --avatar / avatar_profile_id)")
+    av.add_argument("--section", default="", choices=["", "mine", "builtin", "public", "favorites"])
+    av.add_argument("--search", default="", help="Part of the avatar's name")
+    av.add_argument("--gender", default="", choices=["", "male", "female"])
+    av.add_argument("--limit", type=int, default=50)
+
+    est = sub.add_parser(
+        "estimate",
+        help="Credits a job would need (creates nothing)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "example:\n"
+            '  cliptude estimate --template "Finance vector weekly" --script-file script.txt\n'
+            '  cliptude estimate --template "Finance vector weekly" --voiceover-seconds 3600'
+        ),
+    )
+    est.add_argument("--template", required=True, help="Template name or UUID")
+    est.add_argument("--prompt", default="")
+    est.add_argument("--script", default="")
+    est.add_argument("--script-file", default="")
+    est.add_argument("--duration", default="", help="Duration bucket, e.g. 6-8. Default: template (or from --script)")
+    est.add_argument("--voiceover-seconds", type=float, default=None, help="Length of the voiceover you would upload")
+    est.add_argument("--talking-head-seconds", type=float, default=None, help="Length of the talking-head video you would upload")
+    est.add_argument("--output", default="", choices=["", "video", "plan", "script", "voiceover"])
+    est.add_argument("--avatar-intro-only", action=argparse.BooleanOptionalAction, default=None)
+    est.add_argument("--avatar-ai-footage", action=argparse.BooleanOptionalAction, default=None)
+    est.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
+    est.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+
     g = sub.add_parser(
         "generate",
         help="Start a job",
@@ -206,6 +235,8 @@ def main(argv: list[str] | None = None) -> None:
             "Omit to use the template. Only valid for Avatar Video templates."
         ),
     )
+    g.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
+    g.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
     g.add_argument(
         "--disable-animations",
         action=argparse.BooleanOptionalAction,
@@ -315,6 +346,8 @@ def main(argv: list[str] | None = None) -> None:
     pj.add_argument("--script-file", default="")
     pj.add_argument("--voiceover", default="", help="Local audio to use as the narration (aligned, not re-voiced)")
     pj.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 6-8")
+    pj.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
+    pj.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
 
     nr = sub.add_parser("narration", help="Numbered sentences and word timings of a plan_ready job")
     nr.add_argument("job_id")
@@ -408,6 +441,28 @@ def main(argv: list[str] | None = None) -> None:
             _print(client.template_options(args.format))
         elif args.cmd == "voices":
             _print(client.list_voices(provider=args.provider, language=args.language or None))
+        elif args.cmd == "avatars":
+            _print(client.list_avatars(
+                section=args.section or None, search=args.search or None,
+                gender=args.gender or None, limit=args.limit,
+            ))
+        elif args.cmd == "estimate":
+            script = args.script
+            if args.script_file:
+                script = Path(args.script_file).read_text(encoding="utf-8")
+            _print(client.estimate_credits(
+                template_id=_resolve_template_id(client, args.template),
+                prompt=args.prompt or None,
+                script=script or None,
+                duration=args.duration or None,
+                voiceover_seconds=args.voiceover_seconds,
+                talking_head_seconds=args.talking_head_seconds,
+                output=args.output or None,
+                avatar_intro_only=args.avatar_intro_only,
+                avatar_ai_footage=args.avatar_ai_footage,
+                avatar_profile_id=args.avatar,
+                avatar_engine=args.avatar_engine or None,
+            ))
         elif args.cmd == "generate":
             script = args.script
             if args.script_file:
@@ -441,6 +496,8 @@ def main(argv: list[str] | None = None) -> None:
                 talking_head_path=talking_head or None,
                 avatar_intro_only=args.avatar_intro_only,
                 avatar_ai_footage=args.avatar_ai_footage,
+                avatar_profile_id=args.avatar,
+                avatar_engine=args.avatar_engine or None,
                 disable_animations=args.disable_animations,
                 disable_overlays=args.disable_overlays,
                 disable_effects=args.disable_effects,
@@ -490,6 +547,8 @@ def main(argv: list[str] | None = None) -> None:
                 voiceover_path=voiceover or None,
                 duration=(args.duration or None),
                 output="plan",
+                avatar_profile_id=args.avatar,
+                avatar_engine=args.avatar_engine or None,
             ))
         elif args.cmd == "narration":
             _print(client.get_narration(args.job_id))

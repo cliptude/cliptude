@@ -24,6 +24,27 @@ class ClientTests(TestCase):
         self.assertNotIn("prompt", kwargs["json_body"])
         self.assertNotIn("faceless_coding", kwargs["json_body"])
 
+    def test_estimate_credits_posts_only_given_fields(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "request", return_value={"credits_required": 1452}) as req:
+            client.estimate_credits(template_id="tmpl", voiceover_seconds=3600)
+        req.assert_called_once_with(
+            "POST",
+            "/api/v1/jobs/estimate",
+            json_body={"template_id": "tmpl", "voiceover_seconds": 3600},
+        )
+
+    def test_avatar_fields_go_on_job_and_avatars_are_listed(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "request", return_value={"id": "abc"}) as req:
+            client.create_job(template_id="tmpl", title="T", script="Words.", avatar_profile_id=42, avatar_engine="IV")
+        body = req.call_args.kwargs["json_body"]
+        self.assertEqual(body["avatar_profile_id"], 42)
+        self.assertEqual(body["avatar_engine"], "iv")
+        with patch.object(client, "request", return_value={"results": []}) as req:
+            client.list_avatars(section="mine")
+        req.assert_called_once_with("GET", "/api/v1/avatars", params={"limit": 50, "offset": 0, "section": "mine"})
+
     def test_create_template_posts_format_and_settings(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "request", return_value={"id": "t1"}) as req:

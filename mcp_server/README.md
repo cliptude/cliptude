@@ -24,6 +24,9 @@ cliptude voices --provider elevenlabs
 cliptude template-create --name "TSMC doc" --format faceless_documentary --set voice_id=<id> --set voice_name=George --set generation_model=pro --set faceless_documentary_style=investigative
 cliptude template-create --name "TSMC doc" --format faceless_documentary --settings-file settings.json
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" --duration 3-4
+cliptude estimate --template "Finance vector weekly" --script-file script.txt
+cliptude avatars --section mine
+cliptude generate --template "My avatar weekly" --title "Episode one" --script-file script.txt --avatar 42
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --voiceover narration.mp3
 cliptude generate --template "My talking head" --title "Weekly recap" --talking-head clip.mp4
@@ -38,7 +41,9 @@ cliptude continue <job-id>
 cliptude status <job-id>
 ```
 
-No template yet? `template-create` makes one without the create wizard: pick a `voice_id` from `voices`, and see `template-options` for every other field, its choices and its default (unset fields take the wizard default). Values are validated like the wizard; uploads (custom music, avatars, characters) still need the wizard. MCP tools: `get_template_options`, `list_voices`, `create_template`.
+No template yet? `template-create` makes one without the create wizard: pick a `voice_id` from `voices`, and see `template-options` for every other field, its choices and its default (unset fields take the wizard default). Values are validated like the wizard; uploads (custom music, avatars, characters) still need the wizard. MCP tools: `get_template_options`, `list_voices`, `create_template`. For Avatar Video, `avatars` (MCP `list_avatars`) lists your avatars; set one with `--set avatar_profile_id=<id>` on `template-create`, or override it per video with `--avatar <id>` (and `--avatar-engine iii|iv|v`) on `generate`, `plan-job` and `estimate`. The avatar's gender must match the voice.
+
+To check the price first, `estimate` (MCP `estimate_credits`, REST `POST /api/v1/jobs/estimate`) takes the same template and prompt/script as `generate` (an upload as `--voiceover-seconds` / `--talking-head-seconds`) and returns the credits the job would need and whether the account has them. It creates and charges nothing.
 
 To revise a finished video, `editor` opens its timeline (item ids, times, text), `agent` asks Cliptude Agent for an edit (it charges agent credits; reference item ids with `--items`), and `render` exports a new MP4. MCP tools: `open_editor_project`, `get_editor_project`, `run_agent`, `get_agent_run`, `cancel_agent_run`, `render_project`, `get_render`.
 

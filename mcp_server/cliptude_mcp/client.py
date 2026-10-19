@@ -129,8 +129,14 @@ def _avatar_job_fields(
     avatar_ai_footage: bool | None,
     *,
     as_strings: bool = False,
+    avatar_profile_id: int | str | None = None,
+    avatar_engine: str | None = None,
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {}
+    if avatar_profile_id not in (None, ""):
+        fields["avatar_profile_id"] = str(avatar_profile_id) if as_strings else int(avatar_profile_id)
+    if avatar_engine:
+        fields["avatar_engine"] = str(avatar_engine).strip().lower()
     if avatar_intro_only is not None:
         fields["avatar_intro_only"] = (
             ("true" if avatar_intro_only else "false") if as_strings else bool(avatar_intro_only)
@@ -270,6 +276,8 @@ class CliptudeClient:
         output: str | None = None,
         avatar_intro_only: bool | None = None,
         avatar_ai_footage: bool | None = None,
+        avatar_profile_id: int | str | None = None,
+        avatar_engine: str | None = None,
         disable_animations: bool | None = None,
         disable_overlays: bool | None = None,
         disable_effects: bool | None = None,
@@ -331,7 +339,10 @@ class CliptudeClient:
             )
         if vo_path:
             extra_data = {
-                **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
+                **_avatar_job_fields(
+                    avatar_intro_only, avatar_ai_footage, as_strings=True,
+                    avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
+                ),
                 **motion_fields_str,
                 **({"output": output_kind} if output_kind == "plan" else {}),
             }
@@ -353,7 +364,10 @@ class CliptudeClient:
             body["duration"] = duration
         if output_kind and output_kind != "video":
             body["output"] = output_kind
-        body.update(_avatar_job_fields(avatar_intro_only, avatar_ai_footage))
+        body.update(_avatar_job_fields(
+            avatar_intro_only, avatar_ai_footage,
+            avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
+        ))
         body.update(motion_fields)
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
@@ -724,3 +738,52 @@ class CliptudeClient:
 
     def get_account(self) -> Any:
         return self.request("GET", "/api/v1/account")
+
+    def estimate_credits(
+        self,
+        *,
+        template_id: str,
+        prompt: str | None = None,
+        script: str | None = None,
+        duration: str | None = None,
+        voiceover_seconds: float | None = None,
+        talking_head_seconds: float | None = None,
+        output: str | None = None,
+        avatar_intro_only: bool | None = None,
+        avatar_ai_footage: bool | None = None,
+        avatar_profile_id: int | str | None = None,
+        avatar_engine: str | None = None,
+    ) -> Any:
+        """Credits a job would need; creates nothing."""
+        body: dict[str, Any] = {"template_id": template_id}
+        for key, value in (
+            ("prompt", prompt),
+            ("script", script),
+            ("duration", duration),
+            ("voiceover_seconds", voiceover_seconds),
+            ("talking_head_seconds", talking_head_seconds),
+            ("output", output),
+        ):
+            if value is not None and value != "":
+                body[key] = value
+        body.update(_avatar_job_fields(
+            avatar_intro_only, avatar_ai_footage,
+            avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
+        ))
+        return self.request("POST", "/api/v1/jobs/estimate", json_body=body)
+
+    def list_avatars(
+        self,
+        *,
+        section: str | None = None,
+        search: str | None = None,
+        gender: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Avatars for Avatar Video (ids for avatar_profile_id)."""
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        for key, value in (("section", section), ("search", search), ("gender", gender)):
+            if value:
+                params[key] = value
+        return self.request("GET", "/api/v1/avatars", params=params)

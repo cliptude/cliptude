@@ -96,6 +96,8 @@ def build_server(*, with_http_auth: bool = False):
         "prompt, script, voiceover_path (uploaded audio, transcribed; skips TTS), "
         "or talking_head_path (presenter video on a Talking Head template). "
         "create_job returns immediately; poll get_job until completed or failed. "
+        "To quote a price or check the balance first, call estimate_credits with the same "
+        "template and prompt/script (an upload as voiceover_seconds); it creates nothing. "
         "For a script only (no MP4), use create_script. For narration audio only, "
         "use create_voiceover. To turn a completed script or voiceover job into an MP4 "
         "on the same job id, use continue_job (do not create a second job). "
@@ -105,6 +107,8 @@ def build_server(*, with_http_auth: bool = False):
         "If they provide a voiceover file, pass voiceover_path and omit prompt/script. "
         "If they provide a talking-head recording, pass talking_head_path and omit "
         "prompt/script/voiceover_path (template format must be talking_head). "
+        "Avatar Video: list_avatars gives avatar ids; put one in create_template settings as "
+        "avatar_profile_id (with the voice), or pass avatar_profile_id on create_job to override. "
         "Avatar Video templates may include avatar_intro_only "
         "(Avatar Intro Only) and avatar_ai_footage (AI Image + AI Video); pass those "
         "on create_job to override the template, or omit them to keep the template. "
@@ -187,6 +191,7 @@ def build_server(*, with_http_auth: bool = False):
                 description=(
                     "Wizard settings: voice_id, voice_name, voice_provider plus any field from "
                     "get_template_options (unset fields take the wizard defaults). "
+                    "Avatar Video: avatar_profile_id from list_avatars (gender must match the voice). "
                     "Optional thumbnail: {custom_prompt}."
                 )
             ),
@@ -195,6 +200,84 @@ def build_server(*, with_http_auth: bool = False):
         """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job)."""
         try:
             return _client().create_template(name=name, format=format, settings=settings)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Estimate credits",
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+    )
+    def estimate_credits(
+        template_id: Annotated[str, Field(min_length=8, description="Saved template UUID")],
+        prompt: Annotated[str | None, Field(description="Topic/brief, as you would send to create_job.")] = None,
+        script: Annotated[str | None, Field(description="Spoken narration, as you would send to create_job. Its length sets the estimate.")] = None,
+        duration: Annotated[
+            str | None,
+            Field(description="Duration bucket such as 6-8. Omit to use the template (or estimate from script)."),
+        ] = None,
+        voiceover_seconds: Annotated[
+            float | None,
+            Field(gt=0, description="Length of the voiceover you would upload. Uploaded voiceovers bill at the lowest voice rate. Do not also send prompt or script."),
+        ] = None,
+        talking_head_seconds: Annotated[
+            float | None,
+            Field(gt=0, description="Length of the talking-head video you would upload (Talking Head templates only)."),
+        ] = None,
+        output: Annotated[
+            str | None,
+            Field(description='"video" (default), "plan", "script" or "voiceover" — the output you would request.'),
+        ] = None,
+        avatar_intro_only: Annotated[bool | None, Field(description="Avatar Video only, as in create_job.")] = None,
+        avatar_ai_footage: Annotated[bool | None, Field(description="Avatar Video only, as in create_job.")] = None,
+        avatar_profile_id: Annotated[
+            int | None,
+            Field(description="Avatar Video only: avatar id from list_avatars. Omit to use the template's avatar."),
+        ] = None,
+        avatar_engine: Annotated[
+            str | None,
+            Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Credits a job would need before you create it, with the same pricing as create_job. Creates and charges nothing.
+
+        Returns credits_required (what is held to start; the final charge after render is usually lower),
+        credits_estimate (before the safety buffer), credits_per_minute, estimated_seconds, voice_source for
+        voice-priced formats, narration_credits for plan jobs, credits_available and enough_credits.
+        Use it to quote the user a price or check the balance before create_job."""
+        try:
+            return _client().estimate_credits(
+                template_id=template_id,
+                prompt=prompt,
+                script=script,
+                duration=duration,
+                voiceover_seconds=voiceover_seconds,
+                talking_head_seconds=talking_head_seconds,
+                output=output,
+                avatar_intro_only=avatar_intro_only,
+                avatar_ai_footage=avatar_ai_footage,
+                avatar_profile_id=avatar_profile_id,
+                avatar_engine=avatar_engine,
+            )
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="List avatars",
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+    )
+    def list_avatars(
+        section: Annotated[
+            str | None,
+            Field(description='"mine" (photo avatars the user created), "builtin", "public" or "favorites". Omit for all.'),
+        ] = None,
+        search: Annotated[str | None, Field(description="Part of the avatar's name.")] = None,
+        gender: Annotated[str | None, Field(description='"male" or "female" to match the voice. Omit for all.')] = None,
+        limit: Annotated[int, Field(ge=1, le=100)] = 50,
+        offset: Annotated[int, Field(ge=0)] = 0,
+    ) -> dict[str, Any]:
+        """Avatars the user can put in an Avatar Video: id, name, section, gender, engines, thumbnail_url. Pass an id as avatar_profile_id to create_template (in settings), create_job, create_plan_job or estimate_credits. The avatar's gender must match the voice."""
+        try:
+            return _client().list_avatars(section=section, search=search, gender=gender, limit=limit, offset=offset)
         except Exception as exc:
             return _err(exc)
 
@@ -247,6 +330,14 @@ def build_server(*, with_http_auth: bool = False):
                 ),
             ),
         ] = None,
+        avatar_profile_id: Annotated[
+            int | None,
+            Field(description="Avatar Video only: avatar id from list_avatars. Omit to use the template's avatar."),
+        ] = None,
+        avatar_engine: Annotated[
+            str | None,
+            Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
+        ] = None,
         disable_animations: Annotated[
             bool | None,
             Field(description="True = no animated text reveals or motion graphics. Omit to use the saved template."),
@@ -296,6 +387,8 @@ def build_server(*, with_http_auth: bool = False):
                 talking_head_path=th,
                 avatar_intro_only=avatar_intro_only,
                 avatar_ai_footage=avatar_ai_footage,
+                avatar_profile_id=avatar_profile_id,
+                avatar_engine=avatar_engine,
                 disable_animations=disable_animations,
                 disable_overlays=disable_overlays,
                 disable_effects=disable_effects,
@@ -372,6 +465,14 @@ def build_server(*, with_http_auth: bool = False):
         script: Annotated[str | None, Field(description="Spoken narration to voice as-is. Omit prompt when you pass this.")] = None,
         voiceover_path: Annotated[str | None, Field(description="Local audio file to use as the narration (aligned, not re-voiced). Omit prompt/script.")] = None,
         duration: Annotated[str | None, Field(description="Duration bucket such as 6-8. Omit to use the template.")] = None,
+        avatar_profile_id: Annotated[
+            int | None,
+            Field(description="Avatar Video only: avatar id from list_avatars. Omit to use the template's avatar."),
+        ] = None,
+        avatar_engine: Annotated[
+            str | None,
+            Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
+        ] = None,
     ) -> dict[str, Any]:
         """Start a job whose visuals YOU plan. Cliptude writes (if needed) and voices the narration, then stops at status plan_ready. It needs the full website price in credits but charges only the narration now; the rest is charged when the video completes, and the total equals the website price. Poll get_job until plan_ready, then get_narration."""
         try:
@@ -385,6 +486,8 @@ def build_server(*, with_http_auth: bool = False):
                 voiceover_path=voiceover_path,
                 duration=duration,
                 output="plan",
+                avatar_profile_id=avatar_profile_id,
+                avatar_engine=avatar_engine,
             )
         except Exception as exc:
             return _err(exc)
