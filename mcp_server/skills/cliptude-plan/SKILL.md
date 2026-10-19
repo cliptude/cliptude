@@ -16,6 +16,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`. Not availabl
 
 1. **Template.** `list_templates`; or `get_template_options` + `list_voices` + `create_template`. The template fixes the
    **voice**, language, aspect ratio and duration bucket. (Theme, colours, style and music can be set in the plan.)
+   The template's `generation_model` decides whether footage can move: Cinder (`high`) sources still pictures only, so `prefer: "video"` becomes a still there; Caldera (`pro`) sources video clips. `check_plan` warns `video_needs_caldera`.
 2. **Start.** `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
    `prompt` (a brief; Cliptude writes the narration — never the bare title), or `voiceover_path` (audio you already
    have). Needs the full website price in credits; charges only the narration now.
