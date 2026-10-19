@@ -49,8 +49,8 @@ CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b
 
 ## Pricing
 
-The total for the job equals the website price for the same video. The narration (script + TTS at cost, or
-`max(2, minutes)` credits to align an uploaded voiceover) is charged when it is ready and is kept if you abandon the
+The total for the job equals the website price for the same video. The narration (charged per minute by voice — 18 credits/min with
+ElevenLabs, 4 with Voicetory — plus the script at cost, or `max(2, minutes)` credits to align an uploaded voiceover) is charged when it is ready and is kept if you abandon the
 job. The rest is charged when the video completes. `check_plan` returns `cost.due_at_continue`. Avatar Video prices
 the presenter seconds you plan.
 

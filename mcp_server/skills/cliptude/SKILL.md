@@ -42,6 +42,7 @@ Or `export CLIPTUDE_API_KEY='clp_…'` from /developers/. Never commit keys.
 
 ```bash
 cliptude templates
+cliptude estimate --template "Finance vector weekly" --script-file script.txt
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt --duration 3-4
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" --duration 3-4
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --voiceover narration.mp3
@@ -64,6 +65,8 @@ If `templates` is empty, or none fits the video, create one: `get_template_optio
 Custom script formatting: spoken words only (no Scene 1, no [Music plays]). See https://cliptude.com/docs/custom-script/
 
 Optional `--duration` (`3-4`, `6-8`, `10-12`, …) overrides the template. Without it, prompt jobs use the template duration and script jobs estimate from word count. `--voiceover` and `--talking-head` ignore `--duration` (length comes from the file). MCP: `create_job(..., voiceover_path="/abs/path/narration.mp3")` or `talking_head_path="/abs/path/clip.mp4"` — local stdio only; remote hosts should use the CLI.
+
+Before a long or costly job, or when the user asks what it will cost, call `estimate_credits` (CLI `estimate`) with the same template and prompt/script (an upload as `voiceover_seconds`). It uses the same pricing as `create_job`, creates nothing and returns `credits_required`, `credits_available` and `enough_credits`. An uploaded voiceover bills at the lowest voice rate.
 
 402 = not enough credits (nothing queued). 403 = need a paid plan (SaaS).
 
