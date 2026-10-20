@@ -96,6 +96,15 @@ each one in a published video: Cliptude stores and renders what you send. Good s
 If a key is needed, ask the user to add it to your environment; `sourcing.env.example` next to this skill lists the
 ones the sources above use. Never put a key in a plan.
 
+**Using the user's own browser.** When your host can drive the user's Chrome (the Claude in Chrome extension, or Chrome
+DevTools / remote debugging through an MCP server such as `chrome-devtools-mcp`), you can source the way the user would:
+search Storyblocks, Shutterstock, Getty or another site they are signed in to, download the licensed file, find a
+public-domain photo on an archive page, or capture a frame or screenshot the narration is about. Ask the user before you
+start, work only in accounts and sites they have access to, take each file the site's own way (its download button or
+API, within that license), and stop at a paywall, CAPTCHA or sign-in you do not have rather than getting around it. Then
+send each file to Cliptude: upload it (`upload_plan_media` / `cliptude upload-media`) or, on a remote host, give a public
+link (`url`). Note in your summary where each picture came from, so the user can credit it.
+
 ## Pricing
 
 The total for the job equals the website price for the same video. Render-only jobs: 15 credits per minute flat. Re-rendering a finished video costs 10% of the job's credits, and never less than 6 credits per minute of timeline. The narration (charged per minute by voice — 18 credits/min with
