@@ -73,17 +73,25 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
 
 ### Finding your own media (render-only)
 Cliptude searches for nothing on these jobs, so the pictures and clips come from you, and you must be allowed to use
-each one in a published video: Cliptude stores and renders what you send. Good sources, all usable without asking:
+each one in a published video: Cliptude stores and renders what you send. Good sources, most usable without asking:
 - **Free stock with an API key you create:** Pexels (`api.pexels.com`, photos and video) and Pixabay
-  (`pixabay.com/api`, photos and video). Both licenses allow commercial use without credit.
+  (`pixabay.com/api`, photos and video). Both allow commercial use without credit; read their license for identifiable
+  people, brands and logos (no implied endorsement, no reselling an unaltered file).
+- **Stock the user subscribes to:** Storyblocks, Vecteezy, Shutterstock, Getty Images / iStock, Adobe Stock, Envato
+  Elements, Pond5, Unsplash+ and Artgrid. Use their API or downloads with the user's own key or account, within that
+  subscription's license (some files are editorial-only, and some plans exclude broadcast or ads).
 - **Public domain and open archives:** NASA, US federal government works (most are public domain), the Library of
   Congress, the US National Archives, Wikimedia Commons and the Internet Archive. On Commons and the Archive, check each
   file's own license: CC BY needs a credit line, and "no known restrictions" is not the same as public domain.
+- **Short excerpts under fair use** from YouTube and other video sites: a few seconds the narration is actually about
+  (commenting on it, reporting on it, analysing it), credited on screen or in the description. Never a whole video,
+  long stretches of one creator's work, or a clip used only as background decoration; avoid music videos, films and
+  sports broadcasts beyond a brief quoted moment. Fair use is judged case by case, and downloading is subject to each
+  platform's terms: the user decides and is responsible.
 - **The user's own material:** their footage, photos, screen recordings and documents.
 - **Pictures you generate** with an image or video model the user has a key for.
-Do not take clips from YouTube, TikTok or other platforms whose terms forbid downloading, and do not use proxies or
-other tricks to get past a site's limits. If a key is needed, ask the user to add it to your environment;
-`sourcing.env.example` next to this skill lists the ones the sources above use. Never put a key in a plan.
+If a key is needed, ask the user to add it to your environment; `sourcing.env.example` next to this skill lists the
+ones the sources above use. Never put a key in a plan.
 
 ## Pricing
 
