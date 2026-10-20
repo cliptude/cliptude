@@ -24,7 +24,7 @@ Same modes as create.html. **Exactly one narration source.** Prompt and script m
 | Topic or title only (“make a video about X”) | Follow **cliptude-script**: web-search, write spoken narration, then `--script-file` / `script` |
 | Full narration they want voiced | `--script` / `--script-file` as-is (spoken words only) |
 | Explicit “let Cliptude write the script” | `--prompt` = a **brief** (audience, angle, must-include facts) — not the title |
-| A voiceover audio file (MP3, M4A, WAV, …) | `--voiceover path` / MCP `voiceover_path`. Cliptude transcribes it and skips TTS. Do not also pass `--prompt` or `--script`. Do not run **cliptude-script**. Duration comes from the file. |
+| A voiceover audio file (MP3, M4A, WAV, …) | `--voiceover path` / MCP `voiceover_path`, or a public link as `--voiceover-url` / `voiceover_url` (remote hosts cannot send a local file). Cliptude transcribes it and skips TTS. Do not also pass `--prompt` or `--script`. Do not run **cliptude-script**. Duration comes from the file. |
 | A talking-head presenter video (MP4, MOV, WEBM, AVI) | `--talking-head path` / MCP `talking_head_path` with a **Talking Head** template. Cliptude transcribes it and skips TTS. Do not also pass `--prompt`, `--script`, or `--voiceover`. Do not run **cliptude-script**. Duration comes from the file. |
 
 Read `../cliptude-script/SKILL.md` before `generate` / `create_job` when the user did not paste a script **and** did not give a voiceover or talking-head file.

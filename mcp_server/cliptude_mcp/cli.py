@@ -175,6 +175,7 @@ def main(argv: list[str] | None = None) -> None:
     est.add_argument("--avatar-ai-footage", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
     est.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    est.add_argument("--render-only", action="store_true", help="Plan job where you bring the voiceover, pictures, clips and graphics (with --output plan --voiceover-seconds)")
 
     g = sub.add_parser(
         "generate",
@@ -207,6 +208,7 @@ def main(argv: list[str] | None = None) -> None:
         default="",
         help="Path to a narration audio file (MP3, M4A, WAV, …). Transcribed; skips TTS. Do not combine with --prompt or --script.",
     )
+    g.add_argument("--voiceover-url", default="", help="Public https link to the narration audio; Cliptude downloads it.")
     g.add_argument(
         "--talking-head",
         default="",
@@ -345,9 +347,11 @@ def main(argv: list[str] | None = None) -> None:
     pj.add_argument("--script", default="")
     pj.add_argument("--script-file", default="")
     pj.add_argument("--voiceover", default="", help="Local audio to use as the narration (aligned, not re-voiced)")
+    pj.add_argument("--voiceover-url", default="", help="Public https link to the narration audio; Cliptude downloads it")
     pj.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 6-8")
     pj.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
     pj.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    pj.add_argument("--render-only", action="store_true", help="You bring everything (needs --voiceover); Cliptude only builds and renders, at the render-only rate")
 
     nr = sub.add_parser("narration", help="Numbered sentences and word timings of a plan_ready job")
     nr.add_argument("job_id")
@@ -370,6 +374,9 @@ def main(argv: list[str] | None = None) -> None:
     pv.add_argument("job_id")
     pr = sub.add_parser("plan-report", help="What sourcing used for each media request of the locked plan")
     pr.add_argument("job_id")
+    um = sub.add_parser("upload-media", help="Send a picture or clip you found to a plan job; prints its keep id for media.keep")
+    um.add_argument("job_id")
+    um.add_argument("path", help="Local JPG/PNG/WEBP/GIF (up to 15 MB) or MP4/MOV/WEBM/M4V (up to 300 MB)")
 
     ed = sub.add_parser("editor", help="Open the timeline editor project for a completed job (prints the timeline)")
     ed.add_argument("job_id")
@@ -462,14 +469,16 @@ def main(argv: list[str] | None = None) -> None:
                 avatar_ai_footage=args.avatar_ai_footage,
                 avatar_profile_id=args.avatar,
                 avatar_engine=args.avatar_engine or None,
+                render_only=args.render_only or None,
             ))
         elif args.cmd == "generate":
             script = args.script
             if args.script_file:
                 script = Path(args.script_file).read_text(encoding="utf-8")
             voiceover = (args.voiceover or "").strip()
+            voiceover_url = (args.voiceover_url or "").strip()
             talking_head = (args.talking_head or "").strip()
-            if talking_head and voiceover:
+            if talking_head and (voiceover or voiceover_url):
                 raise CliptudeApiError("Use --talking-head or --voiceover, not both.")
             if talking_head and (args.prompt or script):
                 raise CliptudeApiError(
@@ -493,6 +502,7 @@ def main(argv: list[str] | None = None) -> None:
                 script=script or None,
                 duration=(args.duration or None),
                 voiceover_path=voiceover or None,
+                voiceover_url=voiceover_url or None,
                 talking_head_path=talking_head or None,
                 avatar_intro_only=args.avatar_intro_only,
                 avatar_ai_footage=args.avatar_ai_footage,
@@ -536,8 +546,9 @@ def main(argv: list[str] | None = None) -> None:
             if args.script_file:
                 script = Path(args.script_file).read_text(encoding="utf-8")
             voiceover = (args.voiceover or "").strip()
-            if not (args.prompt or "").strip() and not (script or "").strip() and not voiceover:
-                raise CliptudeApiError("Provide --prompt, --script / --script-file, or --voiceover.")
+            voiceover_url = (args.voiceover_url or "").strip()
+            if not (args.prompt or "").strip() and not (script or "").strip() and not voiceover and not voiceover_url:
+                raise CliptudeApiError("Provide --prompt, --script / --script-file, --voiceover or --voiceover-url.")
             template_id = _resolve_template_id(client, args.template)
             _print(client.create_job(
                 template_id=template_id,
@@ -545,10 +556,12 @@ def main(argv: list[str] | None = None) -> None:
                 prompt=args.prompt or None,
                 script=script or None,
                 voiceover_path=voiceover or None,
+                voiceover_url=voiceover_url or None,
                 duration=(args.duration or None),
                 output="plan",
                 avatar_profile_id=args.avatar,
                 avatar_engine=args.avatar_engine or None,
+                render_only=args.render_only or None,
             ))
         elif args.cmd == "narration":
             _print(client.get_narration(args.job_id))
@@ -567,6 +580,8 @@ def main(argv: list[str] | None = None) -> None:
             _print(client.get_plan_review(args.job_id))
         elif args.cmd == "plan-report":
             _print(client.get_plan_report(args.job_id))
+        elif args.cmd == "upload-media":
+            _print(client.upload_plan_media(args.job_id, args.path))
         elif args.cmd == "download-voiceover":
             dest = Path(args.out)
             client.download_voiceover_file(args.job_id, dest)

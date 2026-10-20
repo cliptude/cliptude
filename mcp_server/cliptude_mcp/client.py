@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 from contextvars import ContextVar
 from pathlib import Path
@@ -272,6 +273,7 @@ class CliptudeClient:
         script: str | None = None,
         duration: str | None = None,
         voiceover_path: str | Path | None = None,
+        voiceover_url: str | None = None,
         talking_head_path: str | Path | None = None,
         output: str | None = None,
         avatar_intro_only: bool | None = None,
@@ -284,7 +286,15 @@ class CliptudeClient:
         disable_transitions: bool | None = None,
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
+        render_only: bool | None = None,
     ) -> Any:
+        if voiceover_path and voiceover_url:
+            raise CliptudeApiError("Give voiceover_path or voiceover_url, not both.")
+        if render_only and ((output or "").strip().lower() != "plan" or not (voiceover_path or voiceover_url)):
+            raise CliptudeApiError(
+                "render_only is a plan job with your own narration: pass output=\"plan\" and a voiceover "
+                "(voiceover_path, or voiceover_url for a public link)."
+            )
         motion_fields = _motion_control_job_fields(
             disable_animations=disable_animations,
             disable_overlays=disable_overlays,
@@ -345,6 +355,7 @@ class CliptudeClient:
                 ),
                 **motion_fields_str,
                 **({"output": output_kind} if output_kind == "plan" else {}),
+                **({"render_only": "true"} if render_only else {}),
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -364,6 +375,11 @@ class CliptudeClient:
             body["duration"] = duration
         if output_kind and output_kind != "video":
             body["output"] = output_kind
+        if voiceover_url:
+            # A public link to the narration: Cliptude downloads it (remote hosts cannot upload a file).
+            body["voiceover_url"] = str(voiceover_url).strip()
+        if render_only:
+            body["render_only"] = True
         body.update(_avatar_job_fields(
             avatar_intro_only, avatar_ai_footage,
             avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
@@ -554,23 +570,27 @@ class CliptudeClient:
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
     def _upload_talking_head_parts(self, path: Path, init: dict[str, Any]) -> None:
+        self._upload_parts(path, init, "/api/v1/uploads/talking-head/sign-parts", "talking head")
+
+    def _upload_parts(self, path: Path, init: dict[str, Any], sign_path: str, label: str) -> None:
+        """PUT the file straight to R2, part by part, on URLs Cliptude signs (no R2 keys here)."""
         key = str(init.get("key") or "").strip()
         upload_id = str(init.get("upload_id") or "").strip()
         part_size = int(init.get("part_size") or 0)
         part_count = int(init.get("part_count") or 0)
         if not key or not upload_id or part_size <= 0 or part_count <= 0:
-            raise CliptudeApiError("Talking head upload init returned an incomplete plan.")
+            raise CliptudeApiError(f"The {label} upload init returned an incomplete plan.")
         with path.open("rb") as fh:
             for start in range(0, part_count, 50):
                 nums = list(range(start + 1, min(start + 50, part_count) + 1))
                 signed = self.request(
                     "POST",
-                    "/api/v1/uploads/talking-head/sign-parts",
+                    sign_path,
                     json_body={"key": key, "upload_id": upload_id, "part_numbers": nums},
                 )
                 urls = (signed or {}).get("urls") if isinstance(signed, dict) else None
                 if not isinstance(urls, dict):
-                    raise CliptudeApiError("Could not sign talking head upload parts.")
+                    raise CliptudeApiError(f"Could not sign {label} upload parts.")
                 for num in nums:
                     url = urls.get(str(num))
                     if not url:
@@ -582,7 +602,7 @@ class CliptudeClient:
                         raise CliptudeApiError(str(exc)) from exc
                     if resp.status_code >= 400:
                         raise CliptudeApiError(
-                            f"Failed to upload talking head part {num}.",
+                            f"Failed to upload {label} part {num}.",
                             status=resp.status_code,
                         )
 
@@ -594,6 +614,32 @@ class CliptudeClient:
         return self.request("POST", f"/api/v1/jobs/{job_id}/continue")
 
     # Agent-planned videos -------------------------------------------------------------------------
+
+    def upload_plan_media(self, job_id: str, path: str | Path) -> Any:
+        """Send a picture or clip you found to a plan job; returns {keep, file, media_type, size} for media.keep."""
+        path = Path(path)
+        if not path.is_file():
+            raise CliptudeApiError(f"File not found: {path}")
+        base = f"/api/v1/jobs/{job_id}/media"
+        init = self.request(
+            "POST",
+            f"{base}/init",
+            json_body={
+                "filename": path.name,
+                "size": path.stat().st_size,
+                "content_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            },
+        )
+        body = {"key": (init or {}).get("key"), "upload_id": (init or {}).get("upload_id")}
+        try:
+            self._upload_parts(path, init, f"{base}/sign-parts", "media")
+            return self.request("POST", f"{base}/complete", json_body=body)
+        except Exception:
+            try:
+                self.request("POST", f"{base}/abort", json_body=body)
+            except Exception:
+                pass
+            raise
 
     def get_narration(self, job_id: str) -> Any:
         """Numbered sentences (with word timings), digest, pricing and template flags of a plan job."""
@@ -753,9 +799,12 @@ class CliptudeClient:
         avatar_ai_footage: bool | None = None,
         avatar_profile_id: int | str | None = None,
         avatar_engine: str | None = None,
+        render_only: bool | None = None,
     ) -> Any:
         """Credits a job would need; creates nothing."""
         body: dict[str, Any] = {"template_id": template_id}
+        if render_only:
+            body["render_only"] = True
         for key, value in (
             ("prompt", prompt),
             ("script", script),

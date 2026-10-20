@@ -24,6 +24,22 @@ class ClientTests(TestCase):
         self.assertNotIn("prompt", kwargs["json_body"])
         self.assertNotIn("faceless_coding", kwargs["json_body"])
 
+    def test_a_voiceover_link_and_render_only_go_in_the_json_body(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "get_template", return_value={"format": "faceless_documentary"}):
+            with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
+                client.create_job(template_id="tmpl", title="T", output="plan", render_only=True,
+                                  voiceover_url="https://example.org/narration.mp3")
+        body = req.call_args.kwargs["json_body"]
+        self.assertEqual(body["voiceover_url"], "https://example.org/narration.mp3")
+        self.assertIs(body["render_only"], True)
+        self.assertEqual(body["output"], "plan")
+        with self.assertRaises(CliptudeApiError):
+            client.create_job(template_id="tmpl", title="T", output="plan", render_only=True)  # no voiceover at all
+        with self.assertRaises(CliptudeApiError):
+            client.create_job(template_id="tmpl", title="T", voiceover_path="a.mp3",
+                              voiceover_url="https://example.org/narration.mp3")
+
     def test_estimate_credits_posts_only_given_fields(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "request", return_value={"credits_required": 1452}) as req:
@@ -282,6 +298,54 @@ class ClientTests(TestCase):
             self.assertNotIn("prompt", body)
         finally:
             path.unlink(missing_ok=True)
+
+    def _media_upload(self, put_status):
+        import tempfile
+        from pathlib import Path
+
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(b"\x00" * 64)
+            path = Path(tmp.name)
+        requests = []
+        key = "videos/job1/agent_media/abc123_clip.mp4"
+
+        def fake_request(method, url, **kwargs):
+            requests.append((method, url, kwargs.get("json_body")))
+            if url.endswith("/media/init"):
+                return {"key": key, "upload_id": "up-1", "part_size": 16 * 1024 * 1024, "part_count": 1, "size": 64}
+            if url.endswith("/media/sign-parts"):
+                return {"urls": {"1": "https://r2.example/part1"}}
+            if url.endswith("/media/complete"):
+                return {"keep": "3f9a1c0d2b7e", "file": "abc123_clip.mp4", "media_type": "video", "size": 64}
+            if url.endswith("/media/abort"):
+                return {"ok": True}
+            raise AssertionError(url)
+
+        try:
+            with patch.object(client, "request", side_effect=fake_request), patch("httpx.put") as put:
+                put.return_value = MagicMock(status_code=put_status)
+                try:
+                    result = client.upload_plan_media("job1", path)
+                except CliptudeApiError as exc:
+                    result = exc
+        finally:
+            path.unlink(missing_ok=True)
+        return result, requests, put
+
+    def test_upload_plan_media_puts_parts_and_returns_keep(self):
+        result, requests, put = self._media_upload(200)
+        self.assertEqual(result["keep"], "3f9a1c0d2b7e")
+        put.assert_called_once()
+        self.assertEqual([url for _m, url, _b in requests],
+                         ["/api/v1/jobs/job1/media/init", "/api/v1/jobs/job1/media/sign-parts",
+                          "/api/v1/jobs/job1/media/complete"])
+        self.assertEqual(requests[0][2]["size"], 64)
+
+    def test_upload_plan_media_aborts_when_a_part_fails(self):
+        result, requests, _put = self._media_upload(500)
+        self.assertIsInstance(result, CliptudeApiError)
+        self.assertEqual(requests[-1][1], "/api/v1/jobs/job1/media/abort")
 
     def test_missing_auth_asks_for_login(self):
         with patch.dict("os.environ", {"CLIPTUDE_API_KEY": ""}, clear=False):

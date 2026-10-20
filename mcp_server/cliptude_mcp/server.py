@@ -237,6 +237,10 @@ def build_server(*, with_http_auth: bool = False):
             str | None,
             Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
         ] = None,
+        render_only: Annotated[
+            bool | None,
+            Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url on a remote host), every picture and clip (url, or keep from upload_plan_media) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
+        ] = None,
     ) -> dict[str, Any]:
         """Credits a job would need before you create it, with the same pricing as create_job. Creates and charges nothing.
 
@@ -257,6 +261,7 @@ def build_server(*, with_http_auth: bool = False):
                 avatar_ai_footage=avatar_ai_footage,
                 avatar_profile_id=avatar_profile_id,
                 avatar_engine=avatar_engine,
+                render_only=render_only,
             )
         except Exception as exc:
             return _err(exc)
@@ -362,14 +367,21 @@ def build_server(*, with_http_auth: bool = False):
             list[str] | None,
             Field(description="Transition slugs to exclude from auto-selection, e.g. 'flip-horizontal', 'film-burn'. Omit to use the saved template."),
         ] = None,
+        voiceover_url: Annotated[
+            str | None,
+            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. Use this on remote hosts, which cannot send a local file. Omit prompt/script and voiceover_path."),
+        ] = None,
     ) -> dict[str, Any]:
         """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
         try:
             vo = (voiceover_path or "").strip() or None
+            vo_url = (voiceover_url or "").strip() or None
             th = (talking_head_path or "").strip() or None
-            if vo and th:
+            if vo and vo_url:
+                return {"error": "Give voiceover_path or voiceover_url, not both."}
+            if (vo or vo_url) and th:
                 return {"error": "Upload either a talking head video or a voiceover — not both."}
-            if (vo or th) and ((prompt or "").strip() or (script or "").strip()):
+            if (vo or vo_url or th) and ((prompt or "").strip() or (script or "").strip()):
                 kind = "talking head video" if th else "voiceover"
                 return {
                     "error": (
@@ -384,6 +396,7 @@ def build_server(*, with_http_auth: bool = False):
                 script=script,
                 duration=duration,
                 voiceover_path=vo,
+                voiceover_url=vo_url,
                 talking_head_path=th,
                 avatar_intro_only=avatar_intro_only,
                 avatar_ai_footage=avatar_ai_footage,
@@ -463,7 +476,11 @@ def build_server(*, with_http_auth: bool = False):
         title: Annotated[str, Field(min_length=1, max_length=255, description="Video title")],
         prompt: Annotated[str | None, Field(description="Topic/brief; Cliptude writes the narration. Never the video title.")] = None,
         script: Annotated[str | None, Field(description="Spoken narration to voice as-is. Omit prompt when you pass this.")] = None,
-        voiceover_path: Annotated[str | None, Field(description="Local audio file to use as the narration (aligned, not re-voiced). Omit prompt/script.")] = None,
+        voiceover_path: Annotated[str | None, Field(description="Local audio file to use as the narration (aligned, not re-voiced). Omit prompt/script. Stdio / local MCP only.")] = None,
+        voiceover_url: Annotated[
+            str | None,
+            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. Use this on remote hosts, which cannot send a local file. Omit prompt/script and voiceover_path."),
+        ] = None,
         duration: Annotated[str | None, Field(description="Duration bucket such as 6-8. Omit to use the template.")] = None,
         avatar_profile_id: Annotated[
             int | None,
@@ -473,21 +490,27 @@ def build_server(*, with_http_auth: bool = False):
             str | None,
             Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
         ] = None,
+        render_only: Annotated[
+            bool | None,
+            Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url on a remote host), every picture and clip (url, or keep from upload_plan_media) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
+        ] = None,
     ) -> dict[str, Any]:
         """Start a job whose visuals YOU plan. Cliptude writes (if needed) and voices the narration, then stops at status plan_ready. It needs the full website price in credits but charges only the narration now; the rest is charged when the video completes, and the total equals the website price. Poll get_job until plan_ready, then get_narration."""
         try:
-            if not (prompt or "").strip() and not (script or "").strip() and not voiceover_path:
-                return {"error": "Provide prompt, script or voiceover_path."}
+            if not (prompt or "").strip() and not (script or "").strip() and not voiceover_path and not voiceover_url:
+                return {"error": "Provide prompt, script, voiceover_path or voiceover_url."}
             return _client().create_job(
                 template_id=template_id,
                 title=title,
                 prompt=prompt,
                 script=script,
                 voiceover_path=voiceover_path,
+                voiceover_url=(voiceover_url or "").strip() or None,
                 duration=duration,
                 output="plan",
                 avatar_profile_id=avatar_profile_id,
                 avatar_engine=avatar_engine,
+                render_only=render_only,
             )
         except Exception as exc:
             return _err(exc)
@@ -570,6 +593,23 @@ def build_server(*, with_http_auth: bool = False):
         """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and the props it will be drawn with, or why it is missing). Review this, revise with check_plan/lock_plan + continue_job on the same job if needed, then render_project once."""
         try:
             return _client().get_plan_review(job_id)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Upload plan media",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    def upload_plan_media(
+        job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
+        path: Annotated[
+            str,
+            Field(description="Local picture (JPG/PNG/WEBP/GIF, up to 15 MB) or clip (MP4/MOV/WEBM/M4V, up to 300 MB). Stdio / local MCP only — remote hosts should use the CLI (cliptude upload-media) or give a public file link as media.url."),
+        ],
+    ) -> dict[str, Any]:
+        """Send a picture or clip you found yourself to a plan job. The file goes straight to Cliptude's storage on signed URLs (no storage keys needed) and is checked to be a real picture or video. Returns {keep, file, media_type, size}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot, with start_s/end_s on a beat to play only part of a clip."""
+        try:
+            return _client().upload_plan_media(job_id, path)
         except Exception as exc:
             return _err(exc)
 
