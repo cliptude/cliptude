@@ -88,6 +88,9 @@ each one in a published video: Cliptude stores and renders what you send. Good s
   long stretches of one creator's work, or a clip used only as background decoration; avoid music videos, films and
   sports broadcasts beyond a brief quoted moment. Fair use is judged case by case, and downloading is subject to each
   platform's terms: the user decides and is responsible.
+- **Download services** such as VidKraken and Oxylabs (its YouTube Downloader) fetch a video file for you with the
+  user's own account. They give no rights to what they fetch (Oxylabs says so outright), so use them only for content
+  the user may use: public domain, Creative Commons, the user's own or licensed footage, and the fair-use excerpts above.
 - **The user's own material:** their footage, photos, screen recordings and documents.
 - **Pictures you generate** with an image or video model the user has a key for.
 If a key is needed, ask the user to add it to your environment; `sourcing.env.example` next to this skill lists the
