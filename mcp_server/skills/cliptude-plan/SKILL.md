@@ -1,6 +1,6 @@
 ---
 name: cliptude-plan
-description: Plan every visual of a Cliptude video yourself — the look (theme, colours, style, music), every motion graphic and its text and timing, the search query, person or URL behind every shot, the transition on every cut, two-image reveals and every sound effect — and have Cliptude only voice, source and render it. Use for Faceless Documentary, Faceless Top 10 and Avatar Video templates when the user wants the agent to direct the video (create_plan_job / cliptude plan-job), or asks to review or edit the plan before production.
+description: Plan every visual of a Cliptude video yourself — the look (theme, colours, style, music), every motion graphic and its text and timing, the search query, person or URL behind every shot, the transition on every cut, two-image reveals and every sound effect — and have Cliptude only voice, source and render it. Use for Faceless Documentary, Faceless Top 10, Avatar Video and Vector Explainer templates when the user wants the agent to direct the video (create_plan_job / cliptude plan-job), or asks to review or edit the plan before production.
 ---
 
 # Agent-planned videos
@@ -10,7 +10,7 @@ every sentence with word timings, renders **exactly the plan you lock**, sources
 you afterwards what it used and where it had to fall back. Its own planner does not run: it adds, moves and drops
 nothing.
 
-Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`. Not available in the desktop app yet.
+Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_explainer`. Not available in the desktop app yet.
 
 ## Flow
 
@@ -19,11 +19,17 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`. Not availabl
    The template's `generation_model` decides whether footage can move: Cinder (`high`) sources still pictures only, so `prefer: "video"` becomes a still there; Caldera (`pro`) sources video clips. `check_plan` warns `video_needs_caldera`.
 2. **Start.** `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
    `prompt` (a brief; Cliptude writes the narration — never the bare title), or `voiceover_path` (audio you already
-   have). Needs the full website price in credits; charges only the narration now.
+   have). Needs the full website price in credits; charges only the narration now. Names, places and borrowed
+   words the voice may get wrong go in `pronunciations` (ElevenLabs voices): `[{"word": "Gmay", "alias":
+   "guh-MAY"}]` or `{"word", "phoneme", "alphabet": "ipa"}`, on the template or the job (CLI `--pronunciations
+   file.json`). Keep the real spelling in the script: captions, phrases and searches use it.
 3. **Wait.** Poll `get_job` until `status` is `plan_ready` (`narration_url` is set). Plans expire after 14 days.
 4. **Read.** `get_narration`: `sentences[]` (`id`, `start`, `end`, `text`, `words[]`), `narration_digest`,
    `suggested_chapters`, `template` (theme, switched-off graphics, and `look`: the template's style pack,
-   colours and music now), `pricing`.
+   colours and music now), `pricing`, `narration_audio` (`url` to listen to; `download` = the API path, CLI
+   `cliptude download-voiceover <job>`). Listen to the hard words before you lock: the sentence text is a
+   transcript of the audio, so a misspoken name often shows there as a different word. A wrong word needs a new
+   plan job (new narration) with `pronunciations`; locking cannot change the voice.
 5. **Choose graphics.** `get_kind_catalog(format, compact=true)` for one line per graphic, then
    `get_kind_catalog(types=[...])` for the full entries you will use: description (when to use / not for),
    `prop_schema` (required props), `media_slots`, durations, cap, and a preview video URL.
@@ -178,7 +184,10 @@ the presenter seconds you plan.
   refuses an overlay that overlaps one.
 - **People:** a person board needs a real portrait that passes Cliptude's visual check (a face, the right person).
   Cliptude never invents a face for a real person, so a board whose portrait is not found is dropped (the report
-  gives the reason). For anyone less famous, give the slot a `url` to a portrait you checked, with a `fallback_query`.
+  gives the reason). For anyone less famous, give the slot a `url` to a portrait you checked, with a `fallback_query`;
+  with no checked picture, use a name card (`callout_overlay`, `title_name_card_overlay`) over a scene picture instead.
+  A fictional or animated character is not a person: search it with `query` ("Woody Toy Story character").
+  Write names on boards in their correct spelling even where the narration's transcript mangles them.
 - `props`: all on-screen text and data, per the type's `prop_schema` (write it in the narration language). Overlay
   styles take `text` (+ `secondaryText`, `listItems`, `series`/`chartKind` for the holographic chart).
 - Colours per graphic: hex `accentColor`, `textColor`, `backgroundColor`, `bgColor`, `secondaryColor`,
@@ -186,7 +195,8 @@ the presenter seconds you plan.
 - `sound`: a sound id from the catalog's `sounds`, `"none"` (silent) or `"auto"` (Cliptude's sound, the default).
   `volume`: 0–100 for it.
 - `media`: one entry per picture slot from the catalog's `media_slots`:
-  `{"slot": "<slot>", "query": "…"}`, `{"slot": …, "person": "Full Name"}` (portrait search), or
+  `{"slot": "<slot>", "query": "…"}`, `{"slot": …, "person": "Full Name"}` (portrait search; only on portrait
+  slots such as `portrait` or `personImageQuery`: an `images` slot takes `query` or `url`), or
   `{"slot": …, "url": "https://…", "fallback_query": "…"}`. A board with no picture found gets an AI still and
   the report says so. A media item may also carry `intent` (one sentence describing the picture) and `era`, as on
   beats. A `url` can be any public http(s) picture or clip; Cliptude downloads and keeps a copy.
@@ -238,7 +248,8 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   | The sentence states… | Board (premium) |
   |---|---|
   | a percentage or share | `circle_chart_overlay`, `percentage_bar_chart`, `text_and_image_progress_overlay` |
-  | a money amount or big count | `number_count_overlay`, `large_number_text_overlay` |
+  | a money amount | `large_number_text_overlay` (`number` up to 999.99 + `word` such as "MILLION" + `currency`) |
+  | a big count | `number_count_overlay`, `icon_count_overlay` |
   | two values or two sides | `comparison_bar_chart`, `vertical_bar_chart_comparison`, `double_image_comparison`, `splitscreen_comparison` |
   | a trend or market share over time | `comparison_line_chart_overlay`, `line_chart_callout`, `chart_race_comparison` |
   | a country, city or region | `country_map_icon_popup`, `country_map`, `country_border_highlight`, `multi_country_highlight_text` |
@@ -248,7 +259,7 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   | a list of things | `bullet_point_overlay`, `icon_and3_bulletpoints`, `text_list` |
   | a sequence of events | `five_step_timeline`, `timeline_of_events` |
   | a headline, report or document | `image_article`, `headline_article_slide_up` |
-  | a new chapter | `chapter_title_scene`, `chapter_title` (1-3 s) |
+  | a new chapter | `chapter_title_scene`, `chapter_title` (4-5 s) |
 - **Give every board its own picture.** Most premium boards take an optional `images` picture behind or beside the data;
   fill it with a search for *this sentence's* subject, never the beat's footage by default. Write the query as subject +
   era + medium: `"Morris Chang Texas Instruments 1980s archival portrait photograph"`, `"TSMC Fab 1 Hsinchu 1987
@@ -256,12 +267,17 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   reason a premium board looks empty (`borrowed_picture`, `empty_board`).
 - **Board text is a label, not a sentence:** 2-4 words, the way a title card reads (`"ADVANCED CHIPS"`, callout
   `"MORRIS CHANG"` with role `"TI EXEC"`, versus `"CHIP DESIGN"` / `"OWN A FAB"`). The narration says the rest.
+  Quote boards (`character_quote`, `quote_box_graphic`, `quote_and_transparent_portrait`, articles) are the exception:
+  they show the quoted words as spoken, and `narration_as_text` does not flag them.
 - **Two facts in one sentence can take two boards back to back** (a person card, then that company's logo board).
 - **Open on footage.** The hook (first ~15-20 s) is fast cuts, 1.5-4 s a picture; the first board lands on the first
-  hard fact. Keep a short overlay title there if you want text earlier.
+  hard fact. The scorecard still wants a first graphic by ~6 s: when the opening states no fact, put a short title
+  overlay or name card there.
 - **Join chapters and big turns with a real transition** (`film-burn`, `glitch`, `zoom`, `sliding-pan` or a
   template-allowed one), about one every 20 s, and leave the other cuts on `auto`. Silence about half of those joins
-  (`"transition_sound": "none"`) so the whooshes do not repeat on every cut.
+  (`"transition_sound": "none"`) so the whooshes do not repeat on every cut. A join needs a visible cut, so put it on
+  a beat that starts in footage, not under a board (`join_under_board`): with boards on half the runtime, that is
+  the beat right after a board ends, or a footage stretch between boards (a mid-sentence beat is fine).
 - **Let the boards make the sound.** The reference video had no separate effects track: its sound was each board's own
   cues and the joins, over one music bed. Leave premium boards' `sound` unset and set their `volume` to 30-50 (0 on a
   quiet, serious line); add `sfx` hits only for the two or three biggest moments (a number landing, a verdict).
@@ -286,6 +302,7 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   pictures through its `media_slots`; the presenter clip is never one of them.
 
 ### Beat media
+Give every searched beat 1-2 `alts` (`no_alts` warns otherwise).
 One of: `query` (+ `alts`, `negatives`, `query_kind` such as object, place or person, `prefer`: video|image), `person`,
 `url` (+ `fallback_query`; public http(s) images ≤15 MB or videos ≤300 MB), `auto: true` (Cliptude writes the
 query), or `keep` (+ `fallback_query`): the `keep` id `get_plan_review` or `get_plan_report` shows for a file an
@@ -359,9 +376,29 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
 
 ### Format-specific
 - `ranked_items` (Top 10 only): one title per entry, unique ranks, titles may not overlap each other or a board.
+  Anchor each title on the sentence (or `phrase`) that opens its entry; `dur` is 3-8 s (default 4). Number the
+  ranks as the narration counts them. Titles are not graphics: they do not count toward boards, coverage or joins.
+  `ranked_pacing` warns when titles are under 3 or over 8 s, or 40-95 s apart; when the narration's own entries are
+  shorter than 40 s, leave that warning. An entry that opens on its year or date ("In 1969, ...") puts the year
+  board right after the title: coverage counts a board anywhere from 1 s before that sentence to 4 s after it ends.
 - `presenter_windows` (Avatar Video only): `full_screen`, `split_left` or `split_right`; no overlaps; total seconds
   within the template's cap (intro-only templates: one opening window). Full-screen windows may not cover graphics,
   except speaker boards, which must sit inside one.
+- Vector Explainer: every picture beat is drawn as a flat vector illustration (the template's or job's character,
+  colour or black-and-white style). Nothing is searched: write `media.intent` as what to draw (subject, action,
+  setting) and keep `query` a short label; `person` names are drawn as stylised figures. Alts and eras are not
+  needed. Boards that show photos (any catalog entry with media slots) are not listed for this format and
+  `check_plan` refuses them (`excluded_type`). `get_narration` returns the settings under `template.vector`.
+  Motion comes from `vector_reveal_mode` (template or `create_plan_job`): `"none"` draws stills that the beat's
+  `camera` moves (`zoom_in`, `pan_left`, …); `"video"` animates every picture beat as an AI clip, and
+  `media.prefer: "image"` keeps one beat still. In stills mode `prefer: "video"` does nothing (`check_plan` warns
+  `vector_stills_mode`). Drawn beats get camera moves only; set `treatment` on a beat to add grain, light leak etc.
+  Boards are drawn full screen, never as an inset card on a drawing: leave `plate` out (`check_plan` warns
+  `vector_beat_plate`), and a beat that full-screen boards cover from start to end gets no drawing of its own.
+- Vector Explainer, render-only: `render_only` works as for other formats. Bring every picture (`url` / `keep`,
+  ideally flat vector art in one style) and the voiceover; nothing is drawn or animated whatever
+  `vector_reveal_mode` says, the vector look (tone pack, theme, camera-only treatment) still applies, and since
+  the pictures are yours, photo boards are allowed again.
 - A-roll is off for agent plans.
 
 ## What `check_plan` rejects
@@ -378,13 +415,18 @@ effects are off, and transitions while transitions are off or excluded.
 ## Scorecard targets (from reference videos; advisory)
 Graphics/min ≈ 4.9 (3.6–6.7); ~55% of runtime covered (50–60%); ≥80% of graphics starting on a sentence start; first graphic
 ≤ 6 s; ≥ 9 visuals in the first minute; longest gap ≲ 30 s; no kind more than twice in a row; ≥ 16 distinct kinds per
-10 minutes; ~70% of graphics are premium boards, covering ~55% of the runtime (`board_share_high` over 65%); every spoken date, ~50% of years and ~60% of money figures on screen. Warnings also flag
-numbers on cards that are not spoken nearby and sample text left in props.
+10 minutes; at least ~70% of graphics are premium boards (all boards is fine), covering ~55% of the runtime
+(`board_share_high` over 65%; a plated board, an inset over a picture, does not count toward it); every spoken date, ~50% of years and ~60% of money
+figures on screen. A date, year or amount counts as shown when any board on screen from 1 s before its sentence to
+4 s after the sentence ends writes it in any of its text or number fields. Warnings also flag numbers on cards not
+spoken within 5 s of the card (`number_not_spoken`; digits read one by one, like "nine eight eight", are not
+matched) and sample text left in props. The sentence-start target gives way where a rank title or an earlier
+board holds the sentence start: start the board on a `phrase`.
 Pictures: about one beat per sentence, each on screen 4–6 s on average (`avg_picture_s`); `slow_pictures` warns
 above 6 s on average or for any picture held over 12 s, naming the beats to split. `few_graphics` warns below 3.6
-graphics a minute, `few_boards` when boards are under 40% of graphics, `boards_too_short` when boards hold under 4 s
+graphics a minute and `busy_graphics` above 7, `few_boards` when boards are under 40% of graphics, `boards_too_short` when boards hold under 4 s
 on the median, `low_board_share` when boards cover under 45% of the runtime, and `few_joins` under one planned join
-per 40 s (videos over 3 minutes).
+per 28 s (target one about every 20 s; videos over 3 minutes).
 
 ## What Cliptude still decides
 Joins on cuts you leave at `"auto"`, the direction and timing details inside a reveal (a locked plan gets no

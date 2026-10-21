@@ -26,7 +26,17 @@ def _client() -> CliptudeClient:
             set_request_token(token)
     except Exception:
         pass
-    return CliptudeClient(api_key=token)
+    return CliptudeClient(api_key=token, client_kind="mcp")
+
+
+def _thumbnail_arg(prompt: str | None, reference_url: str | None) -> dict[str, str] | None:
+    """create_job's thumbnail object from the flat tool arguments (None keeps the template's)."""
+    thumbnail = {
+        key: value.strip()
+        for key, value in (("custom_prompt", prompt), ("reference_url", reference_url))
+        if value and value.strip()
+    }
+    return thumbnail or None
 
 
 def _err(exc: Exception) -> dict[str, Any]:
@@ -192,7 +202,11 @@ def build_server(*, with_http_auth: bool = False):
                     "Wizard settings: voice_id, voice_name, voice_provider plus any field from "
                     "get_template_options (unset fields take the wizard defaults). "
                     "Avatar Video: avatar_profile_id from list_avatars (gender must match the voice). "
-                    "Optional thumbnail: {custom_prompt}."
+                    "Vector Explainer: vector_character_id from get_template_options (vector_character.choices: "
+                    "a built-in id such as nova, or one of the user's uploaded figures); omit it for no character. "
+                    "Optional thumbnail: {reference_url} (a YouTube video link or https image whose style every "
+                    "thumbnail copies) or {custom_prompt} (a standing brief: people, style, branding; each video "
+                    "still sets its own subject and text). Omit it and each job picks a reference for its title."
                 )
             ),
         ],
@@ -235,11 +249,15 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         avatar_engine: Annotated[
             str | None,
-            Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
+            Field(description='Avatar Video only: "iv" or "v" (list_avatars shows which each avatar supports; Avatar III is not offered). Omit to keep the template.'),
         ] = None,
         render_only: Annotated[
             bool | None,
             Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url on a remote host), every picture and clip (url, or keep from upload_plan_media) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
+        ] = None,
+        vector_reveal_mode: Annotated[
+            str | None,
+            Field(description='Vector Explainer only: "none" (stills with camera moves) or "video" (AI clips), to price a job that overrides the template.'),
         ] = None,
     ) -> dict[str, Any]:
         """Credits a job would need before you create it, with the same pricing as create_job. Creates and charges nothing.
@@ -262,6 +280,7 @@ def build_server(*, with_http_auth: bool = False):
                 avatar_profile_id=avatar_profile_id,
                 avatar_engine=avatar_engine,
                 render_only=render_only,
+                vector_reveal_mode=vector_reveal_mode,
             )
         except Exception as exc:
             return _err(exc)
@@ -283,6 +302,43 @@ def build_server(*, with_http_auth: bool = False):
         """Avatars the user can put in an Avatar Video: id, name, section, gender, engines, thumbnail_url. Pass an id as avatar_profile_id to create_template (in settings), create_job, create_plan_job or estimate_credits. The avatar's gender must match the voice."""
         try:
             return _client().list_avatars(section=section, search=search, gender=gender, limit=limit, offset=offset)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="List vector characters",
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+    )
+    def list_vector_characters() -> dict[str, Any]:
+        """Characters for Vector Explainer videos: the built-in cast (id, name, descriptor, description, preview_url) and the user's own uploads (id, name, preview_url). Pass an id as vector_character_id in create_template settings, or on create_job / create_plan_job for one video. Also returns upload_guidance for making a new one."""
+        try:
+            return _client().list_vector_characters()
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(title="Upload vector character")
+    def upload_vector_character(
+        name: Annotated[str, Field(min_length=1, max_length=120, description="A short name for the character, e.g. 'Dr. Maya'")],
+        image_path: Annotated[str | None, Field(description="Local PNG, JPG or WEBP file. Stdio / local MCP only.")] = None,
+        image_url: Annotated[str | None, Field(description="Public https link to the image (use on remote hosts).")] = None,
+    ) -> dict[str, Any]:
+        """Add the user's own Vector Explainer character and return its id (use it as vector_character_id). Use a picture the user supplied, or one you made for them: in that case show it to the user and upload only after they approve it. Best results: one full-body, front-facing character in flat vector style on a plain or transparent background, at least 1024 px, no text. It appears in the Cliptude wizard too."""
+        try:
+            path = (image_path or "").strip() or None
+            url = (image_url or "").strip() or None
+            if bool(path) == bool(url):
+                return {"error": "Give image_path or image_url (one of them)."}
+            return _client().upload_vector_character(image_path=path, image_url=url, name=name)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(title="Delete vector character")
+    def delete_vector_character(
+        character_id: Annotated[str, Field(min_length=8, description="Uploaded character id from list_vector_characters")],
+    ) -> dict[str, Any]:
+        """Delete one of the user's uploaded characters (built-in ones cannot be deleted). Refused while a saved template uses it. Only when the user asks."""
+        try:
+            return _client().delete_vector_character(character_id)
         except Exception as exc:
             return _err(exc)
 
@@ -341,7 +397,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         avatar_engine: Annotated[
             str | None,
-            Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
+            Field(description='Avatar Video only: "iv" or "v" (list_avatars shows which each avatar supports; Avatar III is not offered). Omit to keep the template.'),
         ] = None,
         disable_animations: Annotated[
             bool | None,
@@ -370,6 +426,26 @@ def build_server(*, with_http_auth: bool = False):
         voiceover_url: Annotated[
             str | None,
             Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. Use this on remote hosts, which cannot send a local file. Omit prompt/script and voiceover_path."),
+        ] = None,
+        thumbnail_prompt: Annotated[
+            str | None,
+            Field(description="This video's thumbnail brief (subject, people, text, style), up to 2000 characters. Replaces the template's thumbnail for this job. Omit to use the template; omit thumbnail_reference_url too."),
+        ] = None,
+        thumbnail_reference_url: Annotated[
+            str | None,
+            Field(description="A YouTube video link or https image whose thumbnail style to copy for this job (the content still comes from this video). Omit to use the template's; without one, Cliptude picks a reference for the title. Not with thumbnail_prompt."),
+        ] = None,
+        vector_character_id: Annotated[
+            str | None,
+            Field(description='Vector Explainer only: a character id from list_vector_characters (built-in or uploaded), or "none", for this video. Omit to use the template\'s.'),
+        ] = None,
+        vector_reveal_mode: Annotated[
+            str | None,
+            Field(description='Vector Explainer only: "none" = drawn stills with camera moves (Ken Burns), "video" = every picture beat animated as an AI clip (costs more; check estimate_credits). Omit to use the template\'s.'),
+        ] = None,
+        pronunciations: Annotated[
+            list[dict[str, str]] | None,
+            Field(description='How the voice says hard words (ElevenLabs voices): [{"word": "Gmay", "alias": "guh-MAY"}] or [{"word": "Ordnung", "phoneme": "ˈɔɹt.nʊŋ", "alphabet": "ipa"}]. Script, captions and searches keep the real spelling. Replaces the template\'s list for this video; omit to keep it.'),
         ] = None,
     ) -> dict[str, Any]:
         """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
@@ -408,6 +484,10 @@ def build_server(*, with_http_auth: bool = False):
                 disable_transitions=disable_transitions,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
+                thumbnail=_thumbnail_arg(thumbnail_prompt, thumbnail_reference_url),
+                vector_character_id=vector_character_id,
+                vector_reveal_mode=vector_reveal_mode,
+                pronunciations=pronunciations,
             )
         except Exception as exc:
             return _err(exc)
@@ -472,7 +552,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(title="Create agent-planned job")
     def create_plan_job(
-        template_id: Annotated[str, Field(min_length=8, description="Saved Faceless Documentary, Faceless Top 10 or Avatar Video template UUID")],
+        template_id: Annotated[str, Field(min_length=8, description="Saved Faceless Documentary, Faceless Top 10, Avatar Video or Vector Explainer template UUID")],
         title: Annotated[str, Field(min_length=1, max_length=255, description="Video title")],
         prompt: Annotated[str | None, Field(description="Topic/brief; Cliptude writes the narration. Never the video title.")] = None,
         script: Annotated[str | None, Field(description="Spoken narration to voice as-is. Omit prompt when you pass this.")] = None,
@@ -488,11 +568,31 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         avatar_engine: Annotated[
             str | None,
-            Field(description='Avatar Video only: "iii", "iv" or "v" (list_avatars shows which each avatar supports). Omit to keep the template.'),
+            Field(description='Avatar Video only: "iv" or "v" (list_avatars shows which each avatar supports; Avatar III is not offered). Omit to keep the template.'),
         ] = None,
         render_only: Annotated[
             bool | None,
             Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url on a remote host), every picture and clip (url, or keep from upload_plan_media) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
+        ] = None,
+        thumbnail_prompt: Annotated[
+            str | None,
+            Field(description="This video's thumbnail brief (subject, people, text, style), up to 2000 characters. Replaces the template's thumbnail for this job. Omit to use the template; omit thumbnail_reference_url too."),
+        ] = None,
+        thumbnail_reference_url: Annotated[
+            str | None,
+            Field(description="A YouTube video link or https image whose thumbnail style to copy for this job (the content still comes from this video). Omit to use the template's; without one, Cliptude picks a reference for the title. Not with thumbnail_prompt."),
+        ] = None,
+        vector_character_id: Annotated[
+            str | None,
+            Field(description='Vector Explainer only: a character id from list_vector_characters (built-in or uploaded), or "none", for this video. Omit to use the template\'s.'),
+        ] = None,
+        vector_reveal_mode: Annotated[
+            str | None,
+            Field(description='Vector Explainer only: "none" = drawn stills with camera moves (Ken Burns), "video" = every picture beat animated as an AI clip (costs more; check estimate_credits). Omit to use the template\'s.'),
+        ] = None,
+        pronunciations: Annotated[
+            list[dict[str, str]] | None,
+            Field(description='How the voice says hard words (ElevenLabs voices): [{"word": "Gmay", "alias": "guh-MAY"}] or [{"word": "Ordnung", "phoneme": "ˈɔɹt.nʊŋ", "alphabet": "ipa"}]. Script, captions and searches keep the real spelling. Replaces the template\'s list for this video; omit to keep it.'),
         ] = None,
     ) -> dict[str, Any]:
         """Start a job whose visuals YOU plan. Cliptude writes (if needed) and voices the narration, then stops at status plan_ready. It needs the full website price in credits but charges only the narration now; the rest is charged when the video completes, and the total equals the website price. Poll get_job until plan_ready, then get_narration."""
@@ -511,6 +611,10 @@ def build_server(*, with_http_auth: bool = False):
                 avatar_profile_id=avatar_profile_id,
                 avatar_engine=avatar_engine,
                 render_only=render_only,
+                thumbnail=_thumbnail_arg(thumbnail_prompt, thumbnail_reference_url),
+                vector_character_id=vector_character_id,
+                vector_reveal_mode=vector_reveal_mode,
+                pronunciations=pronunciations,
             )
         except Exception as exc:
             return _err(exc)
@@ -522,7 +626,7 @@ def build_server(*, with_http_auth: bool = False):
     def get_narration(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status plan_ready)")],
     ) -> dict[str, Any]:
-        """The narration you plan against: numbered sentences with start/end seconds and every word's timing, narration_digest (copy it into the plan), suggested chapters, the template's theme and switched-off graphics, and pricing (website price, already charged, due at continue)."""
+        """The narration you plan against: numbered sentences with start/end seconds and every word's timing, narration_digest (copy it into the plan), suggested chapters, the template's theme and switched-off graphics, pricing (website price, already charged, due at continue), and narration_audio: a url to listen to (check names and borrowed words before you lock) and the API path that downloads the MP3. The sentence text is what the voice said, so a misspoken word shows up there too."""
         try:
             return _client().get_narration(job_id)
         except Exception as exc:
@@ -533,7 +637,7 @@ def build_server(*, with_http_auth: bool = False):
         annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
     )
     def get_kind_catalog(
-        format: Annotated[str | None, Field(description="faceless_documentary, faceless_top_10 or avatar_video")] = None,
+        format: Annotated[str | None, Field(description="faceless_documentary, faceless_top_10, avatar_video or vector_explainer")] = None,
         theme: Annotated[str | None, Field(description="Visual theme, to mark graphics the theme does not use")] = None,
         compact: Annotated[bool, Field(description="One summary line per graphic (start here; the full catalog is large)")] = True,
         types: Annotated[list[str] | None, Field(description="Full entries (description, prop_schema, media_slots, durations, preview) for just these animation types / overlay styles")] = None,

@@ -62,6 +62,8 @@ If the user asked **only for a script** or **only for narration audio**, use `cl
 
 If `templates` is empty, or none fits the video, create one: `get_template_options` (CLI `template-options`) for the format's fields and defaults, `list_voices` (CLI `voices`) for a voice, then `create_template` (CLI `template-create`) with the user's preferences. Send the user to the wizard only if they want to pick the look themselves.
 
+Thumbnails: without a thumbnail setting, each video picks a YouTube style reference for its own title. To set the channel's look, put `thumbnail: {reference_url}` (a YouTube video link or image) or `thumbnail: {custom_prompt}` (people, style, branding; never one video's subject or text) in `create_template` settings (CLI `--thumbnail-reference` / `--thumbnail-prompt`). For one video's own thumbnail idea, pass `thumbnail_prompt` (or `thumbnail_reference_url`) on `create_job` / `create_plan_job` (CLI `--thumbnail-prompt` / `--thumbnail-reference` on `generate` and `plan-job`).
+
 Custom script formatting: spoken words only (no Scene 1, no [Music plays]). See https://cliptude.com/docs/custom-script/
 
 Optional `--duration` (`3-4`, `6-8`, `10-12`, …) overrides the template. Without it, prompt jobs use the template duration and script jobs estimate from word count. `--voiceover` and `--talking-head` ignore `--duration` (length comes from the file). MCP: `create_job(..., voiceover_path="/abs/path/narration.mp3")` or `talking_head_path="/abs/path/clip.mp4"` — local stdio only; remote hosts should use the CLI.
@@ -71,6 +73,12 @@ Before a long or costly job, or when the user asks what it will cost, call `esti
 402 = not enough credits (nothing queued). 403 = need a paid plan (SaaS).
 
 Model tier (`generation_model`): `high` is **Cinder**, still pictures and motion graphics only, no video clips; `pro` is **Caldera**, which adds sourced video clips. Use `pro` whenever the video should have moving footage.
+
+Vector Explainer can carry a recurring character. `list_vector_characters` (CLI `vector-characters`) returns the built-in cast (Nova, Kai, Mira, …, with preview images) and the user's own uploads. Put an id in `create_template` settings as `vector_character_id`, or pass `vector_character_id` on `create_job` / `create_plan_job` (CLI `--vector-character`) for one video.
+
+Motion: `vector_reveal_mode` sets how the drawings move. `"none"` (default) keeps each drawing still and moves the camera across it (Ken Burns push, pan, tilt); `"video"` turns every picture beat into a short AI clip and costs more. Set it in `create_template` settings, or per video on `create_job` / `create_plan_job` / `estimate_credits` (CLI `--vector-motion none|video`). Quote the price with `estimate_credits` before switching to video.
+
+To add the user's own character, `upload_vector_character` (CLI `vector-character-upload --name … --file …` or `--url …`) with a picture they gave you, or one you made: one full-body, front-facing character in flat vector style on a plain or transparent background, 1024 px or more, no text. If you made it, show it to the user and upload only after they approve it. The upload returns the id to use; it also appears in the Cliptude wizard. `delete_vector_character` removes one the user no longer wants (refused while a template uses it).
 
 Avatar Video needs an avatar: `list_avatars` (CLI `avatars`, `--section mine` for the user's own) gives ids. Put one in `create_template` settings as `avatar_profile_id` with a voice of the same gender, or pass `avatar_profile_id` (CLI `--avatar`) on `create_job` to use a different avatar for one video.
 

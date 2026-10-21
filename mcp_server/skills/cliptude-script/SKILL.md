@@ -100,6 +100,8 @@ Output **only** what the voiceover should say. Start on the first spoken word.
 
 **TTS spelling (required):** years and numbers in full words (`twenty twenty-six`, `five hundred fifty dollars`, `sixty-five inch`). Expand abbreviations that contain periods (`United States` not `U.S.`, `Doctor` not `Dr.`, `versus` not `vs.`, `Saint Petersburg` not `St. Petersburg`).
 
+**Hard names and borrowed words:** keep the real spelling in the script (captions and searches read it). Pass how to say them as `pronunciations` on the template or job instead, e.g. `[{"word": "Gmay", "alias": "guh-MAY"}]` (ElevenLabs voices).
+
 If the user asked **Cliptude** to write a script and stop (no video), skip this skill. Use `cliptude script` / MCP `create_script` instead, then poll `get_job` for `script`. If they later want the MP4, `cliptude continue` / `continue_job` on that job id.
 
 ## Step 4 — Hand off

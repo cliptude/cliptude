@@ -12,6 +12,14 @@ class ClientTests(TestCase):
         client = CliptudeClient(base_url="http://web:5021", api_key="clp_test")
         self.assertEqual(client._headers()["X-Forwarded-Proto"], "https")
 
+    def test_cli_and_mcp_name_themselves(self):
+        with patch.dict("os.environ", {"CLIPTUDE_CLIENT_KIND": ""}):
+            plain = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+            self.assertNotIn("X-Cliptude-Client", plain._headers())
+            for kind in ("cli", "mcp"):
+                client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test", client_kind=kind)
+                self.assertEqual(client._headers()["X-Cliptude-Client"], kind)
+
     def test_create_job_posts_script(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "get_template", return_value={"format": "youtube"}):
@@ -23,6 +31,39 @@ class ClientTests(TestCase):
         self.assertEqual(kwargs["json_body"]["script"], "Spoken words.")
         self.assertNotIn("prompt", kwargs["json_body"])
         self.assertNotIn("faceless_coding", kwargs["json_body"])
+
+    def test_vector_characters_list_upload_and_job_field(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "request", return_value={"builtin": []}) as req:
+            client.list_vector_characters()
+            client.upload_vector_character(image_url="https://example.org/maya.png", name="Maya")
+            client.delete_vector_character("abc-123")
+            client.create_job(template_id="tmpl", title="T", script="Words.", vector_character_id="nova")
+        calls = [(c.args[0], c.args[1], c.kwargs.get("json_body")) for c in req.call_args_list]
+        self.assertEqual(calls[0][:2], ("GET", "/api/v1/vector-characters"))
+        self.assertEqual(calls[1], ("POST", "/api/v1/vector-characters",
+                                    {"image_url": "https://example.org/maya.png", "name": "Maya"}))
+        self.assertEqual(calls[2][:2], ("DELETE", "/api/v1/vector-characters/abc-123"))
+        self.assertEqual(calls[3][2]["vector_character_id"], "nova")
+        with self.assertRaises(CliptudeApiError):
+            client.upload_vector_character(name="x")  # neither a file nor a URL
+        with self.assertRaises(CliptudeApiError):
+            client.upload_vector_character(image_path="/no/such/file.png", name="x")
+
+    def test_a_job_thumbnail_goes_in_the_body_and_as_json_in_multipart(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "request", return_value={"id": "abc"}) as req:
+            client.create_job(template_id="tmpl", title="T", script="Words.",
+                              thumbnail={"custom_prompt": " A piggy bank ", "reference_url": ""})
+        self.assertEqual(req.call_args.kwargs["json_body"]["thumbnail"], {"custom_prompt": "A piggy bank"})
+        with patch.object(client, "request", return_value={"id": "abc"}) as req:
+            client.create_job(template_id="tmpl", title="T", script="Words.")
+        self.assertNotIn("thumbnail", req.call_args.kwargs["json_body"])
+        with patch.object(client, "_create_job_multipart", return_value={"id": "abc"}) as multipart:
+            client.create_job(template_id="tmpl", title="T", voiceover_path="a.mp3",
+                              thumbnail={"reference_url": "https://youtu.be/dQw4w9WgXcQ"})
+        self.assertEqual(multipart.call_args.kwargs["extra_data"]["thumbnail"],
+                         '{"reference_url": "https://youtu.be/dQw4w9WgXcQ"}')
 
     def test_a_voiceover_link_and_render_only_go_in_the_json_body(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")

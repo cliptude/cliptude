@@ -35,6 +35,57 @@ def _resolve_template_id(client: CliptudeClient, value: str) -> str:
     raise CliptudeApiError(f"Template not found: {value}")
 
 
+def _add_thumbnail_args(parser: argparse.ArgumentParser, *, scope: str) -> None:
+    parser.add_argument(
+        "--thumbnail-prompt",
+        default="",
+        help=f"Thumbnail brief for {scope} (people, style, text). Not with --thumbnail-reference.",
+    )
+    parser.add_argument(
+        "--thumbnail-reference",
+        default="",
+        help=(
+            f"YouTube video link or https image whose thumbnail style {scope} copies. Without a brief or "
+            "reference, each video picks a reference for its own title."
+        ),
+    )
+
+
+def _add_pronunciations_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--pronunciations",
+        default="",
+        metavar="FILE",
+        help='JSON file: a list of {"word": "Gmay", "alias": "guh-MAY"} or {"word", "phoneme", "alphabet": "ipa"} '
+        "(ElevenLabs voices). Replaces the template's list for this video.",
+    )
+
+
+def _pronunciations_from_args(args) -> list | None:
+    path = (getattr(args, "pronunciations", "") or "").strip()
+    if not path:
+        return None
+    try:
+        rules = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CliptudeApiError(f"--pronunciations: could not read {path}: {exc}") from exc
+    if not isinstance(rules, list):
+        raise CliptudeApiError("--pronunciations must be a JSON list of rules.")
+    return rules
+
+
+def _thumbnail_from_args(args) -> dict | None:
+    thumbnail = {
+        key: value.strip()
+        for key, value in (
+            ("custom_prompt", getattr(args, "thumbnail_prompt", "")),
+            ("reference_url", getattr(args, "thumbnail_reference", "")),
+        )
+        if value and value.strip()
+    }
+    return thumbnail or None
+
+
 def _parse_set_args(pairs: list[str]) -> dict:
     out = {}
     for pair in pairs:
@@ -85,7 +136,7 @@ def _run_auth(auth_cmd: str) -> None:
         print("Not authenticated. Run: cliptude auth login", file=sys.stderr)
         raise SystemExit(1)
     try:
-        account = CliptudeClient().get_account()
+        account = CliptudeClient(client_kind="cli").get_account()
     except Exception as exc:
         _die(exc)
     email = account.get("email") if isinstance(account, dict) else None
@@ -139,6 +190,7 @@ def main(argv: list[str] | None = None) -> None:
         metavar="KEY=VALUE",
         help="One setting; VALUE is parsed as JSON when possible (true, 0.4, [\"a\"]), else a string. Repeatable.",
     )
+    _add_thumbnail_args(tc, scope="every video from this template")
 
     to = sub.add_parser("template-options", help="Fields, choices and defaults for template-create")
     to.add_argument("--format", required=True)
@@ -152,6 +204,17 @@ def main(argv: list[str] | None = None) -> None:
     av.add_argument("--search", default="", help="Part of the avatar's name")
     av.add_argument("--gender", default="", choices=["", "male", "female"])
     av.add_argument("--limit", type=int, default=50)
+
+    vcl = sub.add_parser("vector-characters", help="List Vector Explainer characters (built-in and your uploads)")
+    vcu = sub.add_parser(
+        "vector-character-upload",
+        help="Add your own Vector Explainer character from a local image or a public URL; prints its id",
+    )
+    vcu.add_argument("--name", required=True, help="Short name for the character")
+    vcu.add_argument("--file", default="", help="Local PNG, JPG or WEBP")
+    vcu.add_argument("--url", default="", help="Public https link to the image")
+    vcd = sub.add_parser("vector-character-delete", help="Delete one of your uploaded Vector Explainer characters")
+    vcd.add_argument("character_id")
 
     est = sub.add_parser(
         "estimate",
@@ -174,7 +237,8 @@ def main(argv: list[str] | None = None) -> None:
     est.add_argument("--avatar-intro-only", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar-ai-footage", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    est.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    est.add_argument("--avatar-engine", default="", choices=["", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    est.add_argument("--vector-motion", default="", choices=["", "none", "video"], help="Vector Explainer: price stills (none) or AI clips (video)")
     est.add_argument("--render-only", action="store_true", help="Plan job where you bring the voiceover, pictures, clips and graphics (with --output plan --voiceover-seconds)")
 
     g = sub.add_parser(
@@ -238,7 +302,7 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     g.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    g.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    g.add_argument("--avatar-engine", default="", choices=["", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
     g.add_argument(
         "--disable-animations",
         action=argparse.BooleanOptionalAction,
@@ -279,6 +343,10 @@ def main(argv: list[str] | None = None) -> None:
         metavar="SLUG",
         help="Exclude a transition (e.g. flip-horizontal) from auto-selection. Repeatable. Omit to use the template.",
     )
+    _add_thumbnail_args(g, scope="this video")
+    _add_pronunciations_arg(g)
+    g.add_argument("--vector-motion", default="", choices=["", "none", "video"], help='Vector Explainer: "none" = stills with camera moves, "video" = AI clips. Default: the template\'s')
+    g.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     sc = sub.add_parser(
         "script",
@@ -312,7 +380,7 @@ def main(argv: list[str] | None = None) -> None:
     vo.add_argument("--script-file", default="")
     vo.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 3-4 or 6-8")
 
-    dv = sub.add_parser("download-voiceover", help="Download voiceover MP3 for a completed voiceover job")
+    dv = sub.add_parser("download-voiceover", help="Download the voiceover MP3 of a voiceover job, or the narration of a plan_ready plan job")
     dv.add_argument("job_id")
     dv.add_argument("--out", default="voiceover.mp3")
 
@@ -350,14 +418,18 @@ def main(argv: list[str] | None = None) -> None:
     pj.add_argument("--voiceover-url", default="", help="Public https link to the narration audio; Cliptude downloads it")
     pj.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 6-8")
     pj.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    pj.add_argument("--avatar-engine", default="", choices=["", "iii", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    pj.add_argument("--avatar-engine", default="", choices=["", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
     pj.add_argument("--render-only", action="store_true", help="You bring everything (needs --voiceover); Cliptude only builds and renders, at the render-only rate")
+    _add_thumbnail_args(pj, scope="this video")
+    _add_pronunciations_arg(pj)
+    pj.add_argument("--vector-motion", default="", choices=["", "none", "video"], help='Vector Explainer: "none" = stills with camera moves, "video" = AI clips. Default: the template\'s')
+    pj.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     nr = sub.add_parser("narration", help="Numbered sentences and word timings of a plan_ready job")
     nr.add_argument("job_id")
 
     cat = sub.add_parser("catalog", help="Graphics an agent can place (kinds, types, overlay styles)")
-    cat.add_argument("--format", default="", help="faceless_documentary, faceless_top_10 or avatar_video")
+    cat.add_argument("--format", default="", help="faceless_documentary, faceless_top_10, avatar_video or vector_explainer")
     cat.add_argument("--theme", default="")
     cat.add_argument("--compact", action="store_true", help="One summary line per graphic")
     cat.add_argument("--types", default="", help="Comma-separated types/styles for full entries")
@@ -432,7 +504,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "auth":
         _run_auth(args.auth_cmd)
         return
-    client = CliptudeClient()
+    client = CliptudeClient(client_kind="cli")
     try:
         if args.cmd == "templates":
             _print(client.list_templates(limit=args.limit, offset=args.offset))
@@ -443,11 +515,24 @@ def main(argv: list[str] | None = None) -> None:
                 if not isinstance(settings, dict):
                     raise CliptudeApiError("--settings-file must contain a JSON object.")
             settings.update(_parse_set_args(args.set))
+            thumbnail = _thumbnail_from_args(args)
+            if thumbnail:
+                settings["thumbnail"] = thumbnail
             _print(client.create_template(name=args.name, format=args.format, settings=settings))
         elif args.cmd == "template-options":
             _print(client.template_options(args.format))
         elif args.cmd == "voices":
             _print(client.list_voices(provider=args.provider, language=args.language or None))
+        elif args.cmd == "vector-characters":
+            _print(client.list_vector_characters())
+        elif args.cmd == "vector-character-upload":
+            if bool(args.file) == bool(args.url):
+                raise CliptudeApiError("Give --file or --url (one of them).")
+            _print(client.upload_vector_character(
+                image_path=args.file or None, image_url=args.url or None, name=args.name,
+            ))
+        elif args.cmd == "vector-character-delete":
+            _print(client.delete_vector_character(args.character_id))
         elif args.cmd == "avatars":
             _print(client.list_avatars(
                 section=args.section or None, search=args.search or None,
@@ -470,6 +555,7 @@ def main(argv: list[str] | None = None) -> None:
                 avatar_profile_id=args.avatar,
                 avatar_engine=args.avatar_engine or None,
                 render_only=args.render_only or None,
+                vector_reveal_mode=args.vector_motion or None,
             ))
         elif args.cmd == "generate":
             script = args.script
@@ -514,6 +600,10 @@ def main(argv: list[str] | None = None) -> None:
                 disable_transitions=args.disable_transitions,
                 excluded_animation_types=args.excluded_animation_types,
                 excluded_transition_kinds=args.excluded_transition_kinds,
+                thumbnail=_thumbnail_from_args(args),
+                vector_character_id=args.vector_character or None,
+                vector_reveal_mode=args.vector_motion or None,
+                pronunciations=_pronunciations_from_args(args),
             ))
         elif args.cmd == "script":
             if not (args.prompt or "").strip():
@@ -562,6 +652,10 @@ def main(argv: list[str] | None = None) -> None:
                 avatar_profile_id=args.avatar,
                 avatar_engine=args.avatar_engine or None,
                 render_only=args.render_only or None,
+                thumbnail=_thumbnail_from_args(args),
+                vector_character_id=args.vector_character or None,
+                vector_reveal_mode=args.vector_motion or None,
+                pronunciations=_pronunciations_from_args(args),
             ))
         elif args.cmd == "narration":
             _print(client.get_narration(args.job_id))

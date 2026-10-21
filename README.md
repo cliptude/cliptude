@@ -41,7 +41,7 @@ cliptude continue <job-id>
 cliptude status <job-id>
 ```
 
-No template yet? `template-create` makes one without the create wizard: pick a `voice_id` from `voices`, and see `template-options` for every other field, its choices and its default (unset fields take the wizard default). Values are validated like the wizard; uploads (custom music, avatars, characters) still need the wizard. MCP tools: `get_template_options`, `list_voices`, `create_template`. For Avatar Video, `avatars` (MCP `list_avatars`) lists your avatars; set one with `--set avatar_profile_id=<id>` on `template-create`, or override it per video with `--avatar <id>` (and `--avatar-engine iii|iv|v`) on `generate`, `plan-job` and `estimate`. The avatar's gender must match the voice.
+No template yet? `template-create` makes one without the create wizard: pick a `voice_id` from `voices`, and see `template-options` for every other field, its choices and its default (unset fields take the wizard default). Values are validated like the wizard; uploads (custom music, avatars, characters) still need the wizard. MCP tools: `get_template_options`, `list_voices`, `create_template`. For Avatar Video, `avatars` (MCP `list_avatars`) lists your avatars; set one with `--set avatar_profile_id=<id>` on `template-create`, or override it per video with `--avatar <id>` (and `--avatar-engine iv|v`) on `generate`, `plan-job` and `estimate`. The avatar's gender must match the voice. For Vector Explainer, `vector-characters` lists the built-in cast and your uploads, `vector-character-upload --name "Dr. Maya" --file maya.png` (or `--url`) adds your own, and `--set vector_character_id=<id>` on `template-create` (or `--vector-character <id>` on `generate` / `plan-job`) uses it. Motion: `--set vector_reveal_mode=none|video` on the template, or `--vector-motion none|video` on `generate`, `plan-job` and `estimate` (`none` = stills with camera moves, `video` = AI clips). Thumbnails: `--thumbnail-reference <YouTube link or image URL>` or `--thumbnail-prompt "<brief>"` on `template-create` sets the template's look; the same flags on `generate` and `plan-job` set one video's. With neither, each video picks a style reference for its own title.
 
 To check the price first, `estimate` (MCP `estimate_credits`, REST `POST /api/v1/jobs/estimate`) takes the same template and prompt/script as `generate` (an upload as `--voiceover-seconds` / `--talking-head-seconds`) and returns the credits the job would need and whether the account has them. It creates and charges nothing.
 
@@ -49,7 +49,7 @@ To revise a finished video, `editor` opens its timeline (item ids, times, text),
 
 ### Agent-planned videos
 
-On Faceless Documentary, Faceless Top 10 and Avatar Video templates an agent can plan every visual and leave Cliptude
+On Faceless Documentary, Faceless Top 10, Avatar Video and Vector Explainer templates an agent can plan every visual and leave Cliptude
 only the voicing, sourcing and rendering:
 
 1. `cliptude plan-job` (stops at `plan_ready`), `cliptude narration <job>`.

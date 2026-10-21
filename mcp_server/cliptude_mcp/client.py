@@ -149,6 +149,14 @@ def _avatar_job_fields(
     return fields
 
 
+def _thumbnail_job_field(thumbnail: dict[str, str] | None, *, as_string: bool = False) -> dict[str, Any]:
+    """create_job's per-job thumbnail ({custom_prompt} or {reference_url}); multipart sends it as JSON text."""
+    cleaned = {k: str(v).strip() for k, v in (thumbnail or {}).items() if v is not None and str(v).strip()}
+    if not cleaned:
+        return {}
+    return {"thumbnail": json.dumps(cleaned) if as_string else cleaned}
+
+
 def _motion_control_job_fields(
     *,
     disable_animations: bool | None = None,
@@ -180,8 +188,16 @@ def _motion_control_job_fields(
 
 
 class CliptudeClient:
-    def __init__(self, base_url: str | None = None, api_key: str | None = None, timeout: float = 30.0):
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout: float = 30.0,
+        client_kind: str | None = None,
+    ):
         self.base_url = (base_url or resolve_base_url()).rstrip("/")
+        # "cli" or "mcp": sent as X-Cliptude-Client so Cliptude records where a job was started.
+        self.client_kind = (client_kind or os.environ.get("CLIPTUDE_CLIENT_KIND") or "").strip().lower()
         self.api_key = _resolve_token(api_key)
         self.timeout = timeout
         self._session_file = not bool(
@@ -198,6 +214,8 @@ class CliptudeClient:
             "Accept": "application/json",
             **django_proxy_headers(self.base_url),
         }
+        if self.client_kind:
+            headers["X-Cliptude-Client"] = self.client_kind
         if json_content:
             headers["Content-Type"] = "application/json"
         return headers
@@ -287,6 +305,10 @@ class CliptudeClient:
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         render_only: bool | None = None,
+        thumbnail: dict[str, str] | None = None,
+        vector_character_id: str | None = None,
+        vector_reveal_mode: str | None = None,
+        pronunciations: list[dict[str, str]] | None = None,
     ) -> Any:
         if voiceover_path and voiceover_url:
             raise CliptudeApiError("Give voiceover_path or voiceover_url, not both.")
@@ -346,6 +368,7 @@ class CliptudeClient:
                 disable_transitions=disable_transitions,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
+                thumbnail=thumbnail,
             )
         if vo_path:
             extra_data = {
@@ -356,6 +379,10 @@ class CliptudeClient:
                 **motion_fields_str,
                 **({"output": output_kind} if output_kind == "plan" else {}),
                 **({"render_only": "true"} if render_only else {}),
+                **_thumbnail_job_field(thumbnail, as_string=True),
+                **({"vector_character_id": str(vector_character_id)} if vector_character_id else {}),
+                **({"vector_reveal_mode": str(vector_reveal_mode)} if vector_reveal_mode else {}),
+                **({"pronunciations": json.dumps(pronunciations)} if pronunciations is not None else {}),
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -385,6 +412,13 @@ class CliptudeClient:
             avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
         ))
         body.update(motion_fields)
+        body.update(_thumbnail_job_field(thumbnail))
+        if vector_character_id:
+            body["vector_character_id"] = str(vector_character_id)
+        if vector_reveal_mode:
+            body["vector_reveal_mode"] = str(vector_reveal_mode)
+        if pronunciations is not None:
+            body["pronunciations"] = pronunciations
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
     def _raise_http(self, resp, *, payload=None) -> None:
@@ -480,6 +514,7 @@ class CliptudeClient:
         disable_transitions: bool | None = None,
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
+        thumbnail: dict[str, str] | None = None,
     ) -> Any:
         motion_extra = _motion_control_job_fields(
             disable_animations=disable_animations,
@@ -513,6 +548,7 @@ class CliptudeClient:
             extra_data = {
                 **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
                 **motion_extra,
+                **_thumbnail_job_field(thumbnail, as_string=True),
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -530,6 +566,7 @@ class CliptudeClient:
             extra_data = {
                 **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
                 **motion_extra,
+                **_thumbnail_job_field(thumbnail, as_string=True),
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -557,6 +594,7 @@ class CliptudeClient:
             "talking_head_duration": str(duration),
         }
         body.update(_avatar_job_fields(avatar_intro_only, avatar_ai_footage))
+        body.update(_thumbnail_job_field(thumbnail))
         body.update(
             _motion_control_job_fields(
                 disable_animations=disable_animations,
@@ -800,6 +838,7 @@ class CliptudeClient:
         avatar_profile_id: int | str | None = None,
         avatar_engine: str | None = None,
         render_only: bool | None = None,
+        vector_reveal_mode: str | None = None,
     ) -> Any:
         """Credits a job would need; creates nothing."""
         body: dict[str, Any] = {"template_id": template_id}
@@ -812,6 +851,7 @@ class CliptudeClient:
             ("voiceover_seconds", voiceover_seconds),
             ("talking_head_seconds", talking_head_seconds),
             ("output", output),
+            ("vector_reveal_mode", vector_reveal_mode),
         ):
             if value is not None and value != "":
                 body[key] = value
@@ -820,6 +860,54 @@ class CliptudeClient:
             avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
         ))
         return self.request("POST", "/api/v1/jobs/estimate", json_body=body)
+
+    def list_vector_characters(self) -> Any:
+        """Vector Explainer characters: the built-in cast and your uploads (ids for vector_character_id)."""
+        return self.request("GET", "/api/v1/vector-characters")
+
+    def upload_vector_character(
+        self,
+        *,
+        image_path: str | Path | None = None,
+        image_url: str | None = None,
+        name: str = "",
+        _retried: bool = False,
+    ) -> Any:
+        """Add a Vector Explainer character from a local image or a public image URL; returns its id."""
+        if bool(image_path) == bool((image_url or "").strip()):
+            raise CliptudeApiError("Give image_path or image_url (one of them).")
+        if image_url:
+            return self.request(
+                "POST", "/api/v1/vector-characters", json_body={"image_url": image_url.strip(), "name": name}
+            )
+        path = Path(image_path)
+        if not path.is_file():
+            raise CliptudeApiError(f"Character image not found: {path}")
+        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        try:
+            with path.open("rb") as fh:
+                resp = httpx.post(
+                    f"{self.base_url}/api/v1/vector-characters",
+                    headers=self._headers(json_content=False),
+                    data={"name": name},
+                    files={"image": (path.name, fh, mime)},
+                    timeout=max(self.timeout, 120.0),
+                )
+        except httpx.HTTPError as exc:
+            raise CliptudeApiError(str(exc)) from exc
+        if resp.status_code == 401 and not _retried and self._maybe_refresh():
+            return self.upload_vector_character(image_path=image_path, name=name, _retried=True)
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {"error": resp.text}
+        if resp.status_code >= 400:
+            self._raise_http(resp, payload=payload)
+        return payload
+
+    def delete_vector_character(self, character_id: str) -> Any:
+        """Delete one of your uploaded characters (refused while a template uses it)."""
+        return self.request("DELETE", f"/api/v1/vector-characters/{character_id}")
 
     def list_avatars(
         self,

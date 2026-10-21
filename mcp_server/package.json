@@ -1,13 +1,15 @@
 {
   "name": "@cliptude/cli",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "description": "Cliptude CLI — generate videos from saved templates.",
   "homepage": "https://github.com/cliptude/cliptude#readme",
   "bin": {
-    "cliptude": "./npm/bin/cliptude.js"
+    "cliptude": "npm/bin/cliptude.js"
   },
   "files": [
     "cliptude_mcp",
+    "!cliptude_mcp/__pycache__",
+    "!**/*.pyc",
     "pyproject.toml",
     "README.md",
     "npm"
