@@ -383,7 +383,9 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   board right after the title: coverage counts a board anywhere from 1 s before that sentence to 4 s after it ends.
 - `presenter_windows` (Avatar Video only): `full_screen`, `split_left` or `split_right`; no overlaps; total seconds
   within the template's cap (intro-only templates: one opening window). Full-screen windows may not cover graphics,
-  except speaker boards, which must sit inside one.
+  except speaker boards, which must sit inside one. A split window's `collage_media` is up to three searched
+  pictures beside the presenter, `{"query": "…", "intent": "…"}` each (no `url` or `keep` there yet); without it
+  Cliptude picks the pictures from the narration. Each window costs its sentences plus ~0.7 s of padding.
 - Vector Explainer: every picture beat is drawn as a flat vector illustration (the template's or job's character,
   colour or black-and-white style). Nothing is searched: write `media.intent` as what to draw (subject, action,
   setting) and keep `query` a short label; `person` names are drawn as stylised figures. Alts and eras are not
