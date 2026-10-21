@@ -65,11 +65,17 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
 - Needs `output: "plan"` and your own voiceover. `check_plan` then refuses any searched media: every beat and every
   graphic picture slot is your `url` or `keep` (`render_only_needs_media`), with no `fallback_query`; a plate is
   `{"beat": true}` or your `url`; and there are no `presenter_windows` (no avatar render; `render_only_no_avatar`).
-- **Getting your files to Cliptude.** On a remote host (claude.ai, ChatGPT or any agent on `mcp.cliptude.com`) you
-  cannot send a local file: give the voiceover as `voiceover_url` and every picture and clip as a `url` (a public
-  https link Cliptude downloads once and keeps). With the CLI or a local MCP server you can also upload: the voiceover
-  as `voiceover_path`, pictures and clips with `upload_plan_media(job, path)` / `cliptude upload-media`, then use the
-  `keep` ids. Trim long clips with `start_s` / `end_s`.
+- **Getting your files to Cliptude.** Upload them; nothing has to be public. From any host, remote MCP included
+  (claude.ai, ChatGPT, any agent on `mcp.cliptude.com`) as long as you can run `curl`:
+  1. Narration, before the job: `start_voiceover_upload(filename, size)` → PUT each part's bytes to its signed
+     `url` (`tail -c +$((offset+1)) FILE | head -c LENGTH | curl -sf -X PUT --data-binary @- "URL"`, or
+     `curl -sf -X PUT --upload-file FILE "URL"` for one part) → `finish_voiceover_upload(key, upload_id)` → pass its
+     `voiceover_url` to `create_plan_job(render_only=true, …)` within the hour.
+  2. Pictures and clips, on the job: `start_media_upload(job, filename, size)` → PUT the parts the same way →
+     `finish_media_upload(job, key, upload_id)` → use its `keep` id.
+  With the CLI or a local MCP server the same uploads are one call: `voiceover_path` / `cliptude plan-job
+  --voiceover`, and `upload_plan_media(job, path)` / `cliptude upload-media`. A public https link still works as
+  `voiceover_url` or a media `url`. Trim long clips with `start_s` / `end_s`.
 - A board's picture slot draws one image: a clip given there is shown as one frame of it.
 - If a file cannot be loaded at build time the job fails and says which (`RenderOnlyMediaMissing`), instead of
   quietly searching. Boards left without a picture hold the footage under them; nothing is generated.

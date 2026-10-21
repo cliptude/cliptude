@@ -253,7 +253,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         render_only: Annotated[
             bool | None,
-            Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url on a remote host), every picture and clip (url, or keep from upload_plan_media) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
+            Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url: on a remote host from start_voiceover_upload), every picture and clip (url, or keep from upload_plan_media / start_media_upload) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
         ] = None,
         vector_reveal_mode: Annotated[
             str | None,
@@ -425,7 +425,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         voiceover_url: Annotated[
             str | None,
-            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. Use this on remote hosts, which cannot send a local file. Omit prompt/script and voiceover_path."),
+            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. On a remote host, upload a local file with start_voiceover_upload + finish_voiceover_upload and pass the voiceover_url it returns. Omit prompt/script and voiceover_path."),
         ] = None,
         thumbnail_prompt: Annotated[
             str | None,
@@ -559,7 +559,7 @@ def build_server(*, with_http_auth: bool = False):
         voiceover_path: Annotated[str | None, Field(description="Local audio file to use as the narration (aligned, not re-voiced). Omit prompt/script. Stdio / local MCP only.")] = None,
         voiceover_url: Annotated[
             str | None,
-            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. Use this on remote hosts, which cannot send a local file. Omit prompt/script and voiceover_path."),
+            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. On a remote host, upload a local file with start_voiceover_upload + finish_voiceover_upload and pass the voiceover_url it returns. Omit prompt/script and voiceover_path."),
         ] = None,
         duration: Annotated[str | None, Field(description="Duration bucket such as 6-8. Omit to use the template.")] = None,
         avatar_profile_id: Annotated[
@@ -572,7 +572,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         render_only: Annotated[
             bool | None,
-            Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url on a remote host), every picture and clip (url, or keep from upload_plan_media) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
+            Field(description="Render-only plan job: you bring the voiceover (voiceover_path, or voiceover_url: on a remote host from start_voiceover_upload), every picture and clip (url, or keep from upload_plan_media / start_media_upload) and the graphics; Cliptude searches, writes, voices and generates nothing and charges only the render-only rate per minute."),
         ] = None,
         thumbnail_prompt: Annotated[
             str | None,
@@ -708,12 +708,91 @@ def build_server(*, with_http_auth: bool = False):
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
         path: Annotated[
             str,
-            Field(description="Local picture (JPG/PNG/WEBP/GIF, up to 15 MB) or clip (MP4/MOV/WEBM/M4V, up to 300 MB). Stdio / local MCP only — remote hosts should use the CLI (cliptude upload-media) or give a public file link as media.url."),
+            Field(description="Local picture (JPG/PNG/WEBP/GIF, up to 15 MB) or clip (MP4/MOV/WEBM/M4V, up to 300 MB). Stdio / local MCP only: on a remote host (mcp.cliptude.com) use start_media_upload + finish_media_upload, which work from any agent that can run curl."),
         ],
     ) -> dict[str, Any]:
         """Send a picture or clip you found yourself to a plan job. The file goes straight to Cliptude's storage on signed URLs (no storage keys needed) and is checked to be a real picture or video. Returns {keep, file, media_type, size}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot, with start_s/end_s on a beat to play only part of a clip."""
         try:
             return _client().upload_plan_media(job_id, path)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Start media upload",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    def start_media_upload(
+        job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
+        filename: Annotated[str, Field(min_length=1, description="The file's name with its extension: JPG/PNG/WEBP/GIF picture (up to 15 MB) or MP4/MOV/WEBM/M4V clip (up to 300 MB).")],
+        size: Annotated[int, Field(gt=0, description="The file's size in bytes (e.g. `wc -c < file` or `stat`).")],
+        content_type: Annotated[str | None, Field(description="MIME type; omit to infer it from the file name.")] = None,
+    ) -> dict[str, Any]:
+        """Upload a picture or clip to a plan job from ANY host, remote included: Cliptude signs a PUT URL for each part and you send the bytes yourself, straight to Cliptude's storage. Then call finish_media_upload with the same key and upload_id to get its keep id. Each part: PUT bytes [offset, offset+length) of the file to its url, e.g. `tail -c +$((offset+1)) FILE | head -c LENGTH | curl -sf -X PUT --data-binary @- "URL"` (one part: `curl -sf -X PUT --upload-file FILE "URL"`). URLs expire in 1 hour."""
+        try:
+            out = _client().start_media_upload(job_id, filename=filename, size=size, content_type=content_type)
+            out["next"] = "PUT every part to its url, then finish_media_upload(job_id, key, upload_id)."
+            return out
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Finish media upload",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    def finish_media_upload(
+        job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
+        key: Annotated[str, Field(min_length=1, description="key from start_media_upload")],
+        upload_id: Annotated[str, Field(min_length=1, description="upload_id from start_media_upload")],
+    ) -> dict[str, Any]:
+        """Close an upload after every part is PUT. Cliptude checks it is a real picture or video and returns {keep, file, media_type, size}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot (start_s/end_s on a beat to play part of a clip)."""
+        try:
+            return _client().finish_media_upload(job_id, key=key, upload_id=upload_id)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Abort media upload",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    def abort_media_upload(
+        job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
+        key: Annotated[str, Field(min_length=1, description="key from start_media_upload")],
+        upload_id: Annotated[str, Field(min_length=1, description="upload_id from start_media_upload")],
+    ) -> dict[str, Any]:
+        """Cancel an upload you will not finish (frees the parts already sent)."""
+        try:
+            return _client().abort_media_upload(job_id, key=key, upload_id=upload_id)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Start voiceover upload",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    def start_voiceover_upload(
+        filename: Annotated[str, Field(min_length=1, description="The narration file's name: MP3, M4A, WAV, OGG, FLAC or WEBM (up to 200 MB).")],
+        size: Annotated[int, Field(gt=0, description="The file's size in bytes.")],
+        content_type: Annotated[str | None, Field(description="MIME type; omit to infer it from the file name.")] = None,
+    ) -> dict[str, Any]:
+        """Upload your own narration before the job exists, from ANY host, remote included (for render_only plan jobs, or create_job with your voiceover). PUT each part's bytes to its url exactly as for start_media_upload, then call finish_voiceover_upload: it returns a voiceover_url to pass to create_plan_job / create_job. URLs expire in 1 hour."""
+        try:
+            out = _client().start_voiceover_upload(filename=filename, size=size, content_type=content_type)
+            out["next"] = "PUT every part to its url, then finish_voiceover_upload(key, upload_id) for the voiceover_url."
+            return out
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Finish voiceover upload",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    def finish_voiceover_upload(
+        key: Annotated[str, Field(min_length=1, description="key from start_voiceover_upload")],
+        upload_id: Annotated[str, Field(min_length=1, description="upload_id from start_voiceover_upload")],
+    ) -> dict[str, Any]:
+        """Close a narration upload. Returns {voiceover_url, key, expires_in_s}: pass voiceover_url to create_plan_job (render_only or not) or create_job within the hour. The job checks the audio when it downloads it."""
+        try:
+            return _client().finish_voiceover_upload(key=key, upload_id=upload_id)
         except Exception as exc:
             return _err(exc)
 

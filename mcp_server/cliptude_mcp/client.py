@@ -679,6 +679,49 @@ class CliptudeClient:
                 pass
             raise
 
+    def _start_signed_upload(self, base: str, *, filename: str, size: int, content_type: str | None) -> dict[str, Any]:
+        """Open a multipart upload and sign every part: [{part, offset, length, url}] for the caller to PUT."""
+        if int(size or 0) <= 0:
+            raise CliptudeApiError("size (the file size in bytes) is required.")
+        ctype = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        init = self.request("POST", f"{base}/init", json_body={"filename": filename, "size": int(size), "content_type": ctype})
+        key, upload_id = str((init or {}).get("key") or ""), str((init or {}).get("upload_id") or "")
+        part_size, part_count = int((init or {}).get("part_size") or 0), int((init or {}).get("part_count") or 0)
+        if not key or not upload_id or part_size <= 0 or part_count <= 0:
+            raise CliptudeApiError("The upload init returned an incomplete plan.")
+        parts: list[dict[str, Any]] = []
+        for start in range(0, part_count, 50):
+            nums = list(range(start + 1, min(start + 50, part_count) + 1))
+            signed = self.request("POST", f"{base}/sign-parts", json_body={"key": key, "upload_id": upload_id, "part_numbers": nums})
+            urls = (signed or {}).get("urls") if isinstance(signed, dict) else None
+            if not isinstance(urls, dict):
+                raise CliptudeApiError("Could not sign the upload parts.")
+            for num in nums:
+                offset = (num - 1) * part_size
+                parts.append({"part": num, "offset": offset, "length": min(part_size, int(size) - offset), "url": urls.get(str(num))})
+        return {"key": key, "upload_id": upload_id, "part_size": part_size, "part_count": part_count, "size": int(size), "parts": parts}
+
+    def start_media_upload(self, job_id: str, *, filename: str, size: int, content_type: str | None = None) -> dict[str, Any]:
+        """Signed PUT URLs for a picture or clip of a plan job, for a host that sends the bytes itself."""
+        return self._start_signed_upload(f"/api/v1/jobs/{job_id}/media", filename=filename, size=size, content_type=content_type)
+
+    def finish_media_upload(self, job_id: str, *, key: str, upload_id: str) -> Any:
+        return self.request("POST", f"/api/v1/jobs/{job_id}/media/complete", json_body={"key": key, "upload_id": upload_id})
+
+    def abort_media_upload(self, job_id: str, *, key: str, upload_id: str) -> Any:
+        return self.request("POST", f"/api/v1/jobs/{job_id}/media/abort", json_body={"key": key, "upload_id": upload_id})
+
+    def start_voiceover_upload(self, *, filename: str, size: int, content_type: str | None = None) -> dict[str, Any]:
+        """Signed PUT URLs for a narration file, before the job exists."""
+        return self._start_signed_upload("/api/v1/uploads/voiceover", filename=filename, size=size, content_type=content_type)
+
+    def finish_voiceover_upload(self, *, key: str, upload_id: str) -> Any:
+        """Returns {voiceover_url, key, expires_in_s}: pass voiceover_url to create_job / create_plan_job."""
+        return self.request("POST", "/api/v1/uploads/voiceover/complete", json_body={"key": key, "upload_id": upload_id})
+
+    def abort_voiceover_upload(self, *, key: str, upload_id: str) -> Any:
+        return self.request("POST", "/api/v1/uploads/voiceover/abort", json_body={"key": key, "upload_id": upload_id})
+
     def get_narration(self, job_id: str) -> Any:
         """Numbered sentences (with word timings), digest, pricing and template flags of a plan job."""
         return self.request("GET", f"/api/v1/jobs/{job_id}/narration")
