@@ -11,25 +11,34 @@ const args = process.argv.slice(2);
 const venvDir =
   process.env.CLIPTUDE_VENV || path.join(os.homedir(), ".cliptude", "venv");
 
+const MINOR_VERSIONS = [14, 13, 12, 11, 10];
+
 function pythonCandidates() {
+  const fromEnv = process.env.CLIPTUDE_PYTHON ? [process.env.CLIPTUDE_PYTHON] : [];
   if (process.platform === "win32") {
-    return ["py", "python", "python3"];
+    return [...fromEnv, "py", "python", "python3"];
   }
-  return ["python3", "python"];
+  // macOS ships python3 3.9 at /usr/bin; a newer Homebrew, pyenv or python.org
+  // install is usually only on PATH under its versioned name.
+  const versioned = MINOR_VERSIONS.map((minor) => `python3.${minor}`);
+  const dirs = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const absolute = dirs.flatMap((dir) =>
+    versioned.map((name) => path.join(dir, name)),
+  );
+  return [...fromEnv, ...versioned, "python3", "python", ...absolute];
+}
+
+function isPython310(cmd) {
+  const probe = spawnSync(
+    cmd,
+    ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"],
+    { encoding: "utf8" },
+  );
+  return probe.status === 0;
 }
 
 function findPython() {
-  for (const cmd of pythonCandidates()) {
-    const probe = spawnSync(
-      cmd,
-      ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"],
-      { encoding: "utf8" },
-    );
-    if (probe.status === 0) {
-      return cmd;
-    }
-  }
-  return null;
+  return pythonCandidates().find(isPython310) || null;
 }
 
 function venvPython() {
@@ -120,14 +129,24 @@ function ensureVenv(systemPy) {
   return py;
 }
 
-const systemPy = findPython();
-if (!systemPy) {
-  console.error(
-    "Python 3.10+ is required. Install it, then re-run: npm i -g @cliptude/cli",
-  );
-  process.exit(1);
+function resolvePython() {
+  // A working install needs no system Python at all.
+  const existing = venvPython();
+  if (fs.existsSync(existing) && installedVersionMatches(existing)) {
+    return existing;
+  }
+  const systemPy = findPython();
+  if (!systemPy) {
+    console.error(
+      "Python 3.10+ is required and none was found (tried " +
+        pythonCandidates().slice(0, 7).join(", ") +
+        ", ...). Install it, or point CLIPTUDE_PYTHON at one, then re-run: npm i -g @cliptude/cli",
+    );
+    process.exit(1);
+  }
+  return ensureVenv(systemPy);
 }
 
-const py = ensureVenv(systemPy);
+const py = resolvePython();
 const result = run(py, ["-m", "cliptude_mcp.cli", ...args]);
 process.exit(result.status ?? 1);
