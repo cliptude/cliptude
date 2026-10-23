@@ -2,6 +2,8 @@
 
 Generate videos from a saved template. Same account and credits as cliptude.com.
 
+> Also from Cliptude: [Awesome Faceless YouTube Automation](https://github.com/cliptude/awesome-faceless-youtube-automation), a curated list of tools, footage sources and YouTube policies for faceless channels.
+
 ## Set up
 
 1. Install the CLI: run `npm i -g @cliptude/cli`.
