@@ -24,8 +24,8 @@ Same modes as create.html. **Exactly one narration source.** Prompt and script m
 | Topic or title only (“make a video about X”) | Follow **cliptude-script**: web-search, write spoken narration, then `--script-file` / `script` |
 | Full narration they want voiced | `--script` / `--script-file` as-is (spoken words only) |
 | Explicit “let Cliptude write the script” | `--prompt` = a **brief** (audience, angle, must-include facts) — not the title |
-| A voiceover audio file (MP3, M4A, WAV, …) | `--voiceover path` / MCP `voiceover_path`, or a public link as `--voiceover-url` / `voiceover_url` (remote hosts cannot send a local file). Cliptude transcribes it and skips TTS. Do not also pass `--prompt` or `--script`. Do not run **cliptude-script**. Duration comes from the file. |
-| A talking-head presenter video (MP4, MOV, WEBM, AVI) | `--talking-head path` / MCP `talking_head_path` with a **Talking Head** template. Cliptude transcribes it and skips TTS. Do not also pass `--prompt`, `--script`, or `--voiceover`. Do not run **cliptude-script**. Duration comes from the file. |
+| A voiceover audio file (MP3, M4A, WAV, …) | `--voiceover path` / MCP `voiceover_path`, or a public link as `--voiceover-url` / `voiceover_url` (remote hosts cannot send a local file). Cliptude transcribes it and skips TTS. Do not also pass `--prompt` or `--script`. Do not run **cliptude-script**. Duration comes from the file, which must be at least 6 minutes long. |
+| A talking-head presenter video (MP4, MOV, WEBM, AVI) | `--talking-head path` / MCP `talking_head_path` with a **Talking Head** template. Cliptude transcribes it and skips TTS. Do not also pass `--prompt`, `--script`, or `--voiceover`. Do not run **cliptude-script**. Duration comes from the file, which must be at least 6 minutes long. |
 
 Read `../cliptude-script/SKILL.md` before `generate` / `create_job` when the user did not paste a script **and** did not give a voiceover or talking-head file.
 
@@ -66,7 +66,7 @@ Thumbnails: without a thumbnail setting, each video picks a YouTube style refere
 
 Custom script formatting: spoken words only (no Scene 1, no [Music plays]). See https://cliptude.com/docs/custom-script/
 
-Optional `--duration` (`3-4`, `6-8`, `10-12`, …) overrides the template. Without it, prompt jobs use the template duration and script jobs estimate from word count. `--voiceover` and `--talking-head` ignore `--duration` (length comes from the file). MCP: `create_job(..., voiceover_path="/abs/path/narration.mp3")` or `talking_head_path="/abs/path/clip.mp4"` — local stdio only; remote hosts should use the CLI.
+Optional `--duration` (`3-4`, `6-8`, `10-12`, …) overrides the template. Without it, prompt jobs use the template duration and script jobs estimate from word count. `--voiceover` and `--talking-head` ignore `--duration` (length comes from the file; an upload under 6 minutes is refused, like a script under 880 words). MCP: `create_job(..., voiceover_path="/abs/path/narration.mp3")` or `talking_head_path="/abs/path/clip.mp4"` — local stdio only; remote hosts should use the CLI.
 
 Before a long or costly job, or when the user asks what it will cost, call `estimate_credits` (CLI `estimate`) with the same template and prompt/script (an upload as `voiceover_seconds`). It uses the same pricing as `create_job`, creates nothing and returns `credits_required`, `credits_available` and `enough_credits`. An uploaded voiceover bills at the lowest voice rate.
 

@@ -103,8 +103,8 @@ def build_server(*, with_http_auth: bool = False):
         "(no suitable template? get_template_options + list_voices, then create_template) "
         "To revise a finished video: open_editor_project, run_agent with timeline item ids, "
         "poll get_agent_run, then render_project and get_render. "
-        "prompt, script, voiceover_path (uploaded audio, transcribed; skips TTS), "
-        "or talking_head_path (presenter video on a Talking Head template). "
+        "prompt, script, voiceover_path (uploaded audio of at least 6 minutes, transcribed; skips TTS), "
+        "or talking_head_path (presenter video of at least 6 minutes on a Talking Head template). "
         "create_job returns immediately; poll get_job until completed or failed. "
         "To quote a price or check the balance first, call estimate_credits with the same "
         "template and prompt/script (an upload as voiceover_seconds); it creates nothing. "
@@ -139,7 +139,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="List templates",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="List templates", read_only_hint=True, open_world_hint=False),
     )
     def list_templates(
         limit: Annotated[int, Field(ge=1, le=100, description="Page size")] = 20,
@@ -153,7 +153,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get template",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get template", read_only_hint=True, open_world_hint=False),
     )
     def get_template(
         template_id: Annotated[str, Field(min_length=8, description="Template UUID")],
@@ -166,7 +166,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get template options",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get template options", read_only_hint=True, open_world_hint=False),
     )
     def get_template_options(
         format: Annotated[str, Field(description="Video format, e.g. faceless_documentary or vector_explainer")],
@@ -179,7 +179,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="List voices",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True),
+        annotations=ToolAnnotations(title="List voices", read_only_hint=True, open_world_hint=True),
     )
     def list_voices(
         provider: Annotated[str, Field(description="elevenlabs, minimax, cartesia, inworld or voicetory")] = "elevenlabs",
@@ -191,7 +191,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Create template")
+    @mcp.tool(
+        title="Create template",
+        annotations=ToolAnnotations(title="Create template", read_only_hint=False, destructive_hint=False),
+    )
     def create_template(
         name: Annotated[str, Field(min_length=1, max_length=120, description="Template name")],
         format: Annotated[str, Field(description="Video format, e.g. faceless_documentary")],
@@ -219,7 +222,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Estimate credits",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Estimate credits", read_only_hint=True, open_world_hint=False),
     )
     def estimate_credits(
         template_id: Annotated[str, Field(min_length=8, description="Saved template UUID")],
@@ -287,7 +290,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="List avatars",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="List avatars", read_only_hint=True, open_world_hint=False),
     )
     def list_avatars(
         section: Annotated[
@@ -307,7 +310,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="List vector characters",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="List vector characters", read_only_hint=True, open_world_hint=False),
     )
     def list_vector_characters() -> dict[str, Any]:
         """Characters for Vector Explainer videos: the built-in cast (id, name, descriptor, description, preview_url) and the user's own uploads (id, name, preview_url). Pass an id as vector_character_id in create_template settings, or on create_job / create_plan_job for one video. Also returns upload_guidance for making a new one."""
@@ -316,7 +319,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Upload vector character")
+    @mcp.tool(
+        title="Upload vector character",
+        annotations=ToolAnnotations(title="Upload vector character", read_only_hint=False, destructive_hint=False),
+    )
     def upload_vector_character(
         name: Annotated[str, Field(min_length=1, max_length=120, description="A short name for the character, e.g. 'Dr. Maya'")],
         image_path: Annotated[str | None, Field(description="Local PNG, JPG or WEBP file. Stdio / local MCP only.")] = None,
@@ -332,7 +338,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Delete vector character")
+    @mcp.tool(
+        title="Delete vector character",
+        annotations=ToolAnnotations(title="Delete vector character", read_only_hint=False, destructive_hint=True),
+    )
     def delete_vector_character(
         character_id: Annotated[str, Field(min_length=8, description="Uploaded character id from list_vector_characters")],
     ) -> dict[str, Any]:
@@ -342,7 +351,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Create video job")
+    @mcp.tool(
+        title="Create video job",
+        annotations=ToolAnnotations(title="Create video job", read_only_hint=False, destructive_hint=False),
+    )
     def create_job(
         template_id: Annotated[str, Field(min_length=8, description="Saved template UUID")],
         title: Annotated[str, Field(min_length=1, max_length=255, description="Video title")],
@@ -362,7 +374,7 @@ def build_server(*, with_http_auth: bool = False):
             str | None,
             Field(
                 description=(
-                    "Local path to a talking-head presenter video (MP4, MOV, WEBM, AVI). "
+                    "Local path to a talking-head presenter video (MP4, MOV, WEBM, AVI), at least 6 minutes long. "
                     "Requires a Talking Head template. Cliptude transcribes it and skips TTS. "
                     "Do not also send prompt, script, or voiceover_path. "
                     "Stdio / local MCP only — remote hosts should use the CLI."
@@ -425,7 +437,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         voiceover_url: Annotated[
             str | None,
-            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. On a remote host, upload a local file with start_voiceover_upload + finish_voiceover_upload and pass the voiceover_url it returns. Omit prompt/script and voiceover_path."),
+            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB; at least 6 minutes long). Cliptude downloads it and uses it like an uploaded voiceover. On a remote host, upload a local file with start_voiceover_upload + finish_voiceover_upload and pass the voiceover_url it returns. Omit prompt/script and voiceover_path."),
         ] = None,
         thumbnail_prompt: Annotated[
             str | None,
@@ -492,7 +504,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Create script job")
+    @mcp.tool(
+        title="Create script job",
+        annotations=ToolAnnotations(title="Create script job", read_only_hint=False, destructive_hint=False),
+    )
     def create_script(
         template_id: Annotated[str, Field(min_length=8, description="Saved template UUID")],
         title: Annotated[str, Field(min_length=1, max_length=255, description="Video title")],
@@ -514,7 +529,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Create voiceover job")
+    @mcp.tool(
+        title="Create voiceover job",
+        annotations=ToolAnnotations(title="Create voiceover job", read_only_hint=False, destructive_hint=False),
+    )
     def create_voiceover(
         template_id: Annotated[str, Field(min_length=8, description="Saved template UUID")],
         title: Annotated[str, Field(min_length=1, max_length=255, description="Video title")],
@@ -540,7 +558,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Continue job into video")
+    @mcp.tool(
+        title="Continue job into video",
+        annotations=ToolAnnotations(title="Continue job into video", read_only_hint=False, destructive_hint=False),
+    )
     def continue_job(
         job_id: Annotated[str, Field(min_length=8, description="Completed script or voiceover job UUID, or a plan job with a locked plan")],
     ) -> dict[str, Any]:
@@ -550,16 +571,19 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Create agent-planned job")
+    @mcp.tool(
+        title="Create agent-planned job",
+        annotations=ToolAnnotations(title="Create agent-planned job", read_only_hint=False, destructive_hint=False),
+    )
     def create_plan_job(
         template_id: Annotated[str, Field(min_length=8, description="Saved Faceless Documentary, Faceless Top 10, Avatar Video or Vector Explainer template UUID")],
         title: Annotated[str, Field(min_length=1, max_length=255, description="Video title")],
         prompt: Annotated[str | None, Field(description="Topic/brief; Cliptude writes the narration. Never the video title.")] = None,
         script: Annotated[str | None, Field(description="Spoken narration to voice as-is. Omit prompt when you pass this.")] = None,
-        voiceover_path: Annotated[str | None, Field(description="Local audio file to use as the narration (aligned, not re-voiced). Omit prompt/script. Stdio / local MCP only.")] = None,
+        voiceover_path: Annotated[str | None, Field(description="Local audio file to use as the narration (aligned, not re-voiced), at least 6 minutes long. Omit prompt/script. Stdio / local MCP only.")] = None,
         voiceover_url: Annotated[
             str | None,
-            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB). Cliptude downloads it and uses it like an uploaded voiceover. On a remote host, upload a local file with start_voiceover_upload + finish_voiceover_upload and pass the voiceover_url it returns. Omit prompt/script and voiceover_path."),
+            Field(description="Public https link to the narration audio (MP3, M4A, WAV, OGG, FLAC, WEBM; up to 200 MB; at least 6 minutes long). Cliptude downloads it and uses it like an uploaded voiceover. On a remote host, upload a local file with start_voiceover_upload + finish_voiceover_upload and pass the voiceover_url it returns. Omit prompt/script and voiceover_path."),
         ] = None,
         duration: Annotated[str | None, Field(description="Duration bucket such as 6-8. Omit to use the template.")] = None,
         avatar_profile_id: Annotated[
@@ -621,7 +645,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get narration",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get narration", read_only_hint=True, open_world_hint=False),
     )
     def get_narration(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status plan_ready)")],
@@ -634,7 +658,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get graphics catalog",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get graphics catalog", read_only_hint=True, open_world_hint=False),
     )
     def get_kind_catalog(
         format: Annotated[str | None, Field(description="faceless_documentary, faceless_top_10, avatar_video or vector_explainer")] = None,
@@ -651,7 +675,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Check plan",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Check plan", read_only_hint=True, open_world_hint=False),
     )
     def check_plan(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status plan_ready)")],
@@ -663,7 +687,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Lock plan")
+    @mcp.tool(
+        title="Lock plan",
+        annotations=ToolAnnotations(title="Lock plan", read_only_hint=False, destructive_hint=False),
+    )
     def lock_plan(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status plan_ready)")],
         plan: Annotated[dict[str, Any], Field(description="The plan that check_plan reported valid")],
@@ -676,7 +703,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get locked plan",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get locked plan", read_only_hint=True, open_world_hint=False),
     )
     def get_plan(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
@@ -689,7 +716,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Review the built video",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Review the built video", read_only_hint=True, open_world_hint=False),
     )
     def get_plan_review(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
@@ -702,7 +729,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Upload plan media",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Upload plan media", read_only_hint=False, destructive_hint=False, open_world_hint=False),
     )
     def upload_plan_media(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
@@ -719,7 +746,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Start media upload",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Start media upload", read_only_hint=False, destructive_hint=False, open_world_hint=False),
     )
     def start_media_upload(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
@@ -737,7 +764,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Finish media upload",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Finish media upload", read_only_hint=False, destructive_hint=False, open_world_hint=False),
     )
     def finish_media_upload(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
@@ -752,7 +779,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Abort media upload",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Abort media upload", read_only_hint=False, destructive_hint=True, open_world_hint=False),
     )
     def abort_media_upload(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
@@ -767,7 +794,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Start voiceover upload",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Start voiceover upload", read_only_hint=False, destructive_hint=False, open_world_hint=False),
     )
     def start_voiceover_upload(
         filename: Annotated[str, Field(min_length=1, description="The narration file's name: MP3, M4A, WAV, OGG, FLAC or WEBM (up to 200 MB).")],
@@ -784,7 +811,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Finish voiceover upload",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Finish voiceover upload", read_only_hint=False, destructive_hint=False, open_world_hint=False),
     )
     def finish_voiceover_upload(
         key: Annotated[str, Field(min_length=1, description="key from start_voiceover_upload")],
@@ -798,7 +825,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get plan sourcing report",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get plan sourcing report", read_only_hint=True, open_world_hint=False),
     )
     def get_plan_report(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (after continue_job)")],
@@ -811,7 +838,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get job",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get job", read_only_hint=True, open_world_hint=False),
     )
     def get_job(
         job_id: Annotated[str, Field(min_length=8, description="Job / video UUID")],
@@ -824,7 +851,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="List jobs",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="List jobs", read_only_hint=True, open_world_hint=False),
     )
     def list_jobs(
         status: Annotated[str | None, Field(description="Optional status filter")] = None,
@@ -839,7 +866,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Cancel job",
-        annotations=ToolAnnotations(destructive_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Cancel job", read_only_hint=False, destructive_hint=True, open_world_hint=False),
     )
     def cancel_job(
         job_id: Annotated[str, Field(min_length=8, description="Job UUID")],
@@ -852,12 +879,12 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Open editor project",
-        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+        annotations=ToolAnnotations(title="Open editor project", read_only_hint=False, destructive_hint=False, open_world_hint=False),
     )
     def open_editor_project(
         job_id: Annotated[str, Field(min_length=8, description="Completed video job id")],
     ) -> dict[str, Any]:
-        """Open (or create) the timeline editor project for a completed video job. Returns project id, revision and a compact timeline (item id, type, start_s, end_s, text) to reference in run_agent."""
+        """Open (or create) the timeline editor project for a completed video job. Returns project id, revision, a compact timeline (item id, type, start_s, end_s, text) to reference in run_agent, and export_credits_due: what render_project would charge now."""
         try:
             return _client().open_editor_project(job_id)
         except Exception as exc:
@@ -865,18 +892,21 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get editor project",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get editor project", read_only_hint=True, open_world_hint=False),
     )
     def get_editor_project(
         project_id: Annotated[int, Field(description="Editor project id")],
     ) -> dict[str, Any]:
-        """Current revision, compact timeline and latest render of an editor project."""
+        """Current revision, compact timeline, latest render and export_credits_due (what render_project would charge now) of an editor project."""
         try:
             return _client().get_editor_project(project_id)
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Run Cliptude Agent")
+    @mcp.tool(
+        title="Run Cliptude Agent",
+        annotations=ToolAnnotations(title="Run Cliptude Agent", read_only_hint=False, destructive_hint=False),
+    )
     def run_agent(
         project_id: Annotated[int, Field(description="Editor project id")],
         prompt: Annotated[str, Field(min_length=1, description="Edit request in plain English")],
@@ -896,7 +926,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get agent run",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get agent run", read_only_hint=True, open_world_hint=False),
     )
     def get_agent_run(
         project_id: Annotated[int, Field(description="Editor project id")],
@@ -908,7 +938,10 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Cancel agent run")
+    @mcp.tool(
+        title="Cancel agent run",
+        annotations=ToolAnnotations(title="Cancel agent run", read_only_hint=False, destructive_hint=True),
+    )
     def cancel_agent_run(
         project_id: Annotated[int, Field(description="Editor project id")],
         run_id: Annotated[str, Field(min_length=8, description="Agent run id")],
@@ -919,11 +952,14 @@ def build_server(*, with_http_auth: bool = False):
         except Exception as exc:
             return _err(exc)
 
-    @mcp.tool(title="Render editor project")
+    @mcp.tool(
+        title="Render editor project",
+        annotations=ToolAnnotations(title="Render editor project", read_only_hint=False, destructive_hint=False),
+    )
     def render_project(
         project_id: Annotated[int, Field(description="Editor project id")],
     ) -> dict[str, Any]:
-        """Render the edited timeline to a new MP4 (charged like an editor export). Poll get_render for output_url."""
+        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). Poll get_render for output_url."""
         try:
             return _client().render_project(project_id)
         except Exception as exc:
@@ -931,12 +967,12 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get render",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get render", read_only_hint=True, open_world_hint=False),
     )
     def get_render(
         render_id: Annotated[int, Field(description="Editor render id")],
     ) -> dict[str, Any]:
-        """Status of an editor render; output_url when completed."""
+        """Status of an editor render; output_url when completed. The link plays in the browser and expires in 7 days, but the MP4 stays in the account: call get_render again for a fresh link instead of telling the user to download before it expires."""
         try:
             return _client().get_render(render_id)
         except Exception as exc:
@@ -944,7 +980,7 @@ def build_server(*, with_http_auth: bool = False):
 
     @mcp.tool(
         title="Get account",
-        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+        annotations=ToolAnnotations(title="Get account", read_only_hint=True, open_world_hint=False),
     )
     def get_account() -> dict[str, Any]:
         """Plan, credits remaining, and concurrency in use."""

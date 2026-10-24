@@ -80,6 +80,15 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
 - If a file cannot be loaded at build time the job fails and says which (`RenderOnlyMediaMissing`), instead of
   quietly searching. Boards left without a picture hold the footage under them; nothing is generated.
 - Graphics, overlays, transitions, sound effects and library music work as in any plan; they cost nothing extra.
+- A beat with your own clip or capture holds still unless you set `camera`.
+- A full-frame or plate-capable board shows the picture of the beat under it (from slightly before it starts) as its
+  see-through plate. Don't put a board over a screen capture or any picture with text in it: give boards a clean
+  picture underneath.
+- A beat longer than what is left of its clip (`end_s` - `start_s`) holds the clip's last frame. Split long sentences
+  into several beats, or use longer clips.
+- Plan each file once. A render-only video needs a lot of distinct footage, about one clip per 4-6 s of narration;
+  the same stock clips over and over read as cheap.
+- Your voiceover is the soundtrack: the clips you upload play muted.
 - Flow: `create_plan_job(render_only=true, voiceover_url=…)` (or `voiceover_path=…` locally) → `get_narration` →
   find and link (or upload) your media → write the plan → `check_plan` → `lock_plan` → `continue_job` → review → render.
 
@@ -199,7 +208,8 @@ the presenter seconds you plan.
 - Colours per graphic: hex `accentColor`, `textColor`, `backgroundColor`, `bgColor`, `secondaryColor`,
   `highlightColor`, `primaryColor` override the template palette for that graphic only.
 - `sound`: a sound id from the catalog's `sounds`, `"none"` (silent) or `"auto"` (Cliptude's sound, the default).
-  `volume`: 0–100 for it.
+  `volume`: 0–100 for it. On a premium or speaker board it also sets the board's own timed cues: 100 plays them
+  as designed, 50 about 6 dB quieter, 25 about 12 dB quieter, 0 silent. Leave it unset for the designed level.
 - `media`: one entry per picture slot from the catalog's `media_slots`:
   `{"slot": "<slot>", "query": "…"}`, `{"slot": …, "person": "Full Name"}` (portrait search; only on portrait
   slots such as `portrait` or `personImageQuery`: an `images` slot takes `query` or `url`), or
@@ -244,6 +254,9 @@ the presenter seconds you plan.
   sample data. `check_plan` refuses a premium board missing a required field (`missing_prop`, with the real fields in
   the hint). Each field's `examples` shows the sample it replaces; ranges and `enum`s are in the schema.
 - Pictures are never props: ask for them in `media_slots` (step images, portraits, cut-outs fill in order).
+- List fields count too: `internet_search` draws its sample results unless you give `results`
+  (`[{title, url, snippet}]`), and charts, maps and lists do the same with `chartData`, `countryValues`,
+  `evidenceItems` and the like. The schema's `items` shows each row's shape and `minItems` the fewest it draws.
 
 ### A board for every fact (how the best documentaries are planned)
 The strongest faceless documentaries put **one premium board on each sentence that states a fact**, and let footage
@@ -266,6 +279,8 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   | a sequence of events | `five_step_timeline`, `timeline_of_events` |
   | a headline, report or document | `image_article`, `headline_article_slide_up` |
   | a new chapter | `chapter_title_scene`, `chapter_title` (4-5 s) |
+  | a preview / promise of what the video covers ("by the end of this video…") | `filmstrip_panel_layout` (leave `media` empty: it previews later footage itself) |
+  | a call to subscribe ("subscribe for more…", "hit the bell") | the `subscribe_cta` overlay (`kind: "subscribe_cta"`, `text` such as "SUBSCRIBE", 4-5 s); outside a full-screen presenter window |
 - **Give every board its own picture.** Most premium boards take an optional `images` picture behind or beside the data;
   fill it with a search for *this sentence's* subject, never the beat's footage by default. Write the query as subject +
   era + medium: `"Morris Chang Texas Instruments 1980s archival portrait photograph"`, `"TSMC Fab 1 Hsinchu 1987
@@ -286,7 +301,9 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   the beat right after a board ends, or a footage stretch between boards (a mid-sentence beat is fine).
 - **Let the boards make the sound.** The reference video had no separate effects track: its sound was each board's own
   cues and the joins, over one music bed. Leave premium boards' `sound` unset and set their `volume` to 30-50 (0 on a
-  quiet, serious line); add `sfx` hits only for the two or three biggest moments (a number landing, a verdict).
+  quiet, serious line): that plays every one of the board's own timed cues (its whooshes, pops and hits together)
+  about 10-6 dB under their designed level, which keeps them under the voice; `volume` never makes a cue louder
+  than designed. Add `sfx` hits only for the two or three biggest moments (a number landing, a verdict).
 - Text overlays are only for a quote over the footage, at most one graphic in ten. Names, dates, years and
   money the narration states go on boards (name card, date or year board, number board), not on tags or
   highlights: they count for the coverage targets too. `check_plan` warns `too_many_overlays` when overlays are
@@ -345,9 +362,9 @@ value's error hint lists them all).
 scanLine, cctv, colorChange, footageReveal`, or `"none"`.
 - A beat gets a treatment **only when it sets `treatment`**; Cliptude adds none (no grain, smoke, light leak or
   colour change of its own). The theme's colour grade still applies to every picture.
-- `camera` unset: a beat that plays your `url` holds still (a finished clip, capture or screenshot is shown as
-  sent); any other beat gets a plain slow move (zoom or pan, never an overlay or frame). `"camera": "none"` holds
-  any beat still.
+- `camera` unset: a beat that plays your `url` or a file you uploaded (`keep` from `upload_plan_media`) holds still
+  (a finished clip, capture or screenshot is shown as sent); any other beat, a kept file an earlier build found
+  included, gets a plain slow move (zoom or pan, never an overlay or frame). `"camera": "none"` holds any beat still.
 
 ### Cuts and reveals
 - `transition_in` on a beat is the join on the cut into it: a `slug` from the catalog's `transitions` (e.g. `fade`,

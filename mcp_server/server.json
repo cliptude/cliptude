@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.cliptude/cliptude",
+  "title": "Cliptude",
+  "description": "Make 6–60 minute faceless YouTube documentaries: voiceover, footage, maps and charts.",
+  "repository": {
+    "url": "https://github.com/cliptude/cliptude",
+    "source": "github"
+  },
+  "websiteUrl": "https://cliptude.com",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.cliptude.com/mcp"
+    }
+  ]
+}

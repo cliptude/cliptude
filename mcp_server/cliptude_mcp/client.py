@@ -857,7 +857,7 @@ class CliptudeClient:
         return self.request("POST", f"/api/v1/editor-projects/{project_id}/agent/runs/{run_id}/cancel")
 
     def render_project(self, project_id: int | str) -> Any:
-        """Render the edited timeline to a new MP4 (charged like an editor export)."""
+        """Render the edited timeline to a new MP4: free the first time, then 10% of the original generation."""
         return self.request("POST", f"/api/v1/editor-projects/{project_id}/render")
 
     def get_render(self, render_id: int | str) -> Any:

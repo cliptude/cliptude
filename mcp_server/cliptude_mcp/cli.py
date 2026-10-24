@@ -270,13 +270,13 @@ def main(argv: list[str] | None = None) -> None:
     g.add_argument(
         "--voiceover",
         default="",
-        help="Path to a narration audio file (MP3, M4A, WAV, …). Transcribed; skips TTS. Do not combine with --prompt or --script.",
+        help="Path to a narration audio file (MP3, M4A, WAV, …), at least 6 minutes long. Transcribed; skips TTS. Do not combine with --prompt or --script.",
     )
-    g.add_argument("--voiceover-url", default="", help="Public https link to the narration audio; Cliptude downloads it.")
+    g.add_argument("--voiceover-url", default="", help="Public https link to the narration audio (at least 6 minutes long); Cliptude downloads it.")
     g.add_argument(
         "--talking-head",
         default="",
-        help="Path to a talking-head presenter video (MP4, MOV, WEBM, AVI). Requires a Talking Head template. Transcribed; skips TTS. Do not combine with --prompt, --script, or --voiceover.",
+        help="Path to a talking-head presenter video (MP4, MOV, WEBM, AVI), at least 6 minutes long. Requires a Talking Head template. Transcribed; skips TTS. Do not combine with --prompt, --script, or --voiceover.",
     )
     g.add_argument(
         "--duration",
