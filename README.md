@@ -74,7 +74,7 @@ lists the graphics, `transitions`, `reveal_styles` and `sounds` (with previews).
 ### Product videos from a store
 
 Turn a store product into a 6 to 60 minute educational YouTube video: about 80% teaching, then the product, with
-its real photos composited into the closing boards (never regenerated).
+its real photos composited into the closing boards (never regenerated) and a scan-to-shop QR code in the corner.
 Any Shopify product URL works with no setup; other stores work through the page's structured data; a store
 connected at cliptude.com/integrations/stores/ (or that installed the Cliptude Shopify app) can also be searched.
 
