@@ -361,7 +361,8 @@ value's error hint lists them all).
 `treatment`: `kenBurns, grain, flicker8mm, grayscaleIn, paper, dust, lightLeak, godRays, smoke, lensFlare,
 scanLine, cctv, colorChange, footageReveal`, or `"none"`. Weather: `rain, snow, embers, fireflies, leaves,
 stars`, sparse particles over the picture, on at most two beats a video and never two in a row; use one only
-where the narration is about that weather, fire or night sky.
+where the narration is about that weather, fire or night sky. A treatment listed in the template's
+`excluded_film_treatments` is refused (`excluded_treatment`).
 - A beat gets a treatment **only when it sets `treatment`**; Cliptude adds none (no grain, smoke, light leak or
   colour change of its own). The theme's colour grade still applies to every picture.
 - `camera` unset: a beat that plays your `url` or a file you uploaded (`keep` from `upload_plan_media`) holds still
