@@ -651,6 +651,47 @@ class CliptudeClient:
         """Queue a completed script/voiceover job, or a plan job with a locked plan, as a full video."""
         return self.request("POST", f"/api/v1/jobs/{job_id}/continue")
 
+    # Product videos (store products: Shopify, any store page) --------------------------------------
+
+    def fetch_product_context(self, product_url_or_query: str, *, store_domain: str | None = None) -> Any:
+        """Read a store product (URL, connected-store id/handle, or a search on store_domain) and get 3 angles."""
+        body: dict[str, Any] = {"url_or_query": product_url_or_query}
+        if store_domain:
+            body["store_domain"] = store_domain
+        return self.request("POST", "/api/v1/commerce/products/fetch", json_body=body)
+
+    def draft_product_script(
+        self,
+        product_id: str,
+        *,
+        angle: Any = None,
+        duration: str | int | None = None,
+        template_id: str | None = None,
+        title: str | None = None,
+        discount_code: str | None = None,
+        cta_url: str | None = None,
+        cta_text: str | None = None,
+        image_urls: list[str] | None = None,
+        reviews: list[dict] | None = None,
+    ) -> Any:
+        """Queue the 80/20 educational script for a product; returns {script_id, ...} immediately."""
+        body: dict[str, Any] = {"product_id": product_id}
+        for key, value in (
+            ("angle", angle), ("duration", duration), ("template_id", template_id), ("title", title),
+            ("discount_code", discount_code), ("cta_url", cta_url), ("cta_text", cta_text),
+            ("image_urls", image_urls), ("reviews", reviews),
+        ):
+            if value not in (None, "", []):
+                body[key] = value
+        return self.request("POST", "/api/v1/commerce/scripts", json_body=body)
+
+    def render_product_video(self, job_id: str, *, aspect_ratio: str = "16:9") -> Any:
+        """Turn a ready product script into the video on the same job id (returns immediately)."""
+        return self.request("POST", f"/api/v1/commerce/videos/{job_id}/render", json_body={"aspect_ratio": aspect_ratio})
+
+    def get_product_video_status(self, job_id: str) -> Any:
+        return self.request("GET", f"/api/v1/commerce/videos/{job_id}")
+
     # Agent-planned videos -------------------------------------------------------------------------
 
     def upload_plan_media(self, job_id: str, path: str | Path) -> Any:

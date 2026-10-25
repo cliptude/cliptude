@@ -546,3 +546,20 @@ class AgentPlanClientTests(TestCase):
                 patch.object(cli, "_print"):
             cli.main(["plan-check", "j1", fh.name])
         put.assert_called_once_with("j1", {"version": "cliptude.plan/v1"}, dry_run=True)
+
+
+class ProductVideoClientTests(TestCase):
+    def test_product_endpoints(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "request", return_value={}) as req:
+            client.fetch_product_context("https://store.com/products/pan", store_domain="store.com")
+            client.draft_product_script("pid", angle=1, duration="10-12", discount_code="YT15")
+            client.render_product_video("job", aspect_ratio="9:16")
+            client.get_product_video_status("job")
+        calls = [(c.args[0], c.args[1], c.kwargs.get("json_body")) for c in req.call_args_list]
+        self.assertEqual(calls[0], ("POST", "/api/v1/commerce/products/fetch",
+                                    {"url_or_query": "https://store.com/products/pan", "store_domain": "store.com"}))
+        self.assertEqual(calls[1], ("POST", "/api/v1/commerce/scripts",
+                                    {"product_id": "pid", "angle": 1, "duration": "10-12", "discount_code": "YT15"}))
+        self.assertEqual(calls[2], ("POST", "/api/v1/commerce/videos/job/render", {"aspect_ratio": "9:16"}))
+        self.assertEqual(calls[3], ("GET", "/api/v1/commerce/videos/job", None))

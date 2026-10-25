@@ -126,7 +126,13 @@ def build_server(*, with_http_auth: bool = False):
         "and Cliptude only voices, sources and renders. create_plan_job, poll get_job until "
         "plan_ready, get_narration (numbered sentences), get_kind_catalog (compact first), write the "
         "plan, check_plan until valid, lock_plan, continue_job, then get_plan_report. See the "
-        "cliptude-plan skill."
+        "cliptude-plan skill. "
+        "PRODUCT VIDEOS (Shopify product URLs, a connected store, or any store's product page): "
+        "fetch_product_context, show the user the 3 angles, draft_product_script with their pick and a "
+        "duration (6-8 to 50-60 minutes), poll get_product_video_status until script_ready, let the user "
+        "review the script, render_product_video, poll until ready_for_review, give the user editor_url, "
+        "and only after they approve render with open_editor_project + render_project + get_render. "
+        "Never publish anything to a store or YouTube without the user's explicit go-ahead."
         ),
     }
     if with_http_auth:
@@ -568,6 +574,87 @@ def build_server(*, with_http_auth: bool = False):
         """Queue a completed script or voiceover job, or a plan job whose plan is locked, as a full video on the same id. Poll get_job until completed. Do not create a second job with the script or audio."""
         try:
             return _client().continue_job(job_id)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Fetch product context",
+        annotations=ToolAnnotations(title="Fetch product context", read_only_hint=True, destructive_hint=False,
+                                    open_world_hint=True),
+    )
+    def fetch_product_context(
+        product_url_or_query: Annotated[str, Field(min_length=1, description=(
+            "A product page URL (any Shopify store, e.g. https://store.com/products/handle; other stores "
+            "such as WooCommerce or Etsy work through the page's structured data), a connected store's "
+            "product id/handle, or a search term together with store_domain."))],
+        store_domain: Annotated[str | None, Field(description=(
+            "Store to search or read from, e.g. acme.com or acme.myshopify.com. Uses the user's connected "
+            "store when it matches."))] = None,
+    ) -> dict[str, Any]:
+        """Read a store product: title, price, variants, description and its real image URLs, saved as product_id, plus 3 educational YouTube video angles (80% teaching, 20% product). A search that matches several products returns candidates; fetch again with the chosen URL. Show the user the angles before drafting."""
+        try:
+            return _client().fetch_product_context(product_url_or_query, store_domain=store_domain)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Draft product video script",
+        annotations=ToolAnnotations(title="Draft product video script", read_only_hint=False, destructive_hint=False),
+    )
+    def draft_product_script(
+        product_id: Annotated[str, Field(min_length=8, description="product_id from fetch_product_context")],
+        angle: Annotated[int | str | dict | None, Field(description=(
+            "Index (0-2) of an angle from fetch_product_context, an angle object {title, problem, hook}, or "
+            "a custom educational title. Default 0."))] = None,
+        duration: Annotated[str | int | None, Field(description=(
+            "Length: 6-8, 10-12, 18-20, 30-40 or 50-60 (minutes), or a number of minutes from 6 to 60. "
+            "Default 6-8."))] = None,
+        template_id: Annotated[str | None, Field(description=(
+            "Faceless Documentary template to use (voice, look, music). Omit to use the latest one, or a "
+            "default Product Explainer template."))] = None,
+        title: Annotated[str | None, Field(description="Video title. Defaults to the angle title.")] = None,
+        discount_code: Annotated[str | None, Field(description="Discount code the merchant gave. Never invent one.")] = None,
+        cta_url: Annotated[str | None, Field(description="Where viewers should go. Defaults to the product page.")] = None,
+        image_urls: Annotated[list[str] | None, Field(description=(
+            "Which of the product's image URLs to show (defaults to all of them)."))] = None,
+        reviews: Annotated[list[dict] | None, Field(description=(
+            "Up to 3 real customer reviews the merchant gave you, word for word: "
+            "[{quote, author, rating (1-5), verified}]. Enables the review card. Never write or "
+            "paraphrase a review."))] = None,
+    ) -> dict[str, Any]:
+        """Queue the narration for a product video: an educational documentary for about 80% of its length, then a natural bridge to the product (real specs, price, offer) in the last 20%. Returns script_id (the job id) immediately; poll get_product_video_status until stage is script_ready, then show the user the script."""
+        try:
+            return _client().draft_product_script(
+                product_id, angle=angle, duration=duration, template_id=template_id, title=title,
+                discount_code=discount_code, cta_url=cta_url, image_urls=image_urls, reviews=reviews,
+            )
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Render product video",
+        annotations=ToolAnnotations(title="Render product video", read_only_hint=False, destructive_hint=False),
+    )
+    def render_product_video(
+        script_id: Annotated[str, Field(min_length=8, description="script_id / job_id from draft_product_script, once script_ready")],
+        aspect_ratio: Annotated[str, Field(description="16:9 (YouTube), 9:16, 1:1 or 4:5")] = "16:9",
+    ) -> dict[str, Any]:
+        """Produce the video from the approved script on the same job id: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. Returns {job_id, status, editor_url, estimated_minutes} immediately; never wait in this call. Poll get_product_video_status."""
+        try:
+            return _client().render_product_video(script_id, aspect_ratio=aspect_ratio)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Get product video status",
+        annotations=ToolAnnotations(title="Get product video status", read_only_hint=True, destructive_hint=False),
+    )
+    def get_product_video_status(
+        job_id: Annotated[str, Field(min_length=8, description="Job id from draft_product_script / render_product_video")],
+    ) -> dict[str, Any]:
+        """Stage of a product video (script_drafting, script_ready, producing, ready_for_review, rendered, failed) with the script once written, the editor_url to preview, the MP4 URL once rendered, and next_step telling you what to do."""
+        try:
+            return _client().get_product_video_status(job_id)
         except Exception as exc:
             return _err(exc)
 

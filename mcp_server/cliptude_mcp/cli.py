@@ -143,6 +143,15 @@ def _run_auth(auth_cmd: str) -> None:
     print(f"Logged in{f' as {email}' if email else '.'}")
 
 
+def _review_arg(value: str) -> dict:
+    """--review "quote|author|rating" -> {quote, author, rating}."""
+    parts = [p.strip() for p in value.split("|")]
+    review = {"quote": parts[0], "author": parts[1] if len(parts) > 1 else ""}
+    if len(parts) > 2 and parts[2]:
+        review["rating"] = float(parts[2])
+    return review
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="cliptude",
@@ -394,6 +403,38 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     cont.add_argument("job_id")
+
+    prod = sub.add_parser(
+        "product",
+        help="Product videos from a store: fetch a product, draft its 80/20 script, render, check status",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  cliptude product fetch https://store.com/products/handle\n"
+            "  cliptude product script <product-id> --angle 1 --duration 10-12 --discount-code YOUTUBE15\n"
+            "  cliptude product render <job-id> --aspect-ratio 16:9\n"
+            "  cliptude product status <job-id>"
+        ),
+    )
+    prod_sub = prod.add_subparsers(dest="product_cmd", required=True)
+    pf = prod_sub.add_parser("fetch", help="Read a product URL (or search a store) and get 3 video angles")
+    pf.add_argument("url_or_query")
+    pf.add_argument("--store", default="", help="Store domain to search, e.g. acme.com")
+    ps = prod_sub.add_parser("script", help="Queue the 80/20 educational script for a product")
+    ps.add_argument("product_id")
+    ps.add_argument("--angle", default="0", help="Angle index 0-2, or a custom educational title")
+    ps.add_argument("--duration", default="6-8", help="6-8, 10-12, 18-20, 30-40, 50-60 or minutes (6-60)")
+    ps.add_argument("--template", default="", help="Faceless Documentary template id")
+    ps.add_argument("--title", default="")
+    ps.add_argument("--discount-code", default="")
+    ps.add_argument("--cta-url", default="")
+    ps.add_argument("--review", action="append", default=[],
+                    help='A real customer review, "quote|author|rating" (repeat up to 3 times)')
+    pr = prod_sub.add_parser("render", help="Produce the video from a ready product script")
+    pr.add_argument("job_id")
+    pr.add_argument("--aspect-ratio", default="16:9")
+    pst = prod_sub.add_parser("status", help="Stage, script, preview link and MP4 of a product video")
+    pst.add_argument("job_id")
 
     pj = sub.add_parser(
         "plan-job",
@@ -682,6 +723,20 @@ def main(argv: list[str] | None = None) -> None:
             _print({"ok": True, "path": str(dest.resolve())})
         elif args.cmd == "continue":
             _print(client.continue_job(args.job_id))
+        elif args.cmd == "product":
+            if args.product_cmd == "fetch":
+                _print(client.fetch_product_context(args.url_or_query, store_domain=args.store or None))
+            elif args.product_cmd == "script":
+                angle = int(args.angle) if str(args.angle).isdigit() else args.angle
+                _print(client.draft_product_script(
+                    args.product_id, angle=angle, duration=args.duration, template_id=args.template or None,
+                    title=args.title or None, discount_code=args.discount_code or None, cta_url=args.cta_url or None,
+                    reviews=[_review_arg(r) for r in args.review] or None,
+                ))
+            elif args.product_cmd == "render":
+                _print(client.render_product_video(args.job_id, aspect_ratio=args.aspect_ratio))
+            else:
+                _print(client.get_product_video_status(args.job_id))
         elif args.cmd == "editor":
             _print(client.open_editor_project(args.job_id))
         elif args.cmd == "agent":
