@@ -407,8 +407,10 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   `ranked_pacing` warns when titles are under 3 or over 8 s, or 40-95 s apart; when the narration's own entries are
   shorter than 40 s, leave that warning. An entry that opens on its year or date ("In 1969, ...") puts the year
   board right after the title: coverage counts a board anywhere from 1 s before that sentence to 4 s after it ends.
-- `presenter_windows` (Avatar Video only): `full_screen`, `split_left` or `split_right`; no overlaps; total seconds
-  within the template's cap (intro-only templates: one opening window). Full-screen windows may not cover graphics,
+- `presenter_windows` (Avatar Video and Talking Head): `full_screen`, `split_left` or `split_right`; no overlaps;
+  Avatar Video: total seconds within the template's cap (intro-only templates: one opening window). Talking Head:
+  no cap, the speaker's footage is free; keep them on screen 40-60% of the video and never away more than ~75 s
+  (`little_presenter`, `presenter_gap`). Picture pacing and graphic density are measured off full-screen windows. Full-screen windows may not cover graphics,
   except speaker boards, which must sit inside one. A split window's `collage_media` is up to three searched
   pictures beside the presenter, `{"query": "…", "intent": "…"}` each (no `url` or `keep` there yet); without it
   Cliptude picks the pictures from the narration. Each window costs its sentences plus ~0.7 s of padding.
