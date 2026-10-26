@@ -130,8 +130,10 @@ def build_server(*, with_http_auth: bool = False):
         "PRODUCT VIDEOS (Shopify product URLs, a connected store, or any store's product page): "
         "fetch_product_context, show the user the 3 angles, draft_product_script with their pick and a "
         "duration (6-8 to 50-60 minutes), poll get_product_video_status until script_ready, let the user "
-        "review the script, render_product_video, poll until ready_for_review, give the user editor_url, "
-        "and only after they approve render with open_editor_project + render_project + get_render. "
+        "review the script, render_product_video (this starts the build, not the final MP4), poll until "
+        "ready_for_review, review the sourced pictures and graphics yourself (open_editor_project / "
+        "get_editor_project), give the user editor_url, and only after they approve render with "
+        "render_project + get_render. "
         "Never publish anything to a store or YouTube without the user's explicit go-ahead."
         ),
     }
@@ -639,7 +641,7 @@ def build_server(*, with_http_auth: bool = False):
         script_id: Annotated[str, Field(min_length=8, description="script_id / job_id from draft_product_script, once script_ready")],
         aspect_ratio: Annotated[str, Field(description="16:9 (YouTube), 9:16, 1:1 or 4:5")] = "16:9",
     ) -> dict[str, Any]:
-        """Produce the video from the approved script on the same job id: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. Returns {job_id, status, editor_url, estimated_minutes} immediately; never wait in this call. Poll get_product_video_status."""
+        """Start BUILDING the video from the approved script on the same job id: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. This does not render the final MP4: when the build is done (ready_for_review) review it, show the user the editor_url and wait for their go-ahead before render_project. Returns {job_id, status, stage, editor_url, estimated_minutes} immediately; never wait in this call. Poll get_product_video_status."""
         try:
             return _client().render_product_video(script_id, aspect_ratio=aspect_ratio)
         except Exception as exc:
