@@ -1028,7 +1028,7 @@ def build_server(*, with_http_auth: bool = False):
         tier: Annotated[str, Field(description="fast or smart")] = "fast",
         chat_id: Annotated[str | None, Field(description="Continue an existing agent chat")] = None,
     ) -> dict[str, Any]:
-        """Ask Cliptude Agent to edit the timeline (swap footage, regenerate images or voiceover ranges, music, transitions, text). Returns a run; poll get_agent_run. Charges agent credits. Then render_project for a new MP4."""
+        """Ask Cliptude Agent to edit the timeline (swap footage, regenerate images or voiceover ranges, music, transitions, text). One kind of change per run: picture swaps and text edits go in separate runs. Several clips can get new pictures in one run: reference them all and describe each one's picture by its item id; a clip with nothing suitable is left unchanged and named in the reply. Swapping a graphic's picture keeps the graphic and its words. Returns a run; poll get_agent_run. Charges agent credits. Then render_project for a new MP4, after view_scenes on the changed range."""
         try:
             return _client().run_agent(
                 project_id, prompt=prompt, tier=tier, referenced_item_ids=referenced_item_ids, chat_id=chat_id
