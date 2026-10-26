@@ -1,6 +1,6 @@
 {
   "name": "@cliptude/cli",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Cliptude CLI — generate videos from saved templates.",
   "homepage": "https://github.com/cliptude/cliptude#readme",
   "bin": {
