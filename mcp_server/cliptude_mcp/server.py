@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
 import sys
 from typing import Annotated, Any
 
+from mcp.server.mcpserver import Image
 from pydantic import Field
 
 from cliptude_mcp.client import CliptudeApiError, CliptudeClient, set_request_token
@@ -131,8 +134,8 @@ def build_server(*, with_http_auth: bool = False):
         "fetch_product_context, show the user the 3 angles, draft_product_script with their pick and a "
         "duration (6-8 to 50-60 minutes), poll get_product_video_status until script_ready, let the user "
         "review the script, render_product_video (this starts the build, not the final MP4), poll until "
-        "ready_for_review, review the sourced pictures and graphics yourself (open_editor_project / "
-        "get_editor_project), give the user editor_url, and only after they approve render with "
+        "ready_for_review, open_editor_project and look at every picture and graphic yourself with "
+        "view_scenes (contact sheets; media links may not open for you), give the user editor_url, and only after they approve render with "
         "render_project + get_render. "
         "Never publish anything to a store or YouTube without the user's explicit go-ahead."
         ),
@@ -991,6 +994,26 @@ def build_server(*, with_http_auth: bool = False):
             return _client().get_editor_project(project_id)
         except Exception as exc:
             return _err(exc)
+
+    @mcp.tool(
+        title="View scenes",
+        annotations=ToolAnnotations(title="View scenes", read_only_hint=True, open_world_hint=False),
+    )
+    def view_scenes(
+        project_id: Annotated[int, Field(description="Editor project id")],
+        start_s: Annotated[float, Field(ge=0, description="First second to show")] = 0.0,
+        end_s: Annotated[float | None, Field(description="Stop before this second (default: the end)")] = None,
+    ) -> list[str | Image]:
+        """See what the timeline shows, without opening any link: numbered contact sheets of every picture, a frame of every clip and each graphic's picture with its words, with the narration under each, plus a legend (tile, item_id, start_s, end_s, words, said, flags). Up to 24 tiles per call; call again from next_start_s. Use it to review a built video yourself (other brands, wrong pictures, repeats, leftover text) before giving the user the editor link, and again after run_agent to check the change."""
+        try:
+            data = _client().view_scenes(project_id, start_s=start_s, end_s=end_s)
+        except Exception as exc:
+            return [json.dumps(_err(exc))]
+        sheets = data.pop("sheets", None) or []
+        out: list[str | Image] = [json.dumps(data, ensure_ascii=False)]
+        for sheet in sheets:
+            out.append(Image(data=base64.b64decode(sheet["jpeg_base64"]), format="jpeg"))
+        return out
 
     @mcp.tool(
         title="Run Cliptude Agent",

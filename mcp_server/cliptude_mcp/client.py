@@ -860,6 +860,13 @@ class CliptudeClient:
         params = {"design": "1"} if design else None
         return self.request("GET", f"/api/v1/editor-projects/{project_id}", params=params)
 
+    def view_scenes(self, project_id: int | str, *, start_s: float = 0.0, end_s: float | None = None) -> Any:
+        """Contact sheets (base64 JPEG) of the timeline's pictures, clip frames and graphics, with a legend."""
+        params: dict[str, Any] = {"start_s": start_s}
+        if end_s is not None:
+            params["end_s"] = end_s
+        return self.request("GET", f"/api/v1/editor-projects/{project_id}/scenes", params=params)
+
     def agent_tiers(self) -> Any:
         return self.request("GET", "/api/v1/agent/tiers")
 
