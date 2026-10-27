@@ -137,7 +137,8 @@ def build_server(*, with_http_auth: bool = False):
         "duration (6-8 to 50-60 minutes), poll get_product_video_status until script_ready, let the user "
         "review the script, render_product_video (this starts the build, not the final MP4), poll until "
         "ready_for_review, open_editor_project and look at every picture and graphic yourself with "
-        "view_scenes (contact sheets; media links may not open for you), give the user editor_url, and only after they approve render with "
+        "view_scenes (contact sheets; media links may not open for you), check no picture or board shows another brand "
+        "(shop shelves in the product part especially), give the user editor_url, and only after they approve render with "
         "render_project + get_render. "
         "Never publish anything to a store or YouTube without the user's explicit go-ahead."
         ),
