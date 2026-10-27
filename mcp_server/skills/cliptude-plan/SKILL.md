@@ -46,10 +46,17 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    `your URL`, `stock footage`, `stock photo`, `web video`, `web image`, `AI still`, `reused` (a file another beat
    also shows), `text card` (a last-resort plate) or `kept` (a file you put back with `media.keep`); both endpoints
    list them in `source_labels`. Each used file also carries `keep`, a 12-character id (`picture_keep` on a graphic).
+   `get_plan_review` also returns `quality_findings`: Cliptude's quality checks on the build, which ship as
+   warnings rather than blocking it. Fix every finding with `fix_in: "plan"` in a revision (step 10), following its
+   `how` (an opening figure on a picture, a graphic in every long stretch, sharper queries for fallbacks). Findings
+   with `fix_in: "cliptude"` are not yours to change.
 10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
    `get_narration` still works), then `continue_job` again. Cliptude rebuilds from the new plan, reuses every
    picture or clip whose request did not change, and charges nothing more. Repeat 9–10 as needed.
 11. **Render once.** `open_editor_project` for the job, then `render_project` for the final MP4.
+   `render_project` returns 409 `quality_findings_open` while the build still has `fix_in: "plan"` findings: fix
+   them (step 10) and review again. Pass `accept_quality_findings: true` only after trying, or when the user
+   says to ship as is, and tell the user which findings remain.
 
 CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b`, `plan-check <job> plan.json`,
 `plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,

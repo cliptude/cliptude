@@ -130,7 +130,7 @@ def build_server(*, with_http_auth: bool = False):
         "plan_ready, get_narration (numbered sentences), get_kind_catalog (compact first), write the "
         "plan, check_plan until valid, lock_plan, continue_job, then get_plan_report. See the "
         "cliptude-plan skill. "
-        "PRODUCT VIDEOS (Shopify product URLs, a connected store, or any store's product page): "
+        "PRODUCT VIDEOS (the user's connected store, or a product page from a store they sell for): "
         "fetch_product_context, show the user the 3 angles, draft_product_script with their pick and a "
         "duration (6-8 to 50-60 minutes), poll get_product_video_status until script_ready, let the user "
         "review the script, render_product_video (this starts the build, not the final MP4), poll until "
@@ -589,8 +589,8 @@ def build_server(*, with_http_auth: bool = False):
     )
     def fetch_product_context(
         product_url_or_query: Annotated[str, Field(min_length=1, description=(
-            "A product page URL (any Shopify store, e.g. https://store.com/products/handle; other stores "
-            "such as WooCommerce or Etsy work through the page's structured data), a connected store's "
+            "A product page URL from the user's own store (Shopify, e.g. https://store.com/products/handle; "
+            "WooCommerce or Etsy work through the page's structured data), a connected store's "
             "product id/handle, or a search term together with store_domain."))],
         store_domain: Annotated[str | None, Field(description=(
             "Store to search or read from, e.g. acme.com or acme.myshopify.com. Uses the user's connected "
@@ -813,7 +813,7 @@ def build_server(*, with_http_auth: bool = False):
     def get_plan_review(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
     ) -> dict[str, Any]:
-        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and the props it will be drawn with, or why it is missing). Review this, revise with check_plan/lock_plan + continue_job on the same job if needed, then render_project once."""
+        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. Revise with check_plan/lock_plan + continue_job on the same job, review again, then render_project once (it refuses while plan findings remain unless accept_quality_findings is true)."""
         try:
             return _client().get_plan_review(job_id)
         except Exception as exc:
@@ -1070,10 +1070,14 @@ def build_server(*, with_http_auth: bool = False):
     )
     def render_project(
         project_id: Annotated[int, Field(description="Editor project id")],
+        accept_quality_findings: Annotated[
+            bool,
+            Field(description="Agent-planned jobs only: render although get_plan_review still lists quality_findings with fix_in \"plan\". Set it only after trying to fix them, or when the user says to ship as is."),
+        ] = False,
     ) -> dict[str, Any]:
-        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). Poll get_render for output_url."""
+        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). Poll get_render for output_url. On an agent-planned job, a build with quality_findings the plan can fix returns 409 quality_findings_open: revise the plan and review again first."""
         try:
-            return _client().render_project(project_id)
+            return _client().render_project(project_id, accept_quality_findings=accept_quality_findings)
         except Exception as exc:
             return _err(exc)
 

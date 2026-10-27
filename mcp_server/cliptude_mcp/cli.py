@@ -525,6 +525,8 @@ def main(argv: list[str] | None = None) -> None:
     rn = sub.add_parser("render", help="Render an edited project to a new MP4")
     rn.add_argument("project_id")
     rn.add_argument("--wait", action="store_true", help="Poll until the render finishes")
+    rn.add_argument("--accept-quality-findings", action="store_true",
+                    help="Agent-planned jobs: render although plan-review still lists plan quality findings")
 
     rs = sub.add_parser("render-status", help="Get an editor render (output_url when done)")
     rs.add_argument("render_id")
@@ -760,7 +762,7 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "agent-tiers":
             _print(client.agent_tiers())
         elif args.cmd == "render":
-            payload = client.render_project(args.project_id)
+            payload = client.render_project(args.project_id, accept_quality_findings=args.accept_quality_findings)
             if args.wait:
                 render_id = (payload.get("render") or {}).get("id")
                 payload = _wait(lambda: client.get_render(render_id), lambda p: (p.get("render") or {}).get("status"))

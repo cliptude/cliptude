@@ -904,9 +904,10 @@ class CliptudeClient:
     def cancel_agent_run(self, project_id: int | str, run_id: str) -> Any:
         return self.request("POST", f"/api/v1/editor-projects/{project_id}/agent/runs/{run_id}/cancel")
 
-    def render_project(self, project_id: int | str) -> Any:
+    def render_project(self, project_id: int | str, *, accept_quality_findings: bool = False) -> Any:
         """Render the edited timeline to a new MP4: free the first time, then 10% of the original generation."""
-        return self.request("POST", f"/api/v1/editor-projects/{project_id}/render")
+        body = {"accept_quality_findings": True} if accept_quality_findings else None
+        return self.request("POST", f"/api/v1/editor-projects/{project_id}/render", json_body=body)
 
     def get_render(self, render_id: int | str) -> Any:
         return self.request("GET", f"/api/v1/editor-renders/{render_id}")
