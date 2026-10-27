@@ -414,7 +414,11 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   On their lines show their place (named, or real footage of it), objects (a lamp, a door, an empty bed), hands,
   the sky, a map pin, and their words on a quote board. Where the narration names a place, show that place, never
   a lookalike (another lake for Lake Nyos). Generic subjects belong only on general lines (gas, pressure, bubbles).
-  `check_plan` refuses people searches in a true story (`stand_in_person`).
+  `check_plan` refuses people searches in a true story (`stand_in_person`), also in a kept beat's `fallback_query`.
+  A plan that leaves `true_story` out but has a dated topic (`"Lake Nyos disaster, Cameroon, 1986"`) and names
+  `sense.people` is treated as one (`true_story_inferred`); set `false` for fiction. A dated true story checks every
+  searched beat with no `era` against its year, so set `era: "present-day"` on shots of the place today (the lake
+  now, the degassing pipes).
 - Open on footage: a title board at 0 s hides the first beat and repeats its picture. Keep an opening title to 3-4 s
   with its own picture, and give the first two sentences three or more quick beats.
 - Board pictures: a board's own search is weaker than a beat's. For a board that needs a specific subject, prefer
