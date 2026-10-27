@@ -70,6 +70,20 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    warnings rather than blocking it. Fix every finding with `fix_in: "plan"` in a revision (step 10), following its
    `how` (an opening figure on a picture, a graphic in every long stretch, sharper queries for fallbacks). Findings
    with `fix_in: "cliptude"` are not yours to change.
+   **Then look at every frame yourself — required before you give the user the editor link.** `open_editor_project`
+   for the job, then `view_scenes` from 0 to the end (call again from `next_start_s`). Check every tile, boards'
+   pictures included, against this list and fix each hit in a revision:
+   - **Unsafe:** any dead body, gore or injury. Always replace it, however relevant.
+   - **Not ours:** another brand's product, a logo or channel bug, album or app art, a game screenshot, a title card,
+     another publisher's infographic, a webcam frame with a timestamp, big promotional text.
+   - **Wrong setting:** a place, country, era or class of setting the story contradicts (a luxury modern interior for
+     a rural home, a European street for an African village, a 1950s American clip for a 1980s family, snow in the
+     tropics).
+   - **Held or repeated:** one picture on screen more than about 8 s (a board showing the same picture as the beat
+     under it counts), the same picture twice in a row, an opening with fewer than three pictures in 15 s.
+   Fix with a new query that names the story's setting plus `negatives` for what came back, a `phrase` split for a
+   held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat. Review the rebuild the same
+   way; give the user the link only when a full pass is clean.
 10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
    `get_narration` still works), then `continue_job` again. Cliptude rebuilds from the new plan, reuses every
    picture or clip whose request did not change, and charges nothing more. Repeat 9–10 as needed.
@@ -388,6 +402,14 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   not fifty: give mood, action and explanation lines generic subjects that fit the sentence and every library has
   (weather, water, a lamp at night, farmers at work, bubbles in a soda bottle, fog flowing downhill). More than 30% of
   searches on one subject warns `same_subject_searches`.
+- A generic shot that shows a place or people still names the story's setting: `"empty bed mud house"`,
+  `"village road Cameroon"`, `"African father helping child homework"`, not `"empty bed dark room"` or `"father helping
+  child homework"` — without it, stock search returns American and European homes and families. Object close-ups
+  and natural phenomena (`"dry ice fog flowing"`, `"soda bubbles slow motion"`, `"candle"`) need no setting.
+- Open on footage: a title board at 0 s hides the first beat and repeats its picture. Keep an opening title to 3-4 s
+  with its own picture, and give the first two sentences three or more quick beats.
+- Board pictures: a board's own search is weaker than a beat's. For a board that needs a specific subject, prefer
+  `{"keep": "<id>"}` of a picture an earlier build found for a beat (not the beat right under the board).
 - Dated events: the event name plus the year (`"Lake Nyos disaster 1986"`, `era: "1986"`) finds news and archive
   footage; a description of what the archive might show does not.
 - Real footage of named places and events comes mostly from YouTube, which the template's General Web Crawling source
