@@ -336,7 +336,10 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   draws `items` as `[{"label", "price"}]`. Lists are JSON arrays of the item shape the schema shows.
 - Avatar Video: vary the windows. About one in four is `split_left` / `split_right` with `collage_media`, and most
   full-screen windows carry a speaker board; a list inside a presenter window goes on a speaker board, not
-  `text_list` (`presenter_no_speaker_boards`, `presenter_no_splits`).
+  `text_list` (`presenter_no_speaker_boards`, `presenter_no_splits`). The same holds for Talking Head, and
+  check_plan refuses four or more windows that are all full screen with no speaker board
+  (`presenter_only_full_screen`). Treat these warnings, `kind_overused`, `over_cap` and `few_board_pictures`
+  as must-fix.
 - Use them to keep a presenter window from being one long talking head: about one per presenter window, on the
   sentence that states the number, list or step it shows. A card collage, browser window or feed board also takes
   pictures through its `media_slots`; the presenter clip is never one of them.
