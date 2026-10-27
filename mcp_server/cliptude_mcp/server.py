@@ -122,6 +122,8 @@ def build_server(*, with_http_auth: bool = False):
         "prompt/script/voiceover_path (template format must be talking_head). "
         "Avatar Video: list_avatars gives avatar ids; put one in create_template settings as "
         "avatar_profile_id (with the voice), or pass avatar_profile_id on create_job to override. "
+        "Before you create a template or job with an avatar, show the user its thumbnail_url and name and "
+        "wait for them to confirm it is the presenter they want (names repeat; the avatar is paid for). "
         "Avatar Video templates may include avatar_intro_only "
         "(Avatar Intro Only) and avatar_ai_footage (AI Image + AI Video); pass those "
         "on create_job to override the template, or omit them to keep the template. "
@@ -313,7 +315,7 @@ def build_server(*, with_http_auth: bool = False):
         limit: Annotated[int, Field(ge=1, le=100)] = 50,
         offset: Annotated[int, Field(ge=0)] = 0,
     ) -> dict[str, Any]:
-        """Avatars the user can put in an Avatar Video: id, name, section, gender, engines, thumbnail_url. Pass an id as avatar_profile_id to create_template (in settings), create_job, create_plan_job or estimate_credits. The avatar's gender must match the voice."""
+        """Avatars the user can put in an Avatar Video: id, name, section, gender, engines, thumbnail_url. Pass an id as avatar_profile_id to create_template (in settings), create_job, create_plan_job or estimate_credits. The avatar's gender must match the voice. Show the user the thumbnail_url and name and get their OK before you spend credits on it: several avatars share a name."""
         try:
             return _client().list_avatars(section=section, search=search, gender=gender, limit=limit, offset=offset)
         except Exception as exc:

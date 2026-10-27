@@ -17,6 +17,11 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
 1. **Template.** `list_templates`; or `get_template_options` + `list_voices` + `create_template`. The template fixes the
    **voice**, language, aspect ratio and duration bucket. (Theme, colours, style and music can be set in the plan.)
    The template's `generation_model` decides whether footage can move: Cinder (`high`) sources still pictures only, so `prefer: "video"` becomes a still there; Caldera (`pro`) sources video clips. `check_plan` warns `video_needs_caldera`.
+   **Avatar Video: show the user the avatar before anything is spent.** Find it with `list_avatars` (search by name; the
+   template's `avatar_name` names it), show its `thumbnail_url` and name, and wait for the user to confirm that is the
+   presenter they want, before `create_plan_job` and again before `continue_job` if it changed. Names repeat across
+   avatars (several "Ethan"s), and every presenter second is rendered and paid for. A portrait photo avatar fills only
+   the middle of a 16:9 frame; say so, and prefer a landscape one or split windows.
 2. **Start.** `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
    `prompt` (a brief; Cliptude writes the narration — never the bare title), or `voiceover_path` (audio you already
    have). Needs the full website price in credits; charges only the narration now. Names, places and borrowed
@@ -415,7 +420,8 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   shorter than 40 s, leave that warning. An entry that opens on its year or date ("In 1969, ...") puts the year
   board right after the title: coverage counts a board anywhere from 1 s before that sentence to 4 s after it ends.
 - `presenter_windows` (Avatar Video and Talking Head): `full_screen`, `split_left` or `split_right`; no overlaps;
-  Avatar Video: total seconds within the template's cap (intro-only templates: one opening window). Talking Head:
+  Avatar Video: required, since the chosen avatar appears only in them (`no_presenter_windows`); open on the
+  presenter; total seconds within the template's cap (intro-only templates: one opening window). Talking Head:
   no cap, the speaker's footage is free; keep them on screen 40-60% of the video and never away more than ~75 s
   (`little_presenter`, `presenter_gap`). Picture pacing and graphic density are measured off full-screen windows. Full-screen windows may not cover graphics,
   except speaker boards, which must sit inside one. A split window's `collage_media` is up to three searched
