@@ -141,7 +141,7 @@ def build_server(*, with_http_auth: bool = False):
         "plan, check_plan until valid, lock_plan, continue_job, then get_plan_report. Before giving the user "
         "the editor link, open_editor_project and look at EVERY frame with view_scenes (0 to the end): replace "
         "any dead body or gore, other brands, logos, game or album art, title cards, pictures whose place or era "
-        "contradicts the story, and any picture held over ~8 s, in a free revision, then review again. Generic "
+        "contradicts the story (a search naming a place can return a namesake elsewhere), near-black frames, clips floating in black bars, broken AI pictures and any picture held over ~8 s, in a free revision, then review again. Generic "
         "shots of places name the story's setting (\"empty bed mud house\", not \"empty bed dark room\"). True "
         "stories (real events and people) set sense.true_story and sense.people and never search for people: a "
         "stranger on screen is taken for the real person (check_plan refuses it, stand_in_person; a dated topic "
@@ -1073,7 +1073,7 @@ def build_server(*, with_http_auth: bool = False):
         start_s: Annotated[float, Field(ge=0, description="First second to show")] = 0.0,
         end_s: Annotated[float | None, Field(description="Stop before this second (default: the end)")] = None,
     ) -> list[str | Image]:
-        """See what the timeline shows, without opening any link: numbered contact sheets of every picture, a frame of every clip and each graphic's picture with its words, with the narration under each, plus a legend (tile, item_id, start_s, end_s, words, said, flags). Up to 24 tiles per call; call again from next_start_s. Use it to review a built video yourself (other brands, wrong pictures, repeats, leftover text) before giving the user the editor link, and again after run_agent to check the change."""
+        """See what the timeline shows, without opening any link: numbered contact sheets of every picture, a frame of every clip and each graphic's picture with its words, with the narration under each, plus a legend (tile, item_id, start_s, end_s, words, said, flags: REPEATED PICTURE, HELD, AI STILL, DARK, BARS). Up to 24 tiles per call; call again from next_start_s. Use it to review a built video yourself (other brands, wrong pictures, repeats, leftover text) before giving the user the editor link, and again after run_agent to check the change."""
         try:
             data = _client().view_scenes(project_id, start_s=start_s, end_s=end_s)
         except Exception as exc:

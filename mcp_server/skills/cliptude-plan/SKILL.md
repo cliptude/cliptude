@@ -78,7 +78,12 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
      another publisher's infographic, a webcam frame with a timestamp, big promotional text.
    - **Wrong setting:** a place, country, era or class of setting the story contradicts (a luxury modern interior for
      a rural home, a European street for an African village, a 1950s American clip for a 1980s family, snow in the
-     tropics).
+     tropics). A search that names a place can return a namesake elsewhere (Cameroon gave Malaysia's Cameron
+     Highlands tea hills; a lake line gave a Yellowstone geyser, "mist" a spruce forest, a lava line Iceland), and a
+     prop carries a culture (a diya lamp is South Asian: ask for a kerosene lantern or a candle in a jar).
+   - **Unusable frames:** a near-black frame, a small portrait or phone clip floating in black bars, a broken or
+     garbled AI picture, a clip with another channel's watermark. The legend flags DARK, BARS, HELD, AI STILL and
+     REPEATED PICTURE find most of these; look at the tile before you decide.
    - **Stand-ins:** in a true story, any stranger a viewer could take for a real person in it (a face, someone
      acting out the scene), and any other place passed off as the named one.
    - **Held or repeated:** one picture on screen more than about 8 s (a board showing the same picture as the beat
