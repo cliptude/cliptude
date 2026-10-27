@@ -79,6 +79,8 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    - **Wrong setting:** a place, country, era or class of setting the story contradicts (a luxury modern interior for
      a rural home, a European street for an African village, a 1950s American clip for a 1980s family, snow in the
      tropics).
+   - **Stand-ins:** in a true story, any stranger a viewer could take for a real person in it (a face, someone
+     acting out the scene), and any other place passed off as the named one.
    - **Held or repeated:** one picture on screen more than about 8 s (a board showing the same picture as the beat
      under it counts), the same picture twice in a row, an opening with fewer than three pictures in 15 s.
    Fix with a new query that names the story's setting plus `negatives` for what came back, a `phrase` split for a
@@ -193,7 +195,7 @@ the presenter seconds you plan.
     "excluded_transition_kinds": []
   },
   "sense": {"topic": "TSMC and Taiwan", "must_include": ["TSMC"], "must_avoid": ["TSMC stock ticker"],
-            "people": ["Morris Chang"], "places": ["Hsinchu"]},
+            "people": ["Morris Chang"], "places": ["Hsinchu"], "true_story": true},
   "chapters": [{"title": "The bet", "from_sentence": 0, "to_sentence": 21}],
   "beats": [
     {"id": "b0", "sentence_id": 0, "media": {"query": "Hsinchu Science Park aerial", "alts": ["TSMC fab exterior"],
@@ -402,10 +404,17 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   not fifty: give mood, action and explanation lines generic subjects that fit the sentence and every library has
   (weather, water, a lamp at night, farmers at work, bubbles in a soda bottle, fog flowing downhill). More than 30% of
   searches on one subject warns `same_subject_searches`.
-- A generic shot that shows a place or people still names the story's setting: `"empty bed mud house"`,
-  `"village road Cameroon"`, `"African father helping child homework"`, not `"empty bed dark room"` or `"father helping
-  child homework"` — without it, stock search returns American and European homes and families. Object close-ups
-  and natural phenomena (`"dry ice fog flowing"`, `"soda bubbles slow motion"`, `"candle"`) need no setting.
+- A generic shot of a place still names the story's setting: `"empty bed mud house"`, `"village road Cameroon"`,
+  not `"empty bed dark room"` — without it, stock search returns American and European homes. Object close-ups and
+  natural phenomena (`"dry ice fog flowing"`, `"soda bubbles slow motion"`, `"candle"`) need no setting.
+- **True stories show no stand-ins.** For real events and real people (a documentary, news, a biography) set
+  `sense.true_story: true` and list them in `sense.people`. Never search for people (`"father daughter"`,
+  `"villagers"`, `"woman crying"`, `"survivor"`): stock returns strangers, and viewers take them for the real family.
+  Show a real person only by naming them (`media.person`) or with their own photo (`url`, `keep`, an upload).
+  On their lines show their place (named, or real footage of it), objects (a lamp, a door, an empty bed), hands,
+  the sky, a map pin, and their words on a quote board. Where the narration names a place, show that place, never
+  a lookalike (another lake for Lake Nyos). Generic subjects belong only on general lines (gas, pressure, bubbles).
+  `check_plan` refuses people searches in a true story (`stand_in_person`).
 - Open on footage: a title board at 0 s hides the first beat and repeats its picture. Keep an opening title to 3-4 s
   with its own picture, and give the first two sentences three or more quick beats.
 - Board pictures: a board's own search is weaker than a beat's. For a board that needs a specific subject, prefer
