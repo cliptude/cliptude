@@ -234,6 +234,8 @@ the presenter seconds you plan.
   its sentence, which is rarely the one it needs: `check_plan` warns (`borrowed_picture`, naming that beat).
   Give it its own picture unless that beat's picture is what you want there. After the build, `get_plan_review`
   shows `pictures: "n of m"` on each such graphic; anything below m is dropped from the video, never drawn empty.
+  A board that draws one picture per step (five_step_timeline and other multi-picture boards) takes one
+  picture of a different subject per step: `few_board_pictures` warns when it gets fewer.
 
 ### Plates under boards
 - Types with `plate_capable: true` in the catalog (charts, stat cards, lists, timelines, article and social cards)
@@ -287,7 +289,7 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   | a named person | `callout_overlay` (NAME + role), `portrait_card`, `character_introduction_split` |
   | a company or brand | `logo_reveal_overlay`, `logo` |
   | a date or year | `date_overlay`, `day_month_year_text_overlay`, `year_text_overlay` |
-  | a list of things | `bullet_point_overlay`, `icon_and3_bulletpoints`, `text_list` |
+  | a list of things | `bullet_point_overlay`, `icon_and3_bulletpoints`, `three_text_card`, `three_options_with_icon`, `rule_check_card`, `listing_things_image_cut_text` (with pictures), `image_cards_stack`, `text_list` (at most one per chapter); vary them, `kind_overused` warns when one design passes ~15% of boards |
   | a sequence of events | `five_step_timeline`, `timeline_of_events` |
   | a headline, report or document | `image_article`, `headline_article_slide_up` |
   | a new chapter | `chapter_title_scene`, `chapter_title` (4-5 s) |
@@ -332,6 +334,9 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
 - Fill the fields in its `prop_schema`, not a `headline`: `talking_head_bar_chart` draws `title` and `bars`
   (`[{"value": 0-100, "icon": "chart"}]`), `talking_head_numbered_list` draws `items`, `talking_head_receipt_breakdown`
   draws `items` as `[{"label", "price"}]`. Lists are JSON arrays of the item shape the schema shows.
+- Avatar Video: vary the windows. About one in four is `split_left` / `split_right` with `collage_media`, and most
+  full-screen windows carry a speaker board; a list inside a presenter window goes on a speaker board, not
+  `text_list` (`presenter_no_speaker_boards`, `presenter_no_splits`).
 - Use them to keep a presenter window from being one long talking head: about one per presenter window, on the
   sentence that states the number, list or step it shows. A card collage, browser window or feed board also takes
   pictures through its `media_slots`; the presenter clip is never one of them.
