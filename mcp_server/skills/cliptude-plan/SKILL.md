@@ -16,13 +16,24 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
 
 1. **Template.** `list_templates`; or `get_template_options` + `list_voices` + `create_template`. The template fixes the
    **voice**, language, aspect ratio and duration bucket. (Theme, colours, style and music can be set in the plan.)
-   The template's `generation_model` decides whether footage can move: Cinder (`high`) sources still pictures only, so `prefer: "video"` becomes a still there; Caldera (`pro`) sources video clips. `check_plan` warns `video_needs_caldera`.
+   The template's `generation_model` decides whether footage can move: Cinder (`high`) sources still pictures only, so `prefer: "video"` becomes a still there; Caldera (`pro`) sources video clips. `check_plan` warns `video_needs_caldera`. Caldera finds footage of named places, events and people mostly on YouTube, which the template's General Web Crawling source switches on; with it off `check_plan` warns `video_needs_web_crawling` — ask the user to turn it on before building.
    **Avatar Video: show the user the avatar before anything is spent.** Find it with `list_avatars` (search by name; the
    template's `avatar_name` names it), show its `thumbnail_url` and name, and wait for the user to confirm that is the
    presenter they want, before `create_plan_job` and again before `continue_job` if it changed. Names repeat across
    avatars (several "Ethan"s), and every presenter second is rendered and paid for. A portrait photo avatar fills only
    the middle of a 16:9 frame; say so, and prefer a landscape one or split windows.
-2. **Start.** `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
+   **A documentary needs boards and real footage.** Faceless Documentary, Top 10 and Avatar Video are built from
+   footage *and* premium boards (maps, dates, counters, name cards, timelines, comparisons): a plan with no graphics
+   plays like a slideshow. Before you start, check the template has `enable_animations`, `enable_charts` and
+   `enable_broll_text_overlays` on, `source_general_web_crawling` on and Caldera; if any is off, tell the user what
+   it costs (no boards; no YouTube or general web footage, so many AI stills) and get them to turn it on, or their
+   explicit approval to build without it. Never switch these off yourself.
+2. **Start.** The first `create_plan_job` call returns a **review** (status 428, `detail.review`) and creates
+   nothing: show the user every setting in it (voice, model tier, media sources, animations, charts, overlays,
+   transitions, sound effects, music) and every warning and the credits, and ask them to confirm. Then call again
+   with `review_token`; for each `acknowledgements_required` item (`no_general_web_content`, `no_video_footage`,
+   `no_motion_graphics`) explain what it costs and pass it in `acknowledge` only after the user approves it.
+   `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
    `prompt` (a brief; Cliptude writes the narration — never the bare title), or `voiceover_path` (audio you already
    have). Needs the full website price in credits; charges only the narration now. Names, places and borrowed
    words the voice may get wrong go in `pronunciations` (ElevenLabs voices): `[{"word": "Gmay", "alias":
@@ -39,7 +50,11 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    `get_kind_catalog(types=[...])` for the full entries you will use: description (when to use / not for),
    `prop_schema` (required props), `media_slots`, durations, cap, and a preview video URL.
 6. **Write the plan** (schema below), then `check_plan` and fix every error until `valid` is true. Checks are free,
-   use no LLM, 60/minute. Read the warnings and the scorecard; they are advice, not blockers.
+   use no LLM, 60/minute. Plan the boards as carefully as the pictures: a premium board on every fact, date, number,
+   place and person the narration states (see "A board for every fact"), about 5 graphics a minute, ~70% of them
+   premium boards covering ~55% of the runtime. Fix `few_graphics`, `few_boards`, `low_board_share`,
+   `slow_opening` and `graphic_gap` like errors: a documentary without them is a slideshow. Other warnings and
+   the scorecard are advice.
 7. **Lock.** `lock_plan` stores it and applies its `look`. You can lock again to replace it until you continue,
    and again after production to revise it (step 10).
 8. **Produce.** `continue_job`, then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
@@ -362,6 +377,21 @@ wherever they take `url`.
   beat (`invalid_trim`); the report shows the cut, or `failed` if the whole clip played instead. Your query is searched verbatim first, then your `alts`; if nothing usable is found Cliptude uses its normal
 fallbacks (an AI still or a plate), and the report shows it. The same `url` may sit on several beats: each one
 plays that file.
+
+**Searches that find footage.** Queries are matched against clip and picture titles and tags (YouTube, stock
+libraries, archives), so write them the way a clip is titled, not the way a shot is described:
+- 2-5 words naming the subject: `"Lake Nyos aerial"`, `"dry ice fog flowing"`, `"kerosene lamp table night"`. Never a
+  shot description (`"Lake Nyos affected valleys Cameroon public path grass close detail"`) and never medium or camera
+  words (`video`, `footage`, `live action`, `cinematic`, `wide shot`): `prefer: "video"` already asks for a clip and
+  `intent` carries the framing. `check_plan` warns `query_too_long` and `query_style_words`.
+- Search a named place, person or event only on the lines about it. A remote place has a handful of distinct clips,
+  not fifty: give mood, action and explanation lines generic subjects that fit the sentence and every library has
+  (weather, water, a lamp at night, farmers at work, bubbles in a soda bottle, fog flowing downhill). More than 30% of
+  searches on one subject warns `same_subject_searches`.
+- Dated events: the event name plus the year (`"Lake Nyos disaster 1986"`, `era: "1986"`) finds news and archive
+  footage; a description of what the archive might show does not.
+- Real footage of named places and events comes mostly from YouTube, which the template's General Web Crawling source
+  switches on (`video_needs_web_crawling` otherwise). Treat all four warnings as must-fix: every miss is an AI still.
 
 Give every beat an `intent` too (optional, recommended; up to 300 characters): **one concrete sentence describing the
 picture you want** — the subject, what is visible, the era and the place, plus the medium when it matters (news

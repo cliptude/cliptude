@@ -127,6 +127,14 @@ def build_server(*, with_http_auth: bool = False):
         "Avatar Video templates may include avatar_intro_only "
         "(Avatar Intro Only) and avatar_ai_footage (AI Image + AI Video); pass those "
         "on create_job to override the template, or omit them to keep the template. "
+        "REVIEW BEFORE EVERY JOB: create_job, create_plan_job, create_script and create_voiceover first return "
+        "a review (status 428, detail.review) and create nothing. Show the user every setting in it in plain "
+        "words (voice, model tier, media sources incl. general web crawling, animations/motion graphics, charts, "
+        "overlays, transitions, sound effects, music, A-roll) plus every warning and the credits, and ask them to "
+        "confirm. Then call the same tool again with the same arguments and review_token. For each item in "
+        "detail.review.acknowledgements_required (no_general_web_content: no YouTube or general web content, which "
+        "can lower video quality a lot; no_video_footage; no_motion_graphics) tell the user what it costs and pass "
+        "its id in acknowledge only after they explicitly approve; otherwise fix the template. "
         "AGENT-PLANNED VIDEOS (Faceless Documentary, Top 10, Avatar Video): you plan every visual "
         "and Cliptude only voices, sources and renders. create_plan_job, poll get_job until "
         "plan_ready, get_narration (numbered sentences), get_kind_catalog (compact first), write the "
@@ -136,6 +144,9 @@ def build_server(*, with_http_auth: bool = False):
         "put a speaker board (talking_head_*, dual_metric_talking_head) in most full-screen windows; check_plan "
         "refuses all-full-screen windows (presenter_only_full_screen). Treat presenter_no_speaker_boards, "
         "presenter_no_splits, kind_overused, over_cap and few_board_pictures warnings as must-fix. "
+        "On footage videos also fix query_too_long, query_style_words and same_subject_searches (write each "
+        "query as 2-5 words naming the subject, as clips are titled, and put the shot in intent), and on "
+        "video_needs_web_crawling ask the user to turn on General Web Crawling before building. "
         "PRODUCT VIDEOS (the user's connected store, or a product page from a store they sell for): "
         "fetch_product_context, show the user the 3 angles, draft_product_script with their pick and a "
         "duration (6-8 to 50-60 minutes), poll get_product_video_status until script_ready, let the user "
@@ -221,7 +232,10 @@ def build_server(*, with_http_auth: bool = False):
             Field(
                 description=(
                     "Wizard settings: voice_id, voice_name, voice_provider plus any field from "
-                    "get_template_options (unset fields take the wizard defaults). "
+                    "get_template_options (unset fields take the wizard defaults). Set only what the user asked for: "
+                    "each field's description says what turning it on or off does, and the source and graphics "
+                    "switches (source_general_web_crawling, enable_broll_stock_footage, enable_animations, ...) "
+                    "decide whether the video can have real footage and boards at all. "
                     "Avatar Video: avatar_profile_id from list_avatars (gender must match the voice). "
                     "Vector Explainer: vector_character_id from get_template_options (vector_character.choices: "
                     "a built-in id such as nova, or one of the user's uploaded figures); omit it for no character. "
@@ -232,7 +246,7 @@ def build_server(*, with_http_auth: bool = False):
             ),
         ],
     ) -> dict[str, Any]:
-        """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job)."""
+        """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job) and `warnings`: choices that will change what the video can show (no footage, AI stills, no graphics). Tell the user every warning in plain words and fix the ones they did not ask for before making a video."""
         try:
             return _client().create_template(name=name, format=format, settings=settings)
         except Exception as exc:
@@ -477,6 +491,14 @@ def build_server(*, with_http_auth: bool = False):
             list[dict[str, str]] | None,
             Field(description='How the voice says hard words (ElevenLabs voices): [{"word": "Gmay", "alias": "guh-MAY"}] or [{"word": "Ordnung", "phoneme": "ˈɔɹt.nʊŋ", "alphabet": "ipa"}]. Script, captions and searches keep the real spelling. Replaces the template\'s list for this video; omit to keep it.'),
         ] = None,
+        review_token: Annotated[
+            str | None,
+            Field(description="From the review this tool returned when called without it (status 428, detail.review_token). Only send it after showing the user every setting and warning in detail.review and getting their confirmation."),
+        ] = None,
+        acknowledge: Annotated[
+            list[str] | None,
+            Field(description="Ids from detail.review.acknowledgements_required (e.g. no_general_web_content) that the user explicitly approved after you explained each one. Never fill these in yourself."),
+        ] = None,
     ) -> dict[str, Any]:
         """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
         try:
@@ -496,6 +518,8 @@ def build_server(*, with_http_auth: bool = False):
                     )
                 }
             return _client().create_job(
+                review_token=review_token,
+                acknowledge=acknowledge,
                 template_id=template_id,
                 title=title,
                 prompt=prompt,
@@ -534,10 +558,20 @@ def build_server(*, with_http_auth: bool = False):
             str | None,
             Field(description="Wizard duration bucket such as 3-4 or 6-8. Omit to use the template."),
         ] = None,
+        review_token: Annotated[
+            str | None,
+            Field(description="From the review this tool returned when called without it (status 428, detail.review_token). Only send it after showing the user every setting and warning in detail.review and getting their confirmation."),
+        ] = None,
+        acknowledge: Annotated[
+            list[str] | None,
+            Field(description="Ids from detail.review.acknowledgements_required (e.g. no_general_web_content) that the user explicitly approved after you explained each one. Never fill these in yourself."),
+        ] = None,
     ) -> dict[str, Any]:
         """Start a script-only job (no MP4). Returns a job id immediately. Poll get_job until completed; read script. Do not use create_job."""
         try:
             return _client().create_job(
+                review_token=review_token,
+                acknowledge=acknowledge,
                 template_id=template_id,
                 title=title,
                 prompt=prompt,
@@ -560,12 +594,22 @@ def build_server(*, with_http_auth: bool = False):
             str | None,
             Field(description="Wizard duration bucket such as 3-4 or 6-8. Omit to use the template (or estimate from script)."),
         ] = None,
+        review_token: Annotated[
+            str | None,
+            Field(description="From the review this tool returned when called without it (status 428, detail.review_token). Only send it after showing the user every setting and warning in detail.review and getting their confirmation."),
+        ] = None,
+        acknowledge: Annotated[
+            list[str] | None,
+            Field(description="Ids from detail.review.acknowledgements_required (e.g. no_general_web_content) that the user explicitly approved after you explained each one. Never fill these in yourself."),
+        ] = None,
     ) -> dict[str, Any]:
         """Start a TTS-only job (no MP4). Returns a job id immediately. Poll get_job until completed; read voiceover.url. Provide prompt or script."""
         try:
             if not (prompt or "").strip() and not (script or "").strip():
                 return {"error": "Provide prompt or script."}
             return _client().create_job(
+                review_token=review_token,
+                acknowledge=acknowledge,
                 template_id=template_id,
                 title=title,
                 prompt=prompt,
@@ -597,7 +641,8 @@ def build_server(*, with_http_auth: bool = False):
     def fetch_product_context(
         product_url_or_query: Annotated[str, Field(min_length=1, description=(
             "A product page URL from the user's own store (Shopify, e.g. https://store.com/products/handle; "
-            "WooCommerce or Etsy work through the page's structured data), a connected store's "
+            "WooCommerce, e.g. https://store.com/product/name/, is read through its Store API; Etsy and others "
+            "work through the page's structured data), a connected store's "
             "product id/handle, or a search term together with store_domain."))],
         store_domain: Annotated[str | None, Field(description=(
             "Store to search or read from, e.g. acme.com or acme.myshopify.com. Uses the user's connected "
@@ -717,12 +762,22 @@ def build_server(*, with_http_auth: bool = False):
             list[dict[str, str]] | None,
             Field(description='How the voice says hard words (ElevenLabs voices): [{"word": "Gmay", "alias": "guh-MAY"}] or [{"word": "Ordnung", "phoneme": "ˈɔɹt.nʊŋ", "alphabet": "ipa"}]. Script, captions and searches keep the real spelling. Replaces the template\'s list for this video; omit to keep it.'),
         ] = None,
+        review_token: Annotated[
+            str | None,
+            Field(description="From the review this tool returned when called without it (status 428, detail.review_token). Only send it after showing the user every setting and warning in detail.review and getting their confirmation."),
+        ] = None,
+        acknowledge: Annotated[
+            list[str] | None,
+            Field(description="Ids from detail.review.acknowledgements_required (e.g. no_general_web_content) that the user explicitly approved after you explained each one. Never fill these in yourself."),
+        ] = None,
     ) -> dict[str, Any]:
         """Start a job whose visuals YOU plan. Cliptude writes (if needed) and voices the narration, then stops at status plan_ready. It needs the full website price in credits but charges only the narration now; the rest is charged when the video completes, and the total equals the website price. Poll get_job until plan_ready, then get_narration."""
         try:
             if not (prompt or "").strip() and not (script or "").strip() and not voiceover_path and not voiceover_url:
                 return {"error": "Provide prompt, script, voiceover_path or voiceover_url."}
             return _client().create_job(
+                review_token=review_token,
+                acknowledge=acknowledge,
                 template_id=template_id,
                 title=title,
                 prompt=prompt,

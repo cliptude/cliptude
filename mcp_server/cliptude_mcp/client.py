@@ -149,6 +149,19 @@ def _avatar_job_fields(
     return fields
 
 
+def _review_job_fields(review_token: str | None, acknowledge: list[str] | None, review_only: bool | None,
+                       *, as_strings: bool = False) -> dict[str, Any]:
+    """The job review: Cliptude answers a job without a review_token with the review (HTTP 428)."""
+    out: dict[str, Any] = {}
+    if review_token:
+        out["review_token"] = str(review_token)
+    if acknowledge:
+        out["acknowledge"] = ",".join(acknowledge) if as_strings else list(acknowledge)
+    if review_only:
+        out["review_only"] = "true" if as_strings else True
+    return out
+
+
 def _thumbnail_job_field(thumbnail: dict[str, str] | None, *, as_string: bool = False) -> dict[str, Any]:
     """create_job's per-job thumbnail ({custom_prompt} or {reference_url}); multipart sends it as JSON text."""
     cleaned = {k: str(v).strip() for k, v in (thumbnail or {}).items() if v is not None and str(v).strip()}
@@ -309,6 +322,9 @@ class CliptudeClient:
         vector_character_id: str | None = None,
         vector_reveal_mode: str | None = None,
         pronunciations: list[dict[str, str]] | None = None,
+        review_token: str | None = None,
+        acknowledge: list[str] | None = None,
+        review_only: bool | None = None,
     ) -> Any:
         if voiceover_path and voiceover_url:
             raise CliptudeApiError("Give voiceover_path or voiceover_url, not both.")
@@ -369,6 +385,7 @@ class CliptudeClient:
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
                 thumbnail=thumbnail,
+                review=_review_job_fields(review_token, acknowledge, review_only),
             )
         if vo_path:
             extra_data = {
@@ -383,6 +400,7 @@ class CliptudeClient:
                 **({"vector_character_id": str(vector_character_id)} if vector_character_id else {}),
                 **({"vector_reveal_mode": str(vector_reveal_mode)} if vector_reveal_mode else {}),
                 **({"pronunciations": json.dumps(pronunciations)} if pronunciations is not None else {}),
+                **_review_job_fields(review_token, acknowledge, review_only, as_strings=True),
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -419,6 +437,7 @@ class CliptudeClient:
             body["vector_reveal_mode"] = str(vector_reveal_mode)
         if pronunciations is not None:
             body["pronunciations"] = pronunciations
+        body.update(_review_job_fields(review_token, acknowledge, review_only))
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
     def _raise_http(self, resp, *, payload=None) -> None:
@@ -515,7 +534,11 @@ class CliptudeClient:
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         thumbnail: dict[str, str] | None = None,
+        review: dict[str, Any] | None = None,
     ) -> Any:
+        review = review or {}
+        review_strings = {k: (",".join(v) if isinstance(v, list) else ("true" if v is True else v))
+                          for k, v in review.items()}
         motion_extra = _motion_control_job_fields(
             disable_animations=disable_animations,
             disable_overlays=disable_overlays,
@@ -549,6 +572,7 @@ class CliptudeClient:
                 **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
                 **motion_extra,
                 **_thumbnail_job_field(thumbnail, as_string=True),
+                **review_strings,
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -567,6 +591,7 @@ class CliptudeClient:
                 **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
                 **motion_extra,
                 **_thumbnail_job_field(thumbnail, as_string=True),
+                **review_strings,
             }
             return self._create_job_multipart(
                 template_id=template_id,
@@ -605,6 +630,7 @@ class CliptudeClient:
                 excluded_transition_kinds=excluded_transition_kinds,
             )
         )
+        body.update(review)
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
     def _upload_talking_head_parts(self, path: Path, init: dict[str, Any]) -> None:

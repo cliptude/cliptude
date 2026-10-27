@@ -15,6 +15,48 @@ def _print(payload) -> None:
     sys.stdout.write("\n")
 
 
+def _add_review_args(parser) -> None:
+    parser.add_argument("--review-token", default="", help="Token from the job review (shown when you run without it)")
+    parser.add_argument(
+        "--acknowledge", action="append", default=[],
+        help="An item from acknowledgements_required the user approved, e.g. no_general_web_content (repeatable)",
+    )
+
+
+def _create_reviewed(client: CliptudeClient, args, **kwargs):
+    """create_job behind the job review: in a terminal, show it and ask; otherwise print it and stop.
+
+    Cliptude answers a job without a review_token with the review (HTTP 428) and creates nothing.
+    """
+    token = (getattr(args, "review_token", "") or "").strip() or None
+    acks = [a.strip() for raw in (getattr(args, "acknowledge", None) or []) for a in raw.split(",") if a.strip()]
+    try:
+        return client.create_job(review_token=token, acknowledge=acks or None, **kwargs)
+    except CliptudeApiError as exc:
+        detail = exc.payload if isinstance(exc.payload, dict) else {}
+        if exc.status != 428 or "review" not in detail or not sys.stdin.isatty():
+            raise
+    review = detail["review"]
+    out = sys.stderr
+    out.write("\nReview this video before it is created:\n")
+    for item in review.get("settings") or []:
+        out.write(f"  {item.get('label')}: {item.get('value')}\n")
+    credits = review.get("credits") or {}
+    if credits.get("credits_required") is not None:
+        out.write(f"  Credits: about {credits['credits_required']} (you have {credits.get('credits_available')})\n")
+    for warning in review.get("warnings") or []:
+        out.write(f"  ! {warning}\n")
+    approved = []
+    for ack in review.get("acknowledgements_required") or []:
+        out.write(f"\n  {ack['message']}\n")
+        if input(f"  Approve ({ack['id']})? [y/N] ").strip().lower() != "y":
+            raise CliptudeApiError("Not created: change the template and run again.")
+        approved.append(ack["id"])
+    if input("\nCreate this video? [y/N] ").strip().lower() != "y":
+        raise CliptudeApiError("Not created.")
+    return client.create_job(review_token=detail["review_token"], acknowledge=approved or None, **kwargs)
+
+
 def _die(exc: Exception, code: int = 1) -> None:
     if isinstance(exc, CliptudeApiError):
         _print({"error": str(exc), "status": exc.status, "detail": exc.payload})
@@ -543,6 +585,8 @@ def main(argv: list[str] | None = None) -> None:
     c = sub.add_parser("cancel", help="Cancel a job")
     c.add_argument("job_id")
 
+    for job_parser in (g, sc, vo, pj):
+        _add_review_args(job_parser)
     args = parser.parse_args(argv)
     if args.cmd == "auth":
         _run_auth(args.auth_cmd)
@@ -624,7 +668,7 @@ def main(argv: list[str] | None = None) -> None:
                     "Provide --prompt, --script / --script-file, --voiceover, or --talking-head."
                 )
             template_id = _resolve_template_id(client, args.template)
-            _print(client.create_job(
+            _print(_create_reviewed(client, args,
                 template_id=template_id,
                 title=args.title,
                 prompt=args.prompt or None,
@@ -652,7 +696,7 @@ def main(argv: list[str] | None = None) -> None:
             if not (args.prompt or "").strip():
                 raise CliptudeApiError("Provide --prompt.")
             template_id = _resolve_template_id(client, args.template)
-            _print(client.create_job(
+            _print(_create_reviewed(client, args,
                 template_id=template_id,
                 title=args.title,
                 prompt=args.prompt,
@@ -666,7 +710,7 @@ def main(argv: list[str] | None = None) -> None:
             if not (args.prompt or "").strip() and not (script or "").strip():
                 raise CliptudeApiError("Provide --prompt or --script / --script-file.")
             template_id = _resolve_template_id(client, args.template)
-            _print(client.create_job(
+            _print(_create_reviewed(client, args,
                 template_id=template_id,
                 title=args.title,
                 prompt=args.prompt or None,
@@ -683,7 +727,7 @@ def main(argv: list[str] | None = None) -> None:
             if not (args.prompt or "").strip() and not (script or "").strip() and not voiceover and not voiceover_url:
                 raise CliptudeApiError("Provide --prompt, --script / --script-file, --voiceover or --voiceover-url.")
             template_id = _resolve_template_id(client, args.template)
-            _print(client.create_job(
+            _print(_create_reviewed(client, args,
                 template_id=template_id,
                 title=args.title,
                 prompt=args.prompt or None,
