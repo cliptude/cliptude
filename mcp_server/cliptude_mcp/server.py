@@ -772,7 +772,7 @@ def build_server(*, with_http_auth: bool = False):
         script_id: Annotated[str, Field(min_length=8, description="script_id / job_id from draft_product_script, once script_ready")],
         aspect_ratio: Annotated[str, Field(description="16:9 (YouTube), 9:16, 1:1 or 4:5")] = "16:9",
     ) -> dict[str, Any]:
-        """Start BUILDING the video from the approved script on the same job id: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. This does not render the final MP4: when the build is done (ready_for_review) review it, show the user the editor_url and wait for their go-ahead before render_project. Returns {job_id, status, stage, editor_url, estimated_minutes} immediately; never wait in this call. Poll get_product_video_status."""
+        """Start BUILDING the video from the approved script on the same job id: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. This does not render the final MP4: when the build is done (ready_for_review) review it, show the user the editor_url and wait for their go-ahead before render_project. Returns {job_id, status, stage, editor_url, estimated_minutes, credits_reserved, credits} immediately (credits: charged so far, held while it builds, and the full-generation estimate); quote them to the user. Never wait in this call. Poll get_product_video_status."""
         try:
             return _client().render_product_video(script_id, aspect_ratio=aspect_ratio)
         except Exception as exc:
@@ -785,7 +785,7 @@ def build_server(*, with_http_auth: bool = False):
     def get_product_video_status(
         job_id: Annotated[str, Field(min_length=8, description="Job id from draft_product_script / render_product_video")],
     ) -> dict[str, Any]:
-        """Stage of a product video (script_drafting, script_ready, producing, ready_for_review, rendered, failed) with the script once written, the editor_url to preview, the MP4 URL once rendered, and next_step telling you what to do."""
+        """Stage of a product video (script_drafting, script_ready, producing, ready_for_review, rendered, failed) with the script once written, the editor_url to preview, the MP4 URL once rendered, credits {charged, reserved, estimate, estimate_with_buffer} and next_step telling you what to do. The editor's export_credits_due is 0 until a first export exists (the first export of a video is free)."""
         try:
             return _client().get_product_video_status(job_id)
         except Exception as exc:
