@@ -307,6 +307,16 @@ the presenter seconds you plan.
 - List fields count too: `internet_search` draws its sample results unless you give `results`
   (`[{title, url, snippet}]`), and charts, maps and lists do the same with `chartData`, `countryValues`,
   `evidenceItems` and the like. The schema's `items` shows each row's shape and `minItems` the fewest it draws.
+- **Product boards need a product video.** `product_hero_showcase`, `feature_callout_pointers`,
+  `offer_cta_end_card`, `shop_qr_overlay`, `social_proof_review_card` and `us_vs_them_table` draw a connected
+  store product (price, reviews, QR link), so only Cliptude product videos can place them: in any other plan job
+  `check_plan` refuses them (`excluded_type`) whatever the template's `excluded_animation_types` says. To show a
+  product or an offer in an ordinary plan, upload its picture (`upload_plan_media` / `start_media_upload`) and put
+  the `keep` id on a premium image board: `transparent_image_title`, `title_subtitle_lower_third`,
+  `bullet_point_overlay`, `text_list` or `large_number_text_overlay` (the price) all take a picture, and write
+  the link or domain in a lower third. Quote only facts from the product page; never invent reviews or prices.
+- **The narration cannot change in a plan.** `lock_plan` fixes only the visuals; a wrong line, a missing pitch or
+  a presenter line to drop needs a new plan job with a new `script` (the old job and its editor edits stay as they are).
 
 ### A board for every fact (how the best documentaries are planned)
 The strongest faceless documentaries put **one premium board on each sentence that states a fact**, and let footage

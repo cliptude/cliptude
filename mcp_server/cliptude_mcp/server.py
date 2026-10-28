@@ -48,6 +48,74 @@ def _err(exc: Exception) -> dict[str, Any]:
     return {"error": str(exc)}
 
 
+# Fields that make an MCP result too big to read (a 90 minute-class timeline index, per-word timings,
+# whole-voiceover segment arrays) without helping an agent decide anything.
+_BULKY_OPERATION_KEYS = frozenset({
+    "voice_segments", "chunk_alignments", "chunk_durations", "voiceover_chunks", "timing_metadata",
+})
+
+
+def _compact_operation(operation: Any) -> Any:
+    if not isinstance(operation, dict):
+        return operation
+    out: dict[str, Any] = {}
+    for key, value in operation.items():
+        if key in _BULKY_OPERATION_KEYS and isinstance(value, (list, dict)):
+            out[key] = f"<{len(value)} entries omitted>"
+        else:
+            out[key] = value
+    return out
+
+
+def _compact_agent_run(data: Any) -> Any:
+    """Agent run with the voice-segment arrays of its operations summarised (they repeat in messages)."""
+    if not isinstance(data, dict):
+        return data
+    out = dict(data)
+    run = out.get("run")
+    if isinstance(run, dict) and isinstance(run.get("applied_operations"), list):
+        out["run"] = {**run, "applied_operations": [_compact_operation(op) for op in run["applied_operations"]]}
+    messages = out.get("messages")
+    if isinstance(messages, list):
+        compact_messages = []
+        for message in messages:
+            if isinstance(message, dict) and isinstance(message.get("metadata"), dict):
+                meta = dict(message["metadata"])
+                if isinstance(meta.get("operations"), list):
+                    meta["operations"] = [_compact_operation(op) for op in meta["operations"]]
+                message = {**message, "metadata": meta}
+            compact_messages.append(message)
+        out["messages"] = compact_messages
+    return out
+
+
+def _compact_editor_project(data: Any) -> Any:
+    """Editor project without voice_timing.spokenEventIndex (every word of the narration, 100 KB+)."""
+    if not isinstance(data, dict):
+        return data
+    project = data.get("project")
+    if not isinstance(project, dict) or not isinstance(project.get("voice_timing"), dict):
+        return data
+    timing = project["voice_timing"]
+    kept = {k: v for k, v in timing.items() if k != "spokenEventIndex"}
+    index = timing.get("spokenEventIndex")
+    if isinstance(index, dict) and isinstance(index.get("words"), list):
+        kept["spoken_words"] = len(index["words"])
+    return {**data, "project": {**project, "voice_timing": kept}}
+
+
+def _compact_narration(data: Any, *, include_words: bool) -> Any:
+    """Narration sentences without per-word timings unless asked (they are most of the payload)."""
+    if include_words or not isinstance(data, dict) or not isinstance(data.get("sentences"), list):
+        return data
+    sentences = []
+    for sentence in data["sentences"]:
+        if isinstance(sentence, dict) and "words" in sentence:
+            sentence = {k: v for k, v in sentence.items() if k != "words"}
+        sentences.append(sentence)
+    return {**data, "sentences": sentences, "words_omitted": True}
+
+
 def mcp_allowed_hosts(resource_url: str | None = None) -> list[str]:
     """Host header values the Streamable HTTP transport should accept.
 
@@ -810,10 +878,13 @@ def build_server(*, with_http_auth: bool = False):
     )
     def get_narration(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status plan_ready)")],
+        include_words: Annotated[
+            bool, Field(description="Add every word's start/end to each sentence (large: about 10 KB a minute). Phrases in a plan are matched server-side, so leave it off unless you need word times.")
+        ] = False,
     ) -> dict[str, Any]:
-        """The narration you plan against: numbered sentences with start/end seconds and every word's timing, narration_digest (copy it into the plan), suggested chapters, the template's theme and switched-off graphics, pricing (website price, already charged, due at continue), and narration_audio: a url to listen to (check names and borrowed words before you lock) and the API path that downloads the MP3. The sentence text is what the voice said, so a misspoken word shows up there too."""
+        """The narration you plan against: numbered sentences with start/end seconds (and every word's timing with include_words), narration_digest (copy it into the plan), suggested chapters, the template's theme and switched-off graphics, pricing (website price, already charged, due at continue), and narration_audio: a url to listen to (check names and borrowed words before you lock) and the API path that downloads the MP3. The sentence text is what the voice said, so a misspoken word shows up there too."""
         try:
-            return _client().get_narration(job_id)
+            return _compact_narration(_client().get_narration(job_id), include_words=include_words)
         except Exception as exc:
             return _err(exc)
 
@@ -1047,7 +1118,7 @@ def build_server(*, with_http_auth: bool = False):
     ) -> dict[str, Any]:
         """Open (or create) the timeline editor project for a completed video job. Returns project id, revision, a compact timeline (item id, type, start_s, end_s, text) to reference in run_agent, and export_credits_due: what render_project would charge now."""
         try:
-            return _client().open_editor_project(job_id)
+            return _compact_editor_project(_client().open_editor_project(job_id))
         except Exception as exc:
             return _err(exc)
 
@@ -1060,7 +1131,7 @@ def build_server(*, with_http_auth: bool = False):
     ) -> dict[str, Any]:
         """Current revision, compact timeline, latest render and export_credits_due (what render_project would charge now) of an editor project."""
         try:
-            return _client().get_editor_project(project_id)
+            return _compact_editor_project(_client().get_editor_project(project_id))
         except Exception as exc:
             return _err(exc)
 
@@ -1097,11 +1168,11 @@ def build_server(*, with_http_auth: bool = False):
         tier: Annotated[str, Field(description="fast or smart")] = "fast",
         chat_id: Annotated[str | None, Field(description="Continue an existing agent chat")] = None,
     ) -> dict[str, Any]:
-        """Ask Cliptude Agent to edit the timeline (swap footage, regenerate images or voiceover ranges, music, transitions, text). One kind of change per run: picture swaps and text edits go in separate runs. Several clips can get new pictures in one run: reference them all and describe each one's picture by its item id; a clip with nothing suitable is left unchanged and named in the reply. Swapping a graphic's picture keeps the graphic and its words. Returns a run; poll get_agent_run. Charges agent credits. Then render_project for a new MP4, after view_scenes on the changed range."""
+        """Ask Cliptude Agent to edit the timeline (swap footage, regenerate images or voiceover ranges, music, transitions, text). One kind of change per run: picture swaps and text edits go in separate runs. Several clips can get new pictures in one run: reference them all and describe each one's picture by its item id; a clip with nothing suitable is left unchanged and named in the reply. Swapping a graphic's picture keeps the graphic and its words. To use one exact picture (a product cover, a screenshot), paste its https link in the prompt: it is downloaded and applied as is, not searched for. Returns a run; poll get_agent_run. Charges agent credits. Then render_project for a new MP4, after view_scenes on the changed range."""
         try:
-            return _client().run_agent(
+            return _compact_agent_run(_client().run_agent(
                 project_id, prompt=prompt, tier=tier, referenced_item_ids=referenced_item_ids, chat_id=chat_id
-            )
+            ))
         except Exception as exc:
             return _err(exc)
 
@@ -1115,7 +1186,7 @@ def build_server(*, with_http_auth: bool = False):
     ) -> dict[str, Any]:
         """Status of a Cliptude Agent run plus the agent's messages."""
         try:
-            return _client().get_agent_run(project_id, run_id)
+            return _compact_agent_run(_client().get_agent_run(project_id, run_id))
         except Exception as exc:
             return _err(exc)
 
