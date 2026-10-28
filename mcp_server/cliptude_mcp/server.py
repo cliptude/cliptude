@@ -723,7 +723,7 @@ def build_server(*, with_http_auth: bool = False):
             "Store to search or read from, e.g. acme.com or acme.myshopify.com. Uses the user's connected "
             "store when it matches."))] = None,
     ) -> dict[str, Any]:
-        """Read a store product: title, price, variants, description and its real image URLs, saved as product_id, plus 3 educational YouTube video angles (80% teaching, 20% product). A search that matches several products returns candidates; fetch again with the chosen URL. Show the user the angles before drafting."""
+        """Read a store product: title, price, variants, description and its real image URLs, saved as product_id, plus 3 educational YouTube video angles (80% teaching, 20% product). When no angles could be suggested the list is empty with an angles_note: pass your own angle (a title, or {title, problem, hook}) to draft_product_script. A search that matches several products returns candidates; fetch again with the chosen URL. Show the user the angles before drafting."""
         try:
             return _client().fetch_product_context(product_url_or_query, store_domain=store_domain)
         except Exception as exc:
@@ -742,8 +742,9 @@ def build_server(*, with_http_auth: bool = False):
             "Length: 6-8, 10-12, 18-20, 30-40 or 50-60 (minutes), or a number of minutes from 6 to 60. "
             "Default 6-8."))] = None,
         template_id: Annotated[str | None, Field(description=(
-            "Faceless Documentary template to use (voice, look, music). Omit to use the latest one, or a "
-            "default Product Explainer template."))] = None,
+            "Template to use (voice, look, music): a Faceless Documentary, Top 10 or Avatar Video template "
+            "(an Avatar Video one puts the avatar on screen). Omit to use the latest Faceless Documentary one, "
+            "or a default Product Explainer template."))] = None,
         title: Annotated[str | None, Field(description="Video title. Defaults to the angle title.")] = None,
         discount_code: Annotated[str | None, Field(description="Discount code the merchant gave. Never invent one.")] = None,
         cta_url: Annotated[str | None, Field(description="Where viewers should go. Defaults to the product page.")] = None,
