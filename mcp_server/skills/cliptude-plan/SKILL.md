@@ -438,8 +438,8 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
 - **Someone else's footage is edited for commentary, automatically.** Clips Cliptude finds on YouTube, and any
   beat you mark with `media.credit` (who owns it: `"credit": "Rockstar Games"`), are treated as third-party
   footage: never shown at the source's full frame (always zoomed in at least 10%) and always moving, one in four
-  played as an inset card over a blurred copy, their own sound muted, no more than 30 s taken from any one source
-  video, and credited on screen ("Footage: Rockstar Games · PlayStation") and in the YouTube description. Keep each
+  played as an inset card over a blurred copy, their own sound muted, no more than a quarter of any one source
+  video (at least 8 s, at most 90 s: 22 s of a 90 s trailer), and credited on screen ("Footage: Rockstar Games · PlayStation") and in the YouTube description. Keep each
   excerpt short and tied to the line it illustrates: a credited beat held over 6 s warns `long_third_party_excerpt`,
   and in a video about a game, sport, creator or show a searched beat over 6 s is cut into ~4 s parts. Fair use is
   still judged case by case and a rights holder can claim; these rules make the use defensible, not claim-proof.
