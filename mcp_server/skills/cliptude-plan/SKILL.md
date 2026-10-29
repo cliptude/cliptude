@@ -74,7 +74,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    for the job, then `view_scenes` from 0 to the end (call again from `next_start_s`). Check every tile, boards'
    pictures included, against this list and fix each hit in a revision:
    - **Unsafe:** any dead body, gore or injury. Always replace it, however relevant.
-   - **Not ours:** another brand's product, a logo or channel bug, album or app art, a game screenshot, a title card,
+   - **Not ours:** another brand's product, a logo or channel bug, album or app art, a screenshot of a game the video is not about, a title card,
      another publisher's infographic, a webcam frame with a timestamp, big promotional text.
    - **Wrong setting:** a place, country, era or class of setting the story contradicts (a luxury modern interior for
      a rural home, a European street for an African village, a 1950s American clip for a 1980s family, snow in the
@@ -422,6 +422,13 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
 - A generic shot of a place still names the story's setting: `"empty bed mud house"`, `"village road Cameroon"`,
   not `"empty bed dark room"` — without it, stock search returns American and European homes. Object close-ups and
   natural phenomena (`"dry ice fog flowing"`, `"soda bubbles slow motion"`, `"candle"`) need no setting.
+- **A video about a video game shows the game.** For a game, console or controller topic (GTA 6, Minecraft, a
+  new PlayStation), most beats search the game itself: `"GTA 6 trailer Vice City"`, `"GTA 6 gameplay driving"`,
+  `"GTA 6 beach"`, `"Minecraft village gameplay"`. Trailers, gameplay, cutscenes and screenshots of the named game
+  are the footage, not someone else's art. Use real-world shots only for real-world things the line is about (the
+  controller in hands, a console on a shelf, a launch event), never as a stand-in for the game (real Miami streets
+  for Vice City, a soldier with a rifle for in-game gunplay, a police radio for the controller speaker). The
+  `same_subject_searches` limit does not apply to the game's own name.
 - **True stories show no stand-ins.** For real events and real people (a documentary, news, a biography) set
   `sense.true_story: true` and list them in `sense.people`. Never search for people (`"father daughter"`,
   `"villagers"`, `"woman crying"`, `"survivor"`): stock returns strangers, and viewers take them for the real family.
@@ -563,6 +570,8 @@ per 28 s (target one about every 20 s; videos over 3 minutes).
 Joins on cuts you leave at `"auto"`, the direction and timing details inside a reveal (a locked plan gets no
 collages or reveals you did not ask for), where a searched picture or clip comes from (you choose video vs still), the
 plain camera move on a searched beat without a `camera`, the
-voice, caption styling, and fallbacks when your media cannot be found. The report (`get_plan_report`) lists every
+voice, caption styling, and fallbacks when your media cannot be found. A searched beat longer than 9 s that has
+alts is cut into parts of about 7 s, each searching the next of its query and alts (ids `b17~2`, `b17~3`); to change
+them, edit the original beat. The report (`get_plan_report`) lists every
 graphic, transition, reveal and free sound effect you planned against what was rendered, with the reason for anything
 dropped.
