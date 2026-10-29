@@ -74,7 +74,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    for the job, then `view_scenes` from 0 to the end (call again from `next_start_s`). Check every tile, boards'
    pictures included, against this list and fix each hit in a revision:
    - **Unsafe:** any dead body, gore or injury. Always replace it, however relevant.
-   - **Not ours:** another brand's product, a logo or channel bug, album or app art, a screenshot of a game the video is not about, a title card,
+   - **Not ours:** another brand's product, a logo or channel bug, album or app art, footage of a game, match, creator or show the video is not about, a title card,
      another publisher's infographic, a webcam frame with a timestamp, big promotional text.
    - **Wrong setting:** a place, country, era or class of setting the story contradicts (a luxury modern interior for
      a rural home, a European street for an African village, a 1950s American clip for a 1980s family, snow in the
@@ -429,6 +429,12 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   controller in hands, a console on a shelf, a launch event), never as a stand-in for the game (real Miami streets
   for Vice City, a soldier with a rifle for in-game gunplay, a police radio for the controller speaker). The
   `same_subject_searches` limit does not apply to the game's own name.
+- **The same goes for sports, creators and TV shows.** A video about a sport, club or athlete searches the real
+  matches (`"Bellingham Real Madrid goal"`, `"Ballon d'Or 2025 ceremony"`); about a YouTuber or streamer, their own
+  videos and streams (`"Kai Cenat stream"`, `"MrBeast Squid Game challenge"`); about a TV show or anime, its episodes
+  and clips (`"Dancing With the Stars finale"`, `"One Piece Luffy gear 5"`). A broadcaster's corner logo, a
+  scoreboard, a streamer's overlay or a network bug on that footage belongs to the subject and is accepted;
+  stock-library watermarks, another creator's reaction overlay and thumbnails with big text are not.
 - **True stories show no stand-ins.** For real events and real people (a documentary, news, a biography) set
   `sense.true_story: true` and list them in `sense.people`. Never search for people (`"father daughter"`,
   `"villagers"`, `"woman crying"`, `"survivor"`): stock returns strangers, and viewers take them for the real family.
