@@ -59,7 +59,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    and again after production to revise it (step 10).
 8. **Produce.** `continue_job`, then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
    sourced and built the video; nothing is rendered yet. The job is charged here, once.
-9. **Review the build, not a render.** `get_plan_review` returns every picture or clip in order (beat, time, the
+9. **Review the build, not a render.** Before a build is ready, Cliptude reviews every searched picture itself (logos, other franchises, title cards, strangers in a true story, wrong place or era, fakes, unusable frames) and searches again for the ones that fail; a pick it could not fix shows as an `audit_unfixed` finding. `get_plan_review` returns every picture or clip in order (beat, time, the
    sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and
    the props it will be drawn with, or why it is missing). `get_plan_report` adds every media request's fallback.
    Look at the media links: a search can return a wrong picture that still counts as found. `used.source` is one of
@@ -121,6 +121,8 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
      `voiceover_url` to `create_plan_job(render_only=true, …)` within the hour.
   2. Pictures and clips, on the job: `start_media_upload(job, filename, size)` → PUT the parts the same way →
      `finish_media_upload(job, key, upload_id)` → use its `keep` id.
+     Uploads with nudity or gore are refused; a clip's result may carry `notes` ("a title card appears by 3.9s: set
+     end_s to 3.4 or earlier", a weapon aimed at someone): trim the beat with `start_s` / `end_s` as they say.
   With the CLI or a local MCP server the same uploads are one call: `voiceover_path` / `cliptude plan-job
   --voiceover`, and `upload_plan_media(job, path)` / `cliptude upload-media`. A public https link still works as
   `voiceover_url` or a media `url`. Trim long clips with `start_s` / `end_s`.
