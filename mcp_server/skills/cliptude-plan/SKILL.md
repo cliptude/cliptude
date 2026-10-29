@@ -435,6 +435,19 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   and clips (`"Dancing With the Stars finale"`, `"One Piece Luffy gear 5"`). A broadcaster's corner logo, a
   scoreboard, a streamer's overlay or a network bug on that footage belongs to the subject and is accepted;
   stock-library watermarks, another creator's reaction overlay and thumbnails with big text are not.
+- **Someone else's footage is edited for commentary, automatically.** Clips Cliptude finds on YouTube, and any
+  beat you mark with `media.credit` (who owns it: `"credit": "Rockstar Games"`), are treated as third-party
+  footage: never shown at the source's full frame (always zoomed in at least 10%) and always moving, one in four
+  played as an inset card over a blurred copy, their own sound muted, no more than 30 s taken from any one source
+  video, and credited on screen ("Footage: Rockstar Games · PlayStation") and in the YouTube description. Keep each
+  excerpt short and tied to the line it illustrates: a credited beat held over 6 s warns `long_third_party_excerpt`,
+  and in a video about a game, sport, creator or show a searched beat over 6 s is cut into ~4 s parts. Fair use is
+  still judged case by case and a rights holder can claim; these rules make the use defensible, not claim-proof.
+- **No graphic violence or nudity, from any source.** YouTube removes graphic violence. Searched footage, uploads
+  (`upload_plan_media`) and linked `url` files are all checked: a dead body, gore, open wounds, blood on a person or
+  nudity is refused, in real footage and in game, film and animated scenes alike (an upload returns 422 with the
+  reason; a refused `url` falls back like a failed download). Gunfire, fights, explosions and chases without blood
+  are fine.
 - **True stories show no stand-ins.** For real events and real people (a documentary, news, a biography) set
   `sense.true_story: true` and list them in `sense.people`. Never search for people (`"father daughter"`,
   `"villagers"`, `"woman crying"`, `"survivor"`): stock returns strangers, and viewers take them for the real family.
