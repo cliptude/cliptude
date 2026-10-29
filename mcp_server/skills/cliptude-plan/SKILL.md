@@ -59,7 +59,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    and again after production to revise it (step 10).
 8. **Produce.** `continue_job`, then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
    sourced and built the video; nothing is rendered yet. The job is charged here, once.
-9. **Review the build, not a render.** Before a build is ready, Cliptude reviews every searched picture itself (logos, other franchises, title cards, strangers in a true story, wrong place or era, fakes, unusable frames) and searches again for the ones that fail; a pick it could not fix shows as an `audit_unfixed` finding. `get_plan_review` returns every picture or clip in order (beat, time, the
+9. **Review the build, not a render.** Before a build is ready, Cliptude reviews every searched picture itself (logos, other franchises, title cards, strangers in a true story, wrong place or era, fakes, unusable frames) and searches again for the ones that fail; a pick it could not fix is dropped (the beat holds a neighbouring shot) and shows as an `audit_unfixed` finding. `get_plan_review` returns every picture or clip in order (beat, time, the
    sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and
    the props it will be drawn with, or why it is missing). `get_plan_report` adds every media request's fallback.
    Look at the media links: a search can return a wrong picture that still counts as found. `used.source` is one of

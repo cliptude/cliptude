@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cliptude-mcp"
-version = "0.1.19"
+version = "0.1.20"
 description = "Cliptude jobs CLI and MCP server (thin client of /api/v1)."
 readme = "README.md"
 requires-python = ">=3.10"
