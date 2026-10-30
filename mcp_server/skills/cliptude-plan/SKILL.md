@@ -71,8 +71,12 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    `how` (an opening figure on a picture, a graphic in every long stretch, sharper queries for fallbacks). Findings
    with `fix_in: "cliptude"` are not yours to change.
    **Then look at every frame yourself — required before you give the user the editor link.** `open_editor_project`
-   for the job, then `view_scenes` from 0 to the end (call again from `next_start_s`). Check every tile, boards'
-   pictures included, against this list and fix each hit in a revision:
+   for the job, then `view_scenes` from 0 to the end (call again from `next_start_s`; when it answers `boards_pending`,
+   call the same `start_s` again a minute later). Boards are drawn as the export draws them, footage and credits
+   included. Check every tile, boards included, against this list and fix each hit in a revision:
+   - **Bare or wrong board:** words on a flat dark plate (`BARE BOARD`; give it a picture or use an overlay), sample
+     or placeholder text, a picture slot left empty, text cut off at the frame edge, or a number drawn differently from
+     the narration ("$3" for 3.2).
    - **Unsafe:** any dead body, gore or injury. Always replace it, however relevant.
    - **Not ours:** another brand's product, a logo or channel bug, album or app art, footage of a game, match, creator or show the video is not about, a title card,
      another publisher's infographic, a webcam frame with a timestamp, big promotional text.
@@ -304,7 +308,8 @@ the presenter seconds you plan.
   `five_step_timeline`: `firstStepText`…`fifthStepText`). Fill those data fields from the narration, not just a
   `headline`: most premium boards never draw `headline`, and any required field left empty renders the component's
   sample data. `check_plan` refuses a premium board missing a required field (`missing_prop`, with the real fields in
-  the hint). Each field's `examples` shows the sample it replaces; ranges and `enum`s are in the schema.
+  the hint). Each field's `examples` shows the sample it replaces, never text to copy: a field set to the board's own
+  sample ("JHON DOE", "Chapter Title") is refused (`sample_text`). Ranges and `enum`s are in the schema.
 - Pictures are never props: ask for them in `media_slots` (step images, portraits, cut-outs fill in order).
 - List fields count too: `internet_search` draws its sample results unless you give `results`
   (`[{title, url, snippet}]`), and charts, maps and lists do the same with `chartData`, `countryValues`,
