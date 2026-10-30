@@ -59,7 +59,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    and again after production to revise it (step 10).
 8. **Produce.** `continue_job`, then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
    sourced and built the video; nothing is rendered yet. The job is charged here, once.
-9. **Review the build, not a render.** Before a build is ready, Cliptude reviews every searched picture itself (logos, other franchises, title cards, strangers in a true story, wrong place or era, fakes, unusable frames) and searches again for the ones that fail; a pick it could not fix is dropped (the beat holds a neighbouring shot) and shows as an `audit_unfixed` finding. `get_plan_review` returns every picture or clip in order (beat, time, the
+9. **Review the build, not a render.** Before a build is ready, Cliptude reviews every picture and clip itself, at frames across each clip and after each cut in it (logos, other franchises, title cards, strangers in a true story, wrong place or era, fakes, unusable frames, sexual or drug content, another creator's on-screen text such as a stream title or username) and searches again for the searched ones that fail; a pick it could not fix is dropped (the beat holds a shot not already beside it) and shows as an `audit_unfixed` finding. Your own uploads and kept files are reviewed too but never searched again: an unsafe one is dropped, any other problem is reported as "kept, your own file" for you to swap or trim with `start_s` / `end_s`. `get_plan_review` returns every picture or clip in order (beat, time, the
    sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and
    the props it will be drawn with, or why it is missing). `get_plan_report` adds every media request's fallback.
    Look at the media links: a search can return a wrong picture that still counts as found. `used.source` is one of
@@ -72,7 +72,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    with `fix_in: "cliptude"` are not yours to change.
    **Then look at every frame yourself — required before you give the user the editor link.** `open_editor_project`
    for the job, then `view_scenes` from 0 to the end (call again from `next_start_s`; when it answers `boards_pending`,
-   call the same `start_s` again a minute later). Boards are drawn as the export draws them, footage and credits
+   call the same `start_s` again a minute later; when it answers `boards_not_drawn`, that page is not reviewed: never pass it, and tell the user if the boards stay undrawn). Boards are drawn as the export draws them, footage and credits
    included. Check every tile, boards included, against this list and fix each hit in a revision:
    - **Bare or wrong board:** words on a flat dark plate (`BARE BOARD`; give it a picture or use an overlay), sample
      or placeholder text, a picture slot left empty, text cut off at the frame edge, or a number drawn differently from
