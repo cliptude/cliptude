@@ -126,7 +126,8 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
   2. Pictures and clips, on the job: `start_media_upload(job, filename, size)` → PUT the parts the same way →
      `finish_media_upload(job, key, upload_id)` → use its `keep` id.
      Uploads with nudity or gore are refused; a clip's result may carry `notes` ("a title card appears by 3.9s: set
-     end_s to 3.4 or earlier", a weapon aimed at someone): trim the beat with `start_s` / `end_s` as they say.
+     end_s to 3.4 or earlier", a weapon aimed at someone). The build cuts past a title card, logo card or black
+     frame (and any fade to black) itself unless you set that edge; a weapon is yours to trim with `start_s` / `end_s`.
   With the CLI or a local MCP server the same uploads are one call: `voiceover_path` / `cliptude plan-job
   --voiceover`, and `upload_plan_media(job, path)` / `cliptude upload-media`. A public https link still works as
   `voiceover_url` or a media `url`. Trim long clips with `start_s` / `end_s`.
