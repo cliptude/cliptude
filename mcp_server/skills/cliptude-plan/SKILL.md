@@ -97,7 +97,8 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    way; give the user the link only when a full pass is clean.
 10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
    `get_narration` still works), then `continue_job` again. Cliptude rebuilds from the new plan, reuses every
-   picture or clip whose request did not change, and charges nothing more. Repeat 9–10 as needed.
+   picture or clip whose request did not change, and charges nothing more. Aim for one revision: see
+   "One pass" below.
 11. **Render once.** `open_editor_project` for the job, then `render_project` for the final MP4.
    `render_project` returns 409 `quality_findings_open` while the build still has `fix_in: "plan"` findings: fix
    them (step 10) and review again. Pass `accept_quality_findings: true` only after trying, or when the user
@@ -106,6 +107,53 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
 CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b`, `plan-check <job> plan.json`,
 `plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,
 `render <project>`.
+
+## One pass: get it right before the first build
+
+Nobody reviews a video nine times. Every item below was a whole rebuild on a real job (Terminator Salvation took
+nine). Run through this list before you lock, and fix in one revision everything a build review finds.
+
+**Before you lock**
+1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
+   `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `slow_pictures`,
+   `long_third_party_excerpt`. Each one is a defect the review will find later.
+2. **A video about a film, game, show or creator shows the real work:** its trailers, scenes, featurettes and
+   behind-the-scenes footage, credited to its studio. It never shows AI stills or real-world stand-ins. When you
+   upload clips, each clip's `notes` say where a title card or a fade starts: set `start_s` / `end_s` inside them.
+   Trailer clips fade and dip to black between shots, so play only the bright part of each one.
+3. **A clip at least as long as its beat.** Measure what is left of the clip (`end_s` - `start_s`) against the
+   beat's time on screen. If the clip is shorter, split the beat with a `phrase` or pick a longer clip. A short clip
+   freezes on its last frame.
+4. **Each file once a minute, each board its own picture.**
+   - The same `query` gives the same picture: five boards that each searched "Los Angeles skyline 2007" drew one
+     still five times. Give every board a different subject.
+   - A board never shows the beat under it or beside it.
+   - Two clips cut from the same trailer moment count as one picture.
+5. **A name card shows that person or nothing.**
+   - Use `{"person": "<name>"}` or the `keep` of their own photo. A frame from a clip almost never shows the person
+     named: a card for a lead actor drew rubble.
+   - If no free photo exists (Wikimedia Commons is the usual source), leave the card's `media` out. The card then
+     draws over the footage under it; make that beat footage of their work.
+   - Never use a lookalike, and never another person's photo.
+6. **No injuries anywhere, boards included.** War, action and horror footage is full of bloodied faces. Give quote
+   and reaction boards a wide shot, a set, a vehicle or a location, not an actor's face in close-up.
+7. **Boards that take no picture:** a type with no `media_slots` in its catalog entry (`timeline_of_events`) gets
+   no `media`. A board with picture slots always gets a picture of its own.
+8. **Third-party footage stays short:** no credited excerpt over about 6 s per beat.
+
+**After the build: one review, one revision**
+- Read `get_plan_review` first. Its `quality_findings` already list every pick the build review dropped
+  (`audit_unfixed`), every board picture it failed (`audit_unfixed: board gN`), held and repeated pictures, and
+  fallbacks. Fix all of them in one revision.
+- Then go through `view_scenes` once, boards included. A board may come back `boards_pending`: call the same
+  `start_s` again a minute later; it is not a reason to rebuild. Write down every problem across the whole video
+  before you change anything, then fix them all in one revision. Never send one fix per rebuild.
+- When you change a picture, check the new one against items 3-6 too: a fix that brings in a repeat costs another
+  build.
+- A pick the build already passed is not judged again, so the next build only reviews what you changed.
+- Over HTTP, `PUT /jobs/{id}/plan` locks only without `?dry_run=1` (the Python client's `put_plan` needs
+  `dry_run=False`). If `continue_job` says "Only a completed script or voiceover job can be continued", the
+  revision was checked but never locked.
 
 ## Render-only (you bring everything)
 
