@@ -89,7 +89,7 @@ MCP tools: `create_plan_job`, `get_narration`, `get_kind_catalog`, `check_plan`,
 `continue_job`, `get_plan_review`, `get_plan_report`, then `open_editor_project` and `render_project`.
 The plan sets the look (theme, style, colours, music), every graphic with its own data, colours and sound, the
 footage under every beat, the transition on each cut, two-image reveals, and free sound effects; `get_kind_catalog`
-lists the graphics, `transitions`, `reveal_styles` and `sounds` (with previews). The plan schema and rules are in
+lists the graphics, `transitions`, `reveal_styles`, `clip_effects` and `sounds` (with previews). The plan schema and rules are in
 `skills/cliptude-plan/SKILL.md`. The job costs the same as the website price.
 
 ### Product videos from a store

@@ -414,10 +414,18 @@ the presenter seconds you plan.
   boards that can sit over a picture; plate them, shorten them or turn some into overlays.
 
 ### Premium boards
-- Catalog entries with `premium: true` (about 190, mostly full-frame boards: maps, data charts, comparisons, lists,
+- Catalog entries with `premium: true` (about 210, mostly full-frame boards: maps, data charts, comparisons, lists,
   timelines, document and article boards) are the newest designs, ported from a premium motion library.
   `get_kind_catalog(premium=true)` / `cliptude catalog --premium` lists only them. Place one with
   `"animation_type": "<type>"`; check its `prop_schema` and `media_slots` like any other type.
+- Subject boards cut the subject out of its picture and draw it over the photo: `outline_pop` (a sticker with a
+  white outline), `text_behind_subject` (a huge word behind the subject; needs `headline`), `color_pop_subject`,
+  `portrait_blur_focus`, `glow_outline_subject`, `magnify_focus_subject`, `subject_parallax` (2.5D depth) and
+  `background_swap_subject` (the subject over 1-3 other places). Give each one picture where one person or object is
+  large and clearly separated from the background; Cliptude makes the cut-out. Picture boards modelled on CapCut
+  image effects: `phone_3d_mockup`, `polaroid_drop`, `filmstrip_roll`, `before_after_slider`, `pop_art_grid`,
+  `grid_puzzle`, `four_cards_grid`, `three_card_spread`, `card_flip_reveal`, `clarity_scan`, `brush_reveal_paper`,
+  `ink_fade_reveal`, `circle_reveal_image`, `glow_reflection` (their `use_when` says when each fits).
 - Each premium board carries its own timed sound cues (several hits matched to its motion). Leave its `sound` unset
   (or `"auto"`) to keep them, even when the plan lists `sfx`. Setting `sound` replaces them with your one sound and
   `"none"` silences it. Listing any `sfx` mutes the sounds Cliptude would add on its own, not your graphics' cues.
@@ -622,8 +630,18 @@ where the narration is about that weather, fire or night sky. A treatment listed
 - `camera` unset: a beat that plays your `url` or a file you uploaded (`keep` from `upload_plan_media`) holds still
   (a finished clip, capture or screenshot is shown as sent); any other beat, a kept file an earlier build found
   included, gets a plain slow move (zoom or pan, never an overlay or frame). `"camera": "none"` holds any beat still.
+- `clip_effect`: one CapCut-style look or camera move on the beat's picture, a `kind` from the catalog's
+  `clip_effects` (or `"none"`). Looks recolour or texture it (`vhs_tape`, `film_reel`, `old_hollywood`, `comic`,
+  `pencil`, `teal_orange`, `bw_cinema`, `neon_edges`…); moves shake or travel across it for the whole beat
+  (`camera_shake`, `retro_zoom`, `push_3d`, `aggressive_pan`, `vertigo_twist`…) or play as it appears
+  (`enter_bounce`, `enter_swing`, `enter_unpixelate`, `enter_drop`…). Use them on a few beats where the line calls
+  for it (home video, an era, a shock, a fun introduction), never on every beat; an unknown name is refused
+  (`unknown_clip_effect`).
 
 ### Cuts and reveals
+- Transitions come in families (zoom punches, spins, shakes, flashes, glitches, blurs, slides, wipes, light leaks,
+  slices and shapes, pixel, `shattered`), each with its own sound: pick by mood (a shake or `shattered` for a shock, a
+  light leak or flash for a memory, a glitch for tech, a zoom punch for energy) and vary them.
 - `transition_in` on a beat is the join on the cut into it: a `slug` from the catalog's `transitions` (e.g. `fade`,
   `film-burn`, `glitch`, `zoom`, `whip-pan`, `wipe-left`, `iris`, `paper-tear`), `"none"` for a hard cut, or `"auto"`
   (the default: Cliptude decides, at about one join per 10–15 s). Not on the first beat. `transition_sound` (a sound
