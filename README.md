@@ -54,7 +54,13 @@ To revise a finished video, `editor` opens its timeline (item ids, times, text),
 On Faceless Documentary, Faceless Top 10, Avatar Video and Vector Explainer templates an agent can plan every visual and leave Cliptude
 only the voicing, sourcing and rendering:
 
-1. `cliptude plan-job` (stops at `plan_ready`), `cliptude narration <job>`.
+1. `cliptude plan-job` (stops at `plan_ready`), `cliptude narration <job>`. Like every job, it answers first with a
+   review of its settings; music, sound effects, transitions, animations and web sources are on by default, and any the
+   template turns off (`no_music`, `no_sound_effects`, `no_transitions`, `no_motion_graphics`, ...) need the user's
+   approval in `--acknowledge`.
+   Your own footage: `cliptude upload-media <job> trailer.mp4 --split-shots` cuts a whole source into checked 3-12 s
+   clips on its cuts and prints their keep ids; each upload's notes say what the build review would report (a
+   watermark, an end screen, captions).
 2. `cliptude catalog --compact`, then `--types a,b` for full entries (`--premium` lists only the premium boards).
 3. `cliptude plan-check <job> plan.json` until valid, `cliptude plan-lock <job> plan.json`, `cliptude continue <job>`.
    The job stops at `ready_for_edit`: built and charged, not rendered.
@@ -64,11 +70,14 @@ only the voicing, sourcing and rendering:
    media reused, nothing more charged.
 6. Render once: `cliptude editor <job>`, `cliptude render <project> --wait`.
 
+Aim for two builds: one to review, one to ship. The skill's "One pass" section has the order of work (footage budget,
+sources split by shot, people's photos first, picture assignment by script, person-card caps).
+
 MCP tools: `create_plan_job`, `get_narration`, `get_kind_catalog`, `check_plan`, `lock_plan`, `get_plan`,
 `continue_job`, `get_plan_review`, `get_plan_report`, then `open_editor_project` and `render_project`.
 The plan sets the look (theme, style, colours, music), every graphic with its own data, colours and sound, the
 footage under every beat, the transition on each cut, two-image reveals, and free sound effects; `get_kind_catalog`
-lists the graphics, `transitions`, `reveal_styles` and `sounds` (with previews). The plan schema and rules are in
+lists the graphics, `transitions`, `reveal_styles`, `clip_effects` and `sounds` (with previews). The plan schema and rules are in
 `skills/cliptude-plan/SKILL.md`. The job costs the same as the website price.
 
 ### Product videos from a store
