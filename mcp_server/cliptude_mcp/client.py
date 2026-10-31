@@ -191,6 +191,16 @@ def _probe_local_video_duration_seconds(path: Path) -> float | None:
     return None
 
 
+def _login_issuer() -> str:
+    """The server the stored browser login belongs to, or ""."""
+    try:
+        from cliptude_mcp.credentials import load_credentials
+
+        return str((load_credentials() or {}).get("issuer") or "").rstrip("/")
+    except Exception:
+        return ""
+
+
 def _resolve_token(explicit: str | None) -> str:
     return (
         (explicit or "").strip()
@@ -297,11 +307,16 @@ class CliptudeClient:
             self.api_key = conn["token"]
             self.runtime = conn["runtime"]
             self.connection_error = conn["error"]
-        # Only a cliptude.com browser login (~/.cliptude/credentials.json) can be refreshed.
-        self._session_file = self.runtime == "cloud" and not bool(
+        # Only a cliptude.com browser login (~/.cliptude/credentials.json) can be refreshed: on the default
+        # cloud target, or when CLIPTUDE_BASE_URL names the server that login came from (its access token
+        # expires within the hour, and every call after that failed "Invalid or revoked API key").
+        explicit_token = bool(
             (api_key or "").strip()
             or (_request_token.get() or "").strip()
             or (os.environ.get("CLIPTUDE_API_KEY") or "").strip()
+        )
+        self._session_file = not explicit_token and (
+            self.runtime == "cloud" or (self.runtime == "custom" and _login_issuer() == self.base_url)
         )
 
     def _headers(self, *, json_content: bool = True) -> dict[str, str]:

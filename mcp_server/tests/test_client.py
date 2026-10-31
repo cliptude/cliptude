@@ -563,3 +563,17 @@ class ProductVideoClientTests(TestCase):
                                     {"product_id": "pid", "angle": 1, "duration": "10-12", "discount_code": "YT15"}))
         self.assertEqual(calls[2], ("POST", "/api/v1/commerce/videos/job/render", {"aspect_ratio": "9:16"}))
         self.assertEqual(calls[3], ("GET", "/api/v1/commerce/videos/job", None))
+
+
+class StoredLoginRefreshTests(TestCase):
+    def test_a_stored_login_refreshes_when_the_base_url_names_its_server(self):
+        # With CLIPTUDE_BASE_URL=https://cliptude.com the hour-old token was never refreshed: "Invalid or revoked API key".
+        import os
+
+        from cliptude_mcp import client as c
+
+        with patch.dict(os.environ, {"CLIPTUDE_API_KEY": ""}), \
+                patch.object(c, "_login_issuer", return_value="https://cliptude.com"), \
+                patch.object(c, "_resolve_token", return_value="tok"):
+            self.assertTrue(c.CliptudeClient(base_url="https://cliptude.com")._session_file)
+            self.assertFalse(c.CliptudeClient(base_url="https://elsewhere.example")._session_file)
