@@ -115,8 +115,13 @@ nine). Run through this list before you lock, and fix in one revision everything
 
 **Before you lock**
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
-   `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `slow_pictures`,
-   `long_third_party_excerpt`. Each one is a defect the review will find later.
+   `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
+   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `slow_pictures`,
+   `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
+   upload (its length, how bright it is, what each part looks like), so these know the same shot cut into two
+   differently named clips, and a clip that is black or a white flash where it plays.
+   **Have enough footage before you build:** `footage_too_thin` means the clips cannot fill the video without
+   looping. Upload more (other trailers, TV spots, featurettes, interviews) rather than reusing.
 2. **A video about a film, game, show or creator shows the real work:** its trailers, scenes, featurettes and
    behind-the-scenes footage, credited to its studio. It never shows AI stills or real-world stand-ins. When you
    upload clips, each clip's `notes` say where a title card or a fade starts: set `start_s` / `end_s` inside them.
@@ -455,6 +460,9 @@ earlier build of this job used. A kept file is never searched again, so change a
 better and, if the new pick is worse, put the old one back with `{"keep": "<id>"}`. Revising keeps an unchanged
 request's file only from the last build; `keep` reaches any build of the job. Picture slots of graphics take `keep`
 wherever they take `url`.
+- **`from`:** on a `keep` or `url` clip from a work the video is not about, name that work (`"from": "Star Trek
+  (2009) trailer"`). `off_topic_footage` warns when it plays under a line that names neither it nor the video's
+  subject (another film's footage passed off as this one's).
 - **Your own files.** A picture or clip you found as a page (not a direct file link) or have on disk: download it, then
   `upload_plan_media(job_id, path)` (CLI `cliptude upload-media <job> <path>`; JPG/PNG/WEBP/GIF up to 15 MB, MP4/MOV/
   WEBM/M4V up to 300 MB). It goes straight to Cliptude's storage on signed URLs (no storage keys needed), is checked to
