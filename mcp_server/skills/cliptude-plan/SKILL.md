@@ -32,7 +32,7 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    nothing: show the user every setting in it (voice, model tier, media sources, animations, charts, overlays,
    transitions, sound effects, music) and every warning and the credits, and ask them to confirm. Then call again
    with `review_token`; for each `acknowledgements_required` item (`no_general_web_content`, `no_video_footage`,
-   `no_motion_graphics`) explain what it costs and pass it in `acknowledge` only after the user approves it.
+   `no_motion_graphics`, `no_music`, `no_sound_effects`, `no_transitions`) explain what it costs and pass it in `acknowledge` only after the user approves it.
    `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
    `prompt` (a brief; Cliptude writes the narration — never the bare title), or `voiceover_path` (audio you already
    have). Needs the full website price in credits; charges only the narration now. Names, places and borrowed
