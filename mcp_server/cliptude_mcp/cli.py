@@ -562,6 +562,8 @@ def main(argv: list[str] | None = None) -> None:
     um = sub.add_parser("upload-media", help="Send a picture or clip you found to a plan job; prints its keep id for media.keep")
     um.add_argument("job_id")
     um.add_argument("path", help="Local JPG/PNG/WEBP/GIF (up to 15 MB) or MP4/MOV/WEBM/M4V (up to 300 MB)")
+    um.add_argument("--split-shots", action="store_true",
+                    help="Also cut a long source into 3-12 s clips on its cuts, each checked and kept (prints their keep ids)")
 
     ed = sub.add_parser("editor", help="Open the timeline editor project for a completed job (prints the timeline)")
     ed.add_argument("job_id")
@@ -795,7 +797,7 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "plan-report":
             _print(client.get_plan_report(args.job_id))
         elif args.cmd == "upload-media":
-            _print(client.upload_plan_media(args.job_id, args.path))
+            _print(client.upload_plan_media(args.job_id, args.path, split_shots=args.split_shots))
         elif args.cmd == "download-voiceover":
             dest = Path(args.out)
             client.download_voiceover_file(args.job_id, dest)

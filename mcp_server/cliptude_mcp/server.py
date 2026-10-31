@@ -973,10 +973,11 @@ def build_server(*, with_http_auth: bool = False):
             str,
             Field(description="Local picture (JPG/PNG/WEBP/GIF, up to 15 MB) or clip (MP4/MOV/WEBM/M4V, up to 300 MB). Stdio / local MCP only: on a remote host (mcp.cliptude.com) use start_media_upload + finish_media_upload, which work from any agent that can run curl."),
         ],
+        split_shots: Annotated[bool, Field(description="For a long source clip (a trailer, featurette, interview): also cut it into clips of 3-12 s that start and end on its cuts, each checked, measured and kept like an upload, with near-black and white-flash parts left out. Returns shots=[{keep, from_s, seconds, notes?}]. Use it instead of cutting clips yourself.")] = False,
     ) -> dict[str, Any]:
-        """Send a picture or clip you found yourself to a plan job. The file goes straight to Cliptude's storage on signed URLs (no storage keys needed) and is checked to be a real picture or video, and for nudity and gore (refused). Returns {keep, file, media_type, size, notes?}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot, with start_s/end_s on a beat to play only part of a clip. notes say where a clip runs into a title or logo card or a weapon aimed at someone: trim it with start_s/end_s as they say."""
+        """Send a picture or clip you found yourself to a plan job. The file goes straight to Cliptude's storage on signed URLs (no storage keys needed) and is checked to be a real picture or video, and for nudity and gore (refused). Returns {keep, file, media_type, size, notes?}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot, with start_s/end_s on a beat to play only part of a clip. notes say where a clip runs into a title or logo card or a weapon aimed at someone (trim it with start_s/end_s as they say), and what the build review will report on the file (a channel watermark, an end screen, captions): use another file then."""
         try:
-            return _client().upload_plan_media(job_id, path)
+            return _client().upload_plan_media(job_id, path, split_shots=split_shots)
         except Exception as exc:
             return _err(exc)
 
@@ -1006,10 +1007,11 @@ def build_server(*, with_http_auth: bool = False):
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID")],
         key: Annotated[str, Field(min_length=1, description="key from start_media_upload")],
         upload_id: Annotated[str, Field(min_length=1, description="upload_id from start_media_upload")],
+        split_shots: Annotated[bool, Field(description="For a long source clip (a trailer, featurette, interview): also cut it into clips of 3-12 s that start and end on its cuts, each checked, measured and kept like an upload, with near-black and white-flash parts left out. Returns shots=[{keep, from_s, seconds, notes?}]. Use it instead of cutting clips yourself.")] = False,
     ) -> dict[str, Any]:
         """Close an upload after every part is PUT. Cliptude checks it is a real picture or video (nudity and gore are refused) and returns {keep, file, media_type, size, notes?}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot (start_s/end_s on a beat to play part of a clip). notes say where a clip runs into a title or logo card or a weapon aimed at someone: trim it as they say."""
         try:
-            return _client().finish_media_upload(job_id, key=key, upload_id=upload_id)
+            return _client().finish_media_upload(job_id, key=key, upload_id=upload_id, split_shots=split_shots)
         except Exception as exc:
             return _err(exc)
 

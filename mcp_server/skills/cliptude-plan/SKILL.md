@@ -124,10 +124,14 @@ this order, and the video needs two builds: one to review, one to ship.
 2. **Gather all the footage first, from several sources per work.** For the subject: 2-4 official trailers, TV
    spots, featurettes and behind-the-scenes. For each other work the narration covers (earlier films, the studio's
    other releases), a trailer each. Interviews for the people.
-   - **Cut by shot, not by length.** Use scene detection (ffmpeg `select='gt(scene,0.3)'` or PySceneDetect), keep
-     shots of 3 s or more, and drop near-black, white-flash, title-card and logo shots. Fixed-length chunks split one
-     shot into several "different" clips that then repeat on screen.
-   - Upload every clip, read every `notes` and keep a table: keep id, the work it is from, playable start/end, length.
+   - **Upload each whole source with `split_shots: true`** (`upload_plan_media(job, path, split_shots=true)`, CLI
+     `upload-media --split-shots`). Cliptude cuts it into 3-12 s clips that start and end on its cuts, checks and
+     measures each, leaves out near-black and white-flash parts, and returns `shots=[{keep, from_s, seconds,
+     notes?}]`. Do not cut clips yourself: fixed-length chunks split one shot into several "different" clips that
+     then repeat, and 4.5 s chunks are too short for the beats a board stretches.
+   - Every upload's `notes` now carry what the build review would report on it (a channel watermark, an end screen,
+     captions, a logo). Drop those clips before planning; a featurette's watermark is on every clip cut from it.
+   - Keep a table: keep id, the work it is from, playable start/end, length.
    - Cliptude measures each upload. Lock a first draft with `check_plan` and read `footage_too_thin` and
      `shot_overused` **now**: if they fire, gather more before writing anything else.
 3. **Get every named person's photo before planning.** List the people a card will name (`sense.people`). For
@@ -136,7 +140,9 @@ this order, and the video needs two builds: one to review, one to ship.
 4. **Assign by script, not by hand.** Write the beats and boards from your clip table with a small script that
    enforces the rules below for every beat at once; hand edits are where repeats and stand-ins come back.
    - Each line's footage comes from the work the line is about; set `from` on clips of other works.
-   - A clip's playable part is at least its beat's length; no shot within 20 s of itself, none more often than
+   - A clip's playable part is at least as long as it stays on screen. A beat a full-frame board nearly covers is
+     hidden and the beat before it plays on underneath and after: `clip_shorter_than_beat` measures that, so a 4 s
+     beat can need a 10 s clip. No shot within 20 s of itself, none more often than
      `shot_overused` allows, 90 s apart.
    - Boards: a picture used by no beat within 30 s and no other board within 60 s. Quote and reaction boards get
      wide shots, sets or vehicles, never a close-up face (action footage is full of bloodied faces).

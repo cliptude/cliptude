@@ -807,8 +807,11 @@ class CliptudeClient:
 
     # Agent-planned videos -------------------------------------------------------------------------
 
-    def upload_plan_media(self, job_id: str, path: str | Path) -> Any:
-        """Send a picture or clip you found to a plan job; returns {keep, file, media_type, size} for media.keep."""
+    def upload_plan_media(self, job_id: str, path: str | Path, *, split_shots: bool = False) -> Any:
+        """Send a picture or clip you found to a plan job; returns {keep, file, media_type, size} for media.keep.
+
+        split_shots: a long source (a trailer, a featurette) is also cut into clips on its cuts, each checked and
+        kept like an upload: shots=[{keep, from_s, seconds, notes?} or {from_s, skipped}]."""
         path = Path(path)
         if not path.is_file():
             raise CliptudeApiError(f"File not found: {path}")
@@ -825,7 +828,7 @@ class CliptudeClient:
         body = {"key": (init or {}).get("key"), "upload_id": (init or {}).get("upload_id")}
         try:
             self._upload_parts(path, init, f"{base}/sign-parts", "media")
-            return self.request("POST", f"{base}/complete", json_body=body)
+            return self.request("POST", f"{base}/complete", json_body={**body, **({"split_shots": True} if split_shots else {})})
         except Exception:
             try:
                 self.request("POST", f"{base}/abort", json_body=body)
@@ -859,8 +862,9 @@ class CliptudeClient:
         """Signed PUT URLs for a picture or clip of a plan job, for a host that sends the bytes itself."""
         return self._start_signed_upload(f"/api/v1/jobs/{job_id}/media", filename=filename, size=size, content_type=content_type)
 
-    def finish_media_upload(self, job_id: str, *, key: str, upload_id: str) -> Any:
-        return self.request("POST", f"/api/v1/jobs/{job_id}/media/complete", json_body={"key": key, "upload_id": upload_id})
+    def finish_media_upload(self, job_id: str, *, key: str, upload_id: str, split_shots: bool = False) -> Any:
+        body = {"key": key, "upload_id": upload_id, **({"split_shots": True} if split_shots else {})}
+        return self.request("POST", f"/api/v1/jobs/{job_id}/media/complete", json_body=body)
 
     def abort_media_upload(self, job_id: str, *, key: str, upload_id: str) -> Any:
         return self.request("POST", f"/api/v1/jobs/{job_id}/media/abort", json_body={"key": key, "upload_id": upload_id})
