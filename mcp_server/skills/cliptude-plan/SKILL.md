@@ -110,8 +110,54 @@ CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b
 
 ## One pass: get it right before the first build
 
-Nobody reviews a video nine times. Every item below was a whole rebuild on a real job (Terminator Salvation took
-nine). Run through this list before you lock, and fix in one revision everything a build review finds.
+Nobody reviews a video nine times, or talks to an agent for two days. Terminator Salvation (a 23-minute film
+documentary) took fifteen builds because every problem was found one build at a time: too little footage, the same
+shot cut into several clips, dark clips, name cards that could not show a photo, boards the build dropped. Work in
+this order, and the video needs two builds: one to review, one to ship.
+
+### The order of work (films, games, shows, real people)
+1. **Budget before you gather.** Runtime minutes × 15 beats (a picture every 4 s) and × 5 graphics. Distinct
+   shots needed: about 0.6 per beat (a shot may play 2-3 times, 90 s apart), each with at least 4-5 s of usable
+   footage. A 23-minute video needs about 200 distinct shots. Count before planning, not after a build.
+2. **Gather all the footage first, from several sources per work.** For the subject: 2-4 official trailers, TV
+   spots, featurettes and behind-the-scenes. For each other work the narration covers (earlier films, the studio's
+   other releases), a trailer each. Interviews for the people.
+   - **Cut by shot, not by length.** Use scene detection (ffmpeg `select='gt(scene,0.3)'` or PySceneDetect), keep
+     shots of 3 s or more, and drop near-black, white-flash, title-card and logo shots. Fixed-length chunks split one
+     shot into several "different" clips that then repeat on screen.
+   - Upload every clip, read every `notes` and keep a table: keep id, the work it is from, playable start/end, length.
+   - Cliptude measures each upload. Lock a first draft with `check_plan` and read `footage_too_thin` and
+     `shot_overused` **now**: if they fire, gather more before writing anything else.
+3. **Get every named person's photo before planning.** List the people a card will name (`sense.people`). For
+   each, find a free photo (Wikimedia Commons: check the licence and keep the credit) and upload it. No free photo:
+   that card becomes a lower third with no `media`, over footage of their work with no faces in it.
+4. **Assign by script, not by hand.** Write the beats and boards from your clip table with a small script that
+   enforces the rules below for every beat at once; hand edits are where repeats and stand-ins come back.
+   - Each line's footage comes from the work the line is about; set `from` on clips of other works.
+   - A clip's playable part is at least its beat's length; no shot within 20 s of itself, none more often than
+     `shot_overused` allows, 90 s apart.
+   - Boards: a picture used by no beat within 30 s and no other board within 60 s. Quote and reaction boards get
+     wide shots, sets or vehicles, never a close-up face (action footage is full of bloodied faces).
+   - **Person cards** draw their own photo. Respect each design's cap, which the build enforces
+     (`over_build_cap` is an error):
+
+     | Design | Cap |
+     |---|---|
+     | `title_name_card_overlay`, `portrait_card`, `portrait_shot`, `name_card_overlay` | 1 per chapter each |
+     | `person_profile_file`, `person_headline`, `id_arrow_cutout` | 2 per video each |
+     | `person_cutout_headline` | about 1 per 6 minutes |
+     | `title_subtitle_lower_third` | 3 per chapter (no photo: name over footage) |
+
+     Never a pointer label (`callout_overlay`, `footage_pointer_tag`) for a person: it shows only the footage
+     under it, so the name lands on whoever is there.
+   - Numbers within the board's range: `large_number_text_overlay` draws up to 999.99, so 1500 is `1.5` with
+     "THOUSAND" in the word (`number_out_of_range`).
+5. **Lock with no picture warnings.** Every warning in the checklist below is a defect the review will find.
+6. **Build once, review once, revise once.** Read `get_plan_review`'s findings, then one `view_scenes` pass over
+   the whole video (boards draw in a few minutes; `boards_pending` means call again, not rebuild). Write down every
+   problem, fix them all in one revision with the same script, and build again. That build ships.
+
+### The checklist
 
 **Before you lock**
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
