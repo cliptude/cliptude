@@ -17,6 +17,27 @@ pip install -e .
 cliptude auth login
 ```
 
+## Cliptude desktop app
+
+The desktop app ships this CLI and MCP server, so nothing needs installing: in the app, open
+**Settings → Connect an AI assistant** and click **Add** for Claude Desktop or Cursor, or copy the
+command for Claude Code or Codex. Videos are then made in the app with your own provider keys.
+ChatGPT only connects to servers on the internet, so it uses cliptude.com.
+
+Where the CLI and MCP send jobs:
+
+| | |
+|---|---|
+| `cliptude use desktop` | the running desktop app (fails with "Open Cliptude" when it is closed) |
+| `cliptude use cloud` | cliptude.com |
+| `cliptude use auto` (default) | the desktop app while it is running, else cliptude.com |
+| `cliptude use` | show where jobs go now |
+
+`CLIPTUDE_TARGET` overrides the saved choice, and `CLIPTUDE_BASE_URL` overrides both. The app's port
+changes every launch: the CLI reads it from `desktop-runtime.json` and its key from `local-api.json`
+in the app's data folder. The desktop gets only that local key and cliptude.com only your cliptude.com
+login. A `CLIPTUDE_API_KEY` in the environment, without `CLIPTUDE_TARGET`, means cliptude.com.
+
 ## Commands
 
 ```bash

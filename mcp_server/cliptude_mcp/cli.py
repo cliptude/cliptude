@@ -174,6 +174,16 @@ def _run_auth(auth_cmd: str) -> None:
         clear_credentials()
         print("Logged out.")
         return
+    from cliptude_mcp.client import resolve_connection
+
+    conn = resolve_connection()
+    if conn["runtime"] == "desktop":
+        if conn["error"]:
+            print(conn["error"], file=sys.stderr)
+            raise SystemExit(1)
+        account = CliptudeClient(client_kind="cli").get_account()
+        print(f"Using the Cliptude desktop app as {account.get('email')} (no cliptude.com login needed).")
+        return
     if not stored_access_token():
         print("Not authenticated. Run: cliptude auth login", file=sys.stderr)
         raise SystemExit(1)
@@ -183,6 +193,19 @@ def _run_auth(auth_cmd: str) -> None:
         _die(exc)
     email = account.get("email") if isinstance(account, dict) else None
     print(f"Logged in{f' as {email}' if email else '.'}")
+
+
+def _run_use(target: str | None) -> None:
+    from cliptude_mcp.client import chosen_target, resolve_connection, save_target
+
+    if target:
+        save_target(target)
+    conn = resolve_connection()
+    where = {"desktop": "the Cliptude desktop app", "cloud": "cliptude.com"}.get(conn["runtime"], conn["base_url"])
+    print(f"Target: {chosen_target()} → {where}" + (f" ({conn['base_url']})" if conn["base_url"] else ""))
+    if conn["error"]:
+        print(conn["error"], file=sys.stderr)
+        raise SystemExit(1)
 
 
 def _review_arg(value: str) -> dict:
@@ -213,6 +236,13 @@ def main(argv: list[str] | None = None) -> None:
     auth_sub.add_parser("login", help="Open a browser and save a local session")
     auth_sub.add_parser("logout", help="Delete the local session")
     auth_sub.add_parser("status", help="Show whether this machine is signed in")
+
+    use = sub.add_parser(
+        "use",
+        help="Make videos in the Cliptude desktop app or on cliptude.com (no argument: show where)",
+    )
+    use.add_argument("target", nargs="?", choices=["desktop", "cloud", "auto"],
+                     help="auto = the desktop app while it is running, else cliptude.com")
 
     t = sub.add_parser("templates", help="List saved templates")
     t.add_argument("--limit", type=int, default=20)
@@ -590,6 +620,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.cmd == "auth":
         _run_auth(args.auth_cmd)
+        return
+    if args.cmd == "use":
+        _run_use(args.target)
         return
     client = CliptudeClient(client_kind="cli")
     try:

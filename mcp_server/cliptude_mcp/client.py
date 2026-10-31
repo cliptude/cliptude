@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import sys
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -26,33 +27,107 @@ def reset_request_token(token):
     _request_token.reset(token)
 
 
-def discover_desktop_base_url() -> str | None:
-    appdata = os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME")
-    candidates: list[Path] = []
-    if appdata:
-        candidates.append(Path(appdata) / "Cliptude" / "desktop-runtime.json")
+TARGETS = ("auto", "desktop", "cloud")
+DESKTOP_NOT_RUNNING = (
+    "The Cliptude desktop app is not running. Open Cliptude, sign in, then try again "
+    "(or run `cliptude use cloud` to make videos on cliptude.com)."
+)
+DESKTOP_NO_KEY = "Sign in to the Cliptude desktop app once so AI assistants can use it, then try again."
+
+
+def desktop_data_dirs() -> list[Path]:
+    """Where the desktop app keeps desktop-runtime.json (same rules as desktop/paths.py)."""
+    override = (os.environ.get("CLIPTUDE_DESKTOP_DATA_DIR") or "").strip()
+    if override:
+        return [Path(override).expanduser()]
     home = Path.home()
-    candidates.append(home / "Library" / "Application Support" / "Cliptude" / "desktop-runtime.json")
-    candidates.append(home / ".cliptude" / "desktop-runtime.json")
-    for path in candidates:
+    if sys.platform == "darwin":
+        return [home / "Library" / "Application Support" / "Cliptude"]
+    if sys.platform.startswith("win"):
+        return [Path(os.environ.get("APPDATA") or home / "AppData" / "Roaming") / "Cliptude"]
+    return [Path(os.environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "cliptude"]
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def discover_desktop() -> dict | None:
+    """{base_url, key} of a running desktop app, or None. The port changes every launch, so
+    this is read on every client; the app answers /api/desktop/health/ when it is really up."""
+    for folder in desktop_data_dirs():
+        runtime = _read_json(folder / "desktop-runtime.json")
+        port = runtime.get("django") or runtime.get("port") or runtime.get("django_port")
+        if not port:
+            continue
+        base_url = f"http://127.0.0.1:{port}"
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except OSError:
-            continue
-        except json.JSONDecodeError:
-            continue
-        port = data.get("port") or data.get("django_port")
-        if port:
-            return f"http://127.0.0.1:{port}"
+            ok = httpx.get(f"{base_url}/api/desktop/health/", timeout=2.0).status_code < 500
+        except httpx.HTTPError:
+            ok = False
+        if ok:
+            key = str(_read_json(folder / "local-api.json").get("key") or "")
+            return {"base_url": base_url, "key": key}
     return None
 
 
-def resolve_base_url() -> str:
+def discover_desktop_base_url() -> str | None:
+    found = discover_desktop()
+    return found["base_url"] if found else None
+
+
+def config_path() -> Path:
+    return Path.home() / ".cliptude" / "config.json"
+
+
+def chosen_target() -> str:
+    """desktop, cloud or auto: CLIPTUDE_TARGET, else `cliptude use`, else auto."""
+    value = (os.environ.get("CLIPTUDE_TARGET") or "").strip().lower()
+    if value not in TARGETS:
+        value = str(_read_json(config_path()).get("target") or "").strip().lower()
+    return value if value in TARGETS else "auto"
+
+
+def save_target(target: str) -> Path:
+    if target not in TARGETS:
+        raise ValueError(f"target must be one of {', '.join(TARGETS)}")
+    path = config_path()
+    data = _read_json(path)
+    data["target"] = target
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def resolve_connection(api_key: str | None = None) -> dict:
+    """Where requests go and with which token: {base_url, token, runtime, error}.
+
+    CLIPTUDE_BASE_URL wins (any token). Otherwise the desktop app when it is chosen, or when it
+    is running and nothing points at the cloud; else cliptude.com. The desktop gets only its own
+    local key and cliptude.com only its own login, so neither token is ever sent to the other."""
     explicit = (os.environ.get("CLIPTUDE_BASE_URL") or "").rstrip("/")
     if explicit:
-        return explicit
-    desktop = discover_desktop_base_url()
-    return desktop or DEFAULT_SAAS_URL
+        return {"base_url": explicit, "token": _resolve_token(api_key), "runtime": "custom", "error": ""}
+    target = chosen_target()
+    # A cloud API key in the environment (without CLIPTUDE_TARGET) has always meant cliptude.com.
+    cloud_key_env = bool((os.environ.get("CLIPTUDE_API_KEY") or "").strip())
+    if target == "desktop" or (target == "auto" and not cloud_key_env):
+        desktop = discover_desktop()
+        if desktop:
+            token = (api_key or "").strip() or desktop["key"]
+            return {"base_url": desktop["base_url"], "token": token, "runtime": "desktop",
+                    "error": "" if token else DESKTOP_NO_KEY}
+        if target == "desktop":
+            return {"base_url": "", "token": "", "runtime": "desktop", "error": DESKTOP_NOT_RUNNING}
+    return {"base_url": DEFAULT_SAAS_URL, "token": _resolve_token(api_key), "runtime": "cloud", "error": ""}
+
+
+def resolve_base_url() -> str:
+    return resolve_connection()["base_url"] or DEFAULT_SAAS_URL
 
 
 def django_proxy_headers(base_url: str) -> dict[str, str]:
@@ -208,18 +283,30 @@ class CliptudeClient:
         timeout: float = 30.0,
         client_kind: str | None = None,
     ):
-        self.base_url = (base_url or resolve_base_url()).rstrip("/")
         # "cli" or "mcp": sent as X-Cliptude-Client so Cliptude records where a job was started.
         self.client_kind = (client_kind or os.environ.get("CLIPTUDE_CLIENT_KIND") or "").strip().lower()
-        self.api_key = _resolve_token(api_key)
         self.timeout = timeout
-        self._session_file = not bool(
+        self.connection_error = ""
+        if base_url:
+            self.base_url = base_url.rstrip("/")
+            self.api_key = _resolve_token(api_key)
+            self.runtime = "custom"
+        else:
+            conn = resolve_connection(api_key)
+            self.base_url = conn["base_url"].rstrip("/")
+            self.api_key = conn["token"]
+            self.runtime = conn["runtime"]
+            self.connection_error = conn["error"]
+        # Only a cliptude.com browser login (~/.cliptude/credentials.json) can be refreshed.
+        self._session_file = self.runtime == "cloud" and not bool(
             (api_key or "").strip()
             or (_request_token.get() or "").strip()
             or (os.environ.get("CLIPTUDE_API_KEY") or "").strip()
         )
 
     def _headers(self, *, json_content: bool = True) -> dict[str, str]:
+        if self.connection_error:
+            raise CliptudeApiError(self.connection_error)
         if not self.api_key:
             raise CliptudeApiError("Not authenticated. Run: cliptude auth login")
         headers = {

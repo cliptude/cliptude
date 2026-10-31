@@ -52,9 +52,11 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
 6. **Write the plan** (schema below), then `check_plan` and fix every error until `valid` is true. Checks are free,
    use no LLM, 60/minute. Plan the boards as carefully as the pictures: a premium board on every fact, date, number,
    place and person the narration states (see "A board for every fact"), about 5 graphics a minute, ~70% of them
-   premium boards covering ~55% of the runtime. Fix `few_graphics`, `few_boards`, `low_board_share`,
-   `slow_opening` and `graphic_gap` like errors: a documentary without them is a slideshow. Other warnings and
-   the scorecard are advice.
+   premium boards covering ~55% of the runtime. `few_graphics`, `few_boards` and `low_board_share` are errors:
+   the plan does not lock until you add the boards (render-only too; see its section for boards that need no
+   picture). Only if the user asked for a light touch, set `"sparse_graphics": true` and they stay warnings. Fix
+   `slow_opening` and `graphic_gap` like errors too: a documentary without them is a slideshow. Other warnings
+   and the scorecard are advice.
 7. **Lock.** `lock_plan` stores it and applies its `look`. You can lock again to replace it until you continue,
    and again after production to revise it (step 10).
 8. **Produce.** `continue_job`, then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
