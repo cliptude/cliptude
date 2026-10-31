@@ -236,7 +236,14 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
 - A board's picture slot draws one image: a clip given there is shown as one frame of it.
 - If a file cannot be loaded at build time the job fails and says which (`RenderOnlyMediaMissing`), instead of
   quietly searching. Boards left without a picture hold the footage under them; nothing is generated.
-- Graphics, overlays, transitions, sound effects and library music work as in any plan; they cost nothing extra.
+- **Plan graphics as in any plan: about 5 a minute, most of them premium boards.** Render-only means you bring the
+  pictures, not that the video has no boards. Boards that draw no picture of their own need no upload: counters
+  (`number_count_overlay`, `large_number_text_overlay`), dates (`date_overlay`), charts (`circle_chart_overlay`,
+  `percentage_bar_chart`), lists and steps (`bullet_point_overlay`, `five_step_timeline`), headings and lower
+  thirds. Give a board with a picture slot one of your uploads, or leave the slot empty and it shows the footage
+  under it. A plan of two minutes or more with no graphics is refused (`no_graphics`) unless the user asked for
+  none (`"no_graphics": true`). Transitions, sound effects and library music work as in any plan; none of
+  this costs anything extra.
 - A beat with your own clip or capture holds still unless you set `camera`.
 - A full-frame or plate-capable board shows the picture of the beat under it (from slightly before it starts) as its
   see-through plate. Don't put a board over a screen capture or any picture with text in it: give boards a clean
