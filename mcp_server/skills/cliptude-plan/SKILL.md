@@ -116,7 +116,7 @@ nine). Run through this list before you lock, and fix in one revision everything
 **Before you lock**
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
    `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
-   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `slow_pictures`,
+   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `person_on_pointer_label`, `slow_pictures`,
    `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
    upload (its length, how bright it is, what each part looks like), so these know the same shot cut into two
    differently named clips, and a clip that is black or a white flash where it plays.
@@ -140,6 +140,9 @@ nine). Run through this list before you lock, and fix in one revision everything
    - If no free photo exists (Wikimedia Commons is the usual source), leave the card's `media` out. The card then
      draws over the footage under it; make that beat footage of their work.
    - Never use a lookalike, and never another person's photo.
+   - Use a person card that draws its own picture (`title_name_card_overlay`, `person_cutout_headline`), never a
+     pointer label (`callout_overlay`, `footage_pointer_tag`): those draw only the footage under them, so a name lands
+     on whoever that footage shows.
 6. **No injuries anywhere, boards included.** War, action and horror footage is full of bloodied faces. Give quote
    and reaction boards a wide shot, a set, a vehicle or a location, not an actor's face in close-up.
 7. **Boards that take no picture:** a type with no `media_slots` in its catalog entry (`timeline_of_events`) gets
