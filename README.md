@@ -61,6 +61,10 @@ only the voicing, sourcing and rendering:
    Your own footage: `cliptude upload-media <job> trailer.mp4 --split-shots` cuts a whole source into checked 3-12 s
    clips on its cuts and prints their keep ids; each upload's notes say what the build review would report (a
    watermark, an end screen, captions).
+   A render-only job (`--render-only`) takes only uploaded files: download each picture or clip and send it with
+   `upload-media` (MCP `upload_plan_media`, or `start_media_upload` + `finish_media_upload` on a remote host), then
+   use its `keep` id. `plan-check` refuses a media `url` there (`render_only_upload_required`): a link to another
+   site can be throttled or expire before the render, and one failed download fails the whole job.
 2. `cliptude catalog --compact`, then `--types a,b` for full entries (`--premium` lists only the premium boards).
 3. `cliptude plan-check <job> plan.json` until valid, `cliptude plan-lock <job> plan.json`, `cliptude continue <job>`.
    The job stops at `ready_for_edit`: built and charged, not rendered.
@@ -98,6 +102,10 @@ cliptude product status <job-id>                                 # until ready_f
 
 MCP tools: `fetch_product_context`, `draft_product_script`, `render_product_video`, `get_product_video_status`.
 None of them waits for a render; poll the status tool. Nothing is published to a store or YouTube unless you ask.
+
+Every video needs a thumbnail reference or brief: `--thumbnail-reference <YouTube link>` (a video whose thumbnail style
+fits; ask the user or search YouTube) or `--thumbnail-prompt`, on the template, the job or `continue`. Cliptude no longer
+guesses one from the title; without one the job is refused (`thumbnail_required`).
 
 `--title` is required. Provide **one** of `--prompt`, `--script` / `--script-file`, `--voiceover`, or `--talking-head`. Never copy the title into `--prompt`. If you only have a topic, follow **cliptude-script** (web search → spoken narration → `--script-file`), or ask Cliptude to write it with `cliptude script`. After a completed `script` or `voiceover` job, `cliptude continue <job-id>` turns that same job into a full video (reuses the script; voiceover jobs reuse the TTS file). `--voiceover` is a local audio file (same as create.html); it is transcribed and skips TTS — do not combine it with prompt/script. `--talking-head` is a presenter video on a Talking Head template (MP4, MOV, WEBM, AVI); it is transcribed and skips TTS. Optional `--duration` is a wizard bucket (`3-4`, `6-8`, `10-12`, …). Omit it to use the template duration, or the word-count estimate when you pass `--script`. Uploaded audio or talking-head video sets duration from the file. Avatar Video templates can override **Avatar Intro Only** and **AI Image + AI Video** with `--avatar-intro-only` / `--no-avatar-intro-only` and `--avatar-ai-footage` / `--no-avatar-ai-footage`. Omit those flags to keep the template. `generate` / `script` / `voiceover` / `continue` return immediately (`queued`). Poll `status`.
 

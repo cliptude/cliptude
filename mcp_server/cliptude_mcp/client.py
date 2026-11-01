@@ -775,9 +775,10 @@ class CliptudeClient:
     def get_job(self, job_id: str) -> Any:
         return self.request("GET", f"/api/v1/jobs/{job_id}")
 
-    def continue_job(self, job_id: str) -> Any:
+    def continue_job(self, job_id: str, *, thumbnail: dict[str, str] | None = None) -> Any:
         """Queue a completed script/voiceover job, or a plan job with a locked plan, as a full video."""
-        return self.request("POST", f"/api/v1/jobs/{job_id}/continue")
+        body = _thumbnail_job_field(thumbnail)
+        return self.request("POST", f"/api/v1/jobs/{job_id}/continue", json_body=body or None)
 
     # Product videos (store products: Shopify, any store page) --------------------------------------
 

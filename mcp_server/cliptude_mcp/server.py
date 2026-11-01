@@ -195,6 +195,9 @@ def build_server(*, with_http_auth: bool = False):
         "Avatar Video templates may include avatar_intro_only "
         "(Avatar Intro Only) and avatar_ai_footage (AI Image + AI Video); pass those "
         "on create_job to override the template, or omit them to keep the template. "
+        "THUMBNAIL: every video needs thumbnail_reference_url (a YouTube video link whose thumbnail style fits: ask the "
+        "user or search YouTube) or thumbnail_prompt, on the template, create_job, create_plan_job or continue_job; "
+        "without one the job is refused (code thumbnail_required). "
         "REVIEW BEFORE EVERY JOB: create_job, create_plan_job, create_script and create_voiceover first return "
         "a review (status 428, detail.review) and create nothing. Show the user every setting in it in plain "
         "words (voice, model tier, media sources incl. general web crawling, animations/motion graphics, charts, "
@@ -318,9 +321,9 @@ def build_server(*, with_http_auth: bool = False):
                     "Avatar Video: avatar_profile_id from list_avatars (gender must match the voice). "
                     "Vector Explainer: vector_character_id from get_template_options (vector_character.choices: "
                     "a built-in id such as nova, or one of the user's uploaded figures); omit it for no character. "
-                    "Optional thumbnail: {reference_url} (a YouTube video link or https image whose style every "
+                    "Thumbnail: {reference_url} (a YouTube video link or https image whose style every "
                     "thumbnail copies) or {custom_prompt} (a standing brief: people, style, branding; each video "
-                    "still sets its own subject and text). Omit it and each job picks a reference for its title."
+                    "still sets its own subject and text). Omit it and every job must pass its own thumbnail_reference_url or thumbnail_prompt."
                 )
             ),
         ],
@@ -556,7 +559,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         thumbnail_reference_url: Annotated[
             str | None,
-            Field(description="A YouTube video link or https image whose thumbnail style to copy for this job (the content still comes from this video). Omit to use the template's; without one, Cliptude picks a reference for the title. Not with thumbnail_prompt."),
+            Field(description="A YouTube video link or https image whose thumbnail style to copy for this job (the content still comes from this video). Required (this or thumbnail_prompt) unless the template has a thumbnail: find a YouTube video whose thumbnail suits this one (ask the user or search YouTube). Cliptude no longer guesses a reference from the title. Not with thumbnail_prompt."),
         ] = None,
         vector_character_id: Annotated[
             str | None,
@@ -705,10 +708,18 @@ def build_server(*, with_http_auth: bool = False):
     )
     def continue_job(
         job_id: Annotated[str, Field(min_length=8, description="Completed script or voiceover job UUID, or a plan job with a locked plan")],
+        thumbnail_prompt: Annotated[
+            str | None,
+            Field(description="This video's thumbnail brief (subject, people, text, style), up to 2000 characters. Not with thumbnail_reference_url."),
+        ] = None,
+        thumbnail_reference_url: Annotated[
+            str | None,
+            Field(description="A YouTube video link or https image whose thumbnail style to copy. Needed (or thumbnail_prompt) when neither the template nor create_job set a thumbnail: find a YouTube video whose thumbnail suits this one (ask the user or search YouTube)."),
+        ] = None,
     ) -> dict[str, Any]:
-        """Queue a completed script or voiceover job, or a plan job whose plan is locked, as a full video on the same id. Poll get_job until completed. Do not create a second job with the script or audio."""
+        """Queue a completed script or voiceover job, or a plan job whose plan is locked, as a full video on the same id. Poll get_job until completed. Do not create a second job with the script or audio. Refused with code thumbnail_required when the video has no thumbnail reference or brief: pass one here."""
         try:
-            return _client().continue_job(job_id)
+            return _client().continue_job(job_id, thumbnail=_thumbnail_arg(thumbnail_prompt, thumbnail_reference_url))
         except Exception as exc:
             return _err(exc)
 
@@ -828,7 +839,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         thumbnail_reference_url: Annotated[
             str | None,
-            Field(description="A YouTube video link or https image whose thumbnail style to copy for this job (the content still comes from this video). Omit to use the template's; without one, Cliptude picks a reference for the title. Not with thumbnail_prompt."),
+            Field(description="A YouTube video link or https image whose thumbnail style to copy for this job (the content still comes from this video). Required (this or thumbnail_prompt) unless the template has a thumbnail: find a YouTube video whose thumbnail suits this one (ask the user or search YouTube). Cliptude no longer guesses a reference from the title. Not with thumbnail_prompt."),
         ] = None,
         vector_character_id: Annotated[
             str | None,

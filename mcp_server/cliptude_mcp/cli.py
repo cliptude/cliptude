@@ -87,8 +87,8 @@ def _add_thumbnail_args(parser: argparse.ArgumentParser, *, scope: str) -> None:
         "--thumbnail-reference",
         default="",
         help=(
-            f"YouTube video link or https image whose thumbnail style {scope} copies. Without a brief or "
-            "reference, each video picks a reference for its own title."
+            f"YouTube video link or https image whose thumbnail style {scope} copies. Videos need a brief or "
+            "reference (here, on the template, or when the job is continued); Cliptude does not guess one."
         ),
     )
 
@@ -475,6 +475,7 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     cont.add_argument("job_id")
+    _add_thumbnail_args(cont, scope="this video")
 
     prod = sub.add_parser(
         "product",
@@ -803,7 +804,7 @@ def main(argv: list[str] | None = None) -> None:
             client.download_voiceover_file(args.job_id, dest)
             _print({"ok": True, "path": str(dest.resolve())})
         elif args.cmd == "continue":
-            _print(client.continue_job(args.job_id))
+            _print(client.continue_job(args.job_id, thumbnail=_thumbnail_from_args(args)))
         elif args.cmd == "product":
             if args.product_cmd == "fetch":
                 _print(client.fetch_product_context(args.url_or_query, store_domain=args.store or None))

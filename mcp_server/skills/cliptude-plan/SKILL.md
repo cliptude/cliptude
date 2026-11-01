@@ -93,7 +93,8 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    - **Stand-ins:** in a true story, any stranger a viewer could take for a real person in it (a face, someone
      acting out the scene), and any other place passed off as the named one.
    - **Held or repeated:** one picture on screen more than about 8 s (a board showing the same picture as the beat
-     under it counts), the same picture twice in a row, an opening with fewer than three pictures in 15 s.
+     under it counts), the same picture twice in a row or coming back across a stretch between boards
+     (`same_picture_run`), an opening with fewer than three pictures in 15 s.
    Fix with a new query that names the story's setting plus `negatives` for what came back, a `phrase` split for a
    held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat. Review the rebuild the same
    way; give the user the link only when a full pass is clean.
@@ -170,8 +171,8 @@ this order, and the video needs two builds: one to review, one to ship.
 **Before you lock**
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
    `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
-   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `person_on_pointer_label`, `slow_pictures`,
-   `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
+   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `person_on_pointer_label`,
+   `person_not_shown`, `slow_pictures`, `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
    upload (its length, how bright it is, what each part looks like), so these know the same shot cut into two
    differently named clips, and a clip that is black or a white flash where it plays.
    **Have enough footage before you build:** `footage_too_thin` means the clips cannot fill the video without
@@ -225,8 +226,9 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
 **15 credits per minute** (`estimate_credits(render_only=true, output="plan", voiceover_seconds=…)` quotes it).
 
 - Needs `output: "plan"` and your own voiceover. `check_plan` then refuses any searched media: every beat and every
-  graphic picture slot is your `url` or `keep` (`render_only_needs_media`), with no `fallback_query`; a plate is
-  `{"beat": true}` or your `url`; and there are no `presenter_windows` (no avatar render; `render_only_no_avatar`).
+  graphic picture slot is a file you uploaded, as `keep` (`render_only_needs_media`), with no `fallback_query`; a media
+  `url` is refused (`render_only_upload_required`): a link to another site can be throttled or expire before the render,
+  and one failed download fails the whole job. A plate is `{"beat": true}`; and there are no `presenter_windows` (no avatar render; `render_only_no_avatar`).
 - **Getting your files to Cliptude.** Upload them; nothing has to be public. From any host, remote MCP included
   (claude.ai, ChatGPT, any agent on `mcp.cliptude.com`) as long as you can run `curl`:
   1. Narration, before the job: `start_voiceover_upload(filename, size)` → PUT each part's bytes to its signed
@@ -240,7 +242,7 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
      frame (and any fade to black) itself unless you set that edge; a weapon is yours to trim with `start_s` / `end_s`.
   With the CLI or a local MCP server the same uploads are one call: `voiceover_path` / `cliptude plan-job
   --voiceover`, and `upload_plan_media(job, path)` / `cliptude upload-media`. A public https link still works as
-  `voiceover_url` or a media `url`. Trim long clips with `start_s` / `end_s`.
+  `voiceover_url`, but not as a media `url`: download each picture or clip and upload it. Trim long clips with `start_s` / `end_s`.
 - A board's picture slot draws one image: a clip given there is shown as one frame of it.
 - If a file cannot be loaded at build time the job fails and says which (`RenderOnlyMediaMissing`), instead of
   quietly searching. Boards left without a picture hold the footage under them; nothing is generated.
@@ -262,7 +264,7 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
   the same stock clips over and over read as cheap.
 - Your voiceover is the soundtrack: the clips you upload play muted.
 - Flow: `create_plan_job(render_only=true, voiceover_url=…)` (or `voiceover_path=…` locally) → `get_narration` →
-  find and link (or upload) your media → write the plan → `check_plan` → `lock_plan` → `continue_job` → review → render.
+  find, download and upload your media → write the plan → `check_plan` → `lock_plan` → `continue_job` → review → render.
 
 ### Finding your own media (render-only)
 Cliptude searches for nothing on these jobs, so the pictures and clips come from you, and you must be allowed to use
@@ -295,8 +297,8 @@ search Storyblocks, Shutterstock, Getty or another site they are signed in to, d
 public-domain photo on an archive page, or capture a frame or screenshot the narration is about. Ask the user before you
 start, work only in accounts and sites they have access to, take each file the site's own way (its download button or
 API, within that license), and stop at a paywall, CAPTCHA or sign-in you do not have rather than getting around it. Then
-send each file to Cliptude: upload it (`upload_plan_media` / `cliptude upload-media`) or, on a remote host, give a public
-link (`url`). Note in your summary where each picture came from, so the user can credit it.
+send each file to Cliptude: upload it (`upload_plan_media` / `cliptude upload-media`, or `start_media_upload` +
+`finish_media_upload` on a remote host). Note in your summary where each picture came from, so the user can credit it.
 
 ## Pricing
 
@@ -588,6 +590,11 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   `sense.true_story: true` and list them in `sense.people`. Never search for people (`"father daughter"`,
   `"villagers"`, `"woman crying"`, `"survivor"`): stock returns strangers, and viewers take them for the real family.
   Show a real person only by naming them (`media.person`) or with their own photo (`url`, `keep`, an upload).
+  Show each person the narration keeps naming at least once, by name (`person_not_shown`): a name card or portrait
+  board with `person`, the unidentified one too (a police sketch, a wanted poster).
+  Before about 1960, `"typed letter 1940s"` returns modern stock: ask for an archive photograph of a named place,
+  unit, machine or event (`"de Havilland Hatfield factory 1942"`, `"Latchmere House"`) with `"modern"` in
+  `negatives`, and reuse the few real pictures with `keep` rather than fill with modern stand-ins.
   On their lines show their place (named, or real footage of it), objects (a lamp, a door, an empty bed), hands,
   the sky, a map pin, and their words on a quote board. Where the narration names a place, show that place, never
   a lookalike (another lake for Lake Nyos). Generic subjects belong only on general lines (gas, pressure, bubbles).
@@ -698,7 +705,7 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   `vector_stills_mode`). Drawn beats get camera moves only; set `treatment` on a beat to add grain, light leak etc.
   Boards are drawn full screen, never as an inset card on a drawing: leave `plate` out (`check_plan` warns
   `vector_beat_plate`), and a beat that full-screen boards cover from start to end gets no drawing of its own.
-- Vector Explainer, render-only: `render_only` works as for other formats. Bring every picture (`url` / `keep`,
+- Vector Explainer, render-only: `render_only` works as for other formats. Bring every picture (uploaded, as `keep`,
   ideally flat vector art in one style) and the voiceover; nothing is drawn or animated whatever
   `vector_reveal_mode` says, the vector look (tone pack, theme, camera-only treatment) still applies, and since
   the pictures are yours, photo boards are allowed again.
