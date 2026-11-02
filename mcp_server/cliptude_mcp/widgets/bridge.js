@@ -332,20 +332,43 @@ var UI = (function () {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { el.classList.remove("show"); }, 3200);
   }
-  /** Send a choice to the chat. If the host refuses ui/message, keep it in model context and say so. */
+  /** Save a choice for the agent without writing in the user's message box.
+   *  Claude shows "Use caution before running this prompt" on any message an app drafts (ui/message), which
+   *  reads as if Cliptude were up to something. So the choice goes into model context (ui/update-model-context)
+   *  and the widget asks the user to type "next". ChatGPT has no model context for apps and no such warning, so
+   *  there (and wherever saving fails) the choice is sent as a message, as before. */
   function choose(text, structured) {
+    if (Cliptude.state.openai) return sendAsMessage(text);
+    return Cliptude.updateModelContext(text, structured).then(function () {
+      saved(text);
+      return true;
+    }).catch(function () { return sendAsMessage(text); });
+  }
+  function sendAsMessage(text) {
     return Cliptude.sendMessage(text).then(function () {
       toast("Sent to the chat.");
       return true;
     }).catch(function () {
-      return Cliptude.updateModelContext(text, structured).then(function () {
-        toast("Saved. Tell Claude to continue and it will use your choice.");
-        return true;
-      }).catch(function () {
-        toast("Copy this into the chat: " + text);
-        return false;
-      });
+      toast("Copy this into the chat: " + text);
+      return false;
     });
+  }
+  /** A note that stays until the next choice: what was saved, and how to go on. */
+  function saved(text) {
+    var note = document.getElementById("saved-note");
+    if (!note) {
+      note = h("div", { id: "saved-note", class: "saved-note", role: "status", "aria-live": "polite" });
+      var app = document.querySelector(".app") || document.body;
+      app.appendChild(note);
+    }
+    clear(note);
+    note.appendChild(h("strong", {}, ["Saved. "]));
+    note.appendChild(document.createTextNode("Type "));
+    note.appendChild(h("kbd", {}, ["next"]));
+    note.appendChild(document.createTextNode(" in the chat to continue."));
+    note.appendChild(h("span", { class: "saved-what" }, [text]));
+    try { note.scrollIntoView({ block: "nearest" }); } catch (e) {}
+    if (Cliptude.reportSize) Cliptude.reportSize();
   }
   function status(el, text, kind) {
     clear(el).appendChild(h("div", { class: "status " + (kind || ""), role: kind === "error" ? "alert" : "status" }, [text]));
