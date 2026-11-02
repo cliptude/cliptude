@@ -97,7 +97,8 @@ BOUND_TOOLS: dict[str, str] = {
 
 # Tools a widget calls itself (tools/call). ChatGPT wants openai/widgetAccessible on them.
 WIDGET_CALLED_TOOLS: frozenset[str] = frozenset({
-    *REVIEW_TOOLS, "list_avatars", "design_voice_previews", "save_designed_voice", "clone_voice", "show_publish_kit",
+    *REVIEW_TOOLS, "list_avatars", "list_templates", "upload_vector_character", "design_voice_previews", "save_designed_voice",
+    "clone_voice", "show_publish_kit",
 })
 
 # ChatGPT's short status lines while a widget tool runs and after (openai/toolInvocation/*, at most 64 chars).

@@ -8,6 +8,7 @@
 /*@BASE_CSS@*/
 .card { cursor: default; }
 .card .thumb { aspect-ratio: 16 / 9; }
+.card .thumb.character img { object-fit: contain; background: #fff; }
 .tile { width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 10px; color: #fff; font-weight: 700; font-size: 15px; }
 .card .body .chips { margin-top: 2px; }
 .card .actions { padding: 0 10px 10px; margin-top: auto; }
@@ -40,7 +41,12 @@
 
   function card(t) {
     var pic;
+    // Avatar Video and Vector Explainer cards show their presenter or character; other formats a coloured tile.
     if (t.format === "avatar_video" && t.avatar_preview_url) pic = UI.img(t.avatar_preview_url, "", UI.initials(t.avatar_name || t.name));
+    else if (t.format === "vector_explainer" && t.character_preview_url) {
+      pic = UI.img(t.character_preview_url, "", UI.initials(t.character_name || t.name));
+      pic.classList.add("character");
+    }
     else pic = h("span", { class: "thumb" }, [h("span", { class: "tile", style: { background: "linear-gradient(150deg, " + (TILE[t.format] || "#444, #111") + ")" } },
       [t.format_label || t.format || ""])]);
     var chips = [t.duration ? t.duration + " min" : "", t.aspect_ratio || "", LIVE[t.format] ? "" : "Retired format"]
@@ -50,7 +56,7 @@
       h("span", { class: "body" }, [
         h("span", { class: "name" }, [t.name || "Untitled"]),
         h("span", { class: "muted" }, [(t.format_label || t.format || "") + (t.voice_name ? " · " + t.voice_name : "") +
-          (t.avatar_name ? " · " + t.avatar_name : "")]),
+          (t.avatar_name ? " · " + t.avatar_name : "") + (t.character_name ? " · " + t.character_name : "")]),
         chips.length ? h("span", { class: "chips" }, chips) : null
       ]),
       h("span", { class: "actions" }, [h("button", { type: "button", class: LIVE[t.format] ? "primary" : "",
@@ -65,15 +71,33 @@
     var hidden = rows.length - live.length;
     var shown = showAll ? rows : live;
     all.hidden = hidden === 0;
-    all.textContent = showAll ? "Live formats only" : "Show all (" + hidden + " more)";
+    all.textContent = showAll ? "Hide retired formats" : "Show retired formats (" + hidden + ")";
     all.setAttribute("aria-pressed", String(showAll));
     var total = data.count || rows.length;
-    document.getElementById("count").textContent = total > rows.length ? rows.length + " of " + total : rows.length + " saved";
+    document.getElementById("count").textContent = shown.length + " shown" + (total > rows.length ? " · " + total + " saved" : "");
     if (!rows.length) { UI.status(content, "No templates yet. Ask Claude to make one: it walks you through the voice, look and music."); return; }
     if (!shown.length) { UI.status(content, "None of your templates uses a format Cliptude makes today. Show all to see them, or ask Claude to make a new one."); return; }
     var grid = h("div", { class: "grid wide", role: "list" });
     shown.forEach(function (t) { grid.appendChild(card(t)); });
     UI.clear(content).appendChild(grid);
+    if (total > rows.length && Cliptude.canCallTools()) {
+      content.appendChild(h("div", { class: "toolbar" }, [h("button", { type: "button", onclick: loadMore }, ["Load more templates"])]));
+    }
+  }
+
+  function loadMore(event) {
+    var button = event.currentTarget;
+    button.disabled = true;
+    var rows = data.results || [];
+    Cliptude.callTool("list_templates", { offset: rows.length, limit: 50 }).then(function (more) {
+      var seen = {};
+      rows.forEach(function (t) { seen[t.id] = true; });
+      ((more && more.results) || []).forEach(function (t) { if (!seen[t.id]) rows.push(t); });
+      data.results = rows;
+      if (more && more.count) data.count = more.count;
+      render();
+      Cliptude.reportSize();
+    }).catch(function () { button.disabled = false; UI.toast("Could not load more templates."); });
   }
 
   all.addEventListener("click", function () { showAll = !showAll; render(); });
