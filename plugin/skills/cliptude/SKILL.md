@@ -1,0 +1,112 @@
+---
+name: cliptude
+description: Generate Cliptude videos from a saved template using the cliptude CLI or MCP. Use when the user wants a video from a topic, a custom script, an uploaded voiceover file, or a talking-head recording (same as create.html). If they asked only for a script or only for narration audio, use create_script / cliptude script or create_voiceover / cliptude voiceover instead of create_job. To turn that completed job into an MP4, use continue_job / cliptude continue (same job id). If they only gave a topic or title for a video, follow cliptude-script first — never pass the title as --prompt. If they have narration audio, pass --voiceover / voiceover_path and skip cliptude-script. If they have a presenter video, pass --talking-head / talking_head_path with a Talking Head template.
+---
+
+# Cliptude video generation
+
+**Want to direct every visual yourself** (theme, colours, every motion graphic and its text and timing, the search
+query, person or URL behind every shot)? On a Faceless Documentary, Faceless Top 10 or Avatar Video template, follow
+**cliptude-plan**: `create_plan_job` → `get_narration` → `get_kind_catalog` → `check_plan` → `lock_plan` →
+`continue_job` → `get_plan_review` (revise on the same job if needed) → `render_project`. Cliptude then only voices,
+sources and renders your plan.
+
+Style lives in a **saved template** (voice, model, format). Either the user finishes the Cliptude wizard once and clicks **Save as template**, or you create one with `cliptude template-create` / MCP `create_template` (see `template-options` / `get_template_options` for fields and `voices` / `list_voices` for voice_id).
+
+## Before generate — prompt vs script vs voiceover vs talking head
+
+Same modes as create.html. **Exactly one narration source.** Prompt and script may be sent together (script is voiced; prompt is extra context). A voiceover or talking-head file cannot be combined with prompt, script, or each other.
+
+**Never pass the video title as `--prompt` / `prompt`.** Production researches the topic, then writes narration. Copying the title into prompt skips that and yields a thin video.
+
+| User gave you… | Do this |
+|---|---|
+| Topic or title only (“make a video about X”), any format | Follow **cliptude-script**: web-search, write spoken narration, show the user the script to review, then `--script-file` / `script`. **Faceless Documentary, Faceless Top 10, Avatar Video and Vector Explainer: plan the video yourself by default** (`create_plan_job` with `script`, then follow **cliptude-plan**); use `create_job` only when the user asks Cliptude to plan the visuals or in the Desktop app |
+| Full narration they want voiced | `--script` / `--script-file` as-is (spoken words only) |
+| Explicit “let Cliptude write the script” | `--prompt` = a **brief** (audience, angle, must-include facts) — not the title |
+| A voiceover audio file (MP3, M4A, WAV, …) | `--voiceover path` / MCP `voiceover_path`, or a public link as `--voiceover-url` / `voiceover_url` (remote hosts cannot send a local file). Cliptude transcribes it and skips TTS. Do not also pass `--prompt` or `--script`. Do not run **cliptude-script**. Duration comes from the file, which must be at least 6 minutes long. |
+| A talking-head presenter video (MP4, MOV, WEBM, AVI) | `--talking-head path` / MCP `talking_head_path` with a **Talking Head** template. Cliptude transcribes it and skips TTS. Do not also pass `--prompt`, `--script`, or `--voiceover`. Do not run **cliptude-script**. Duration comes from the file, which must be at least 6 minutes long. |
+
+Read `../cliptude-script/SKILL.md` before `generate` / `create_job` when the user did not paste a script **and** did not give a voiceover or talking-head file.
+
+## Auth
+
+```bash
+npm i -g @cliptude/cli
+cliptude auth login
+```
+
+Or `export CLIPTUDE_API_KEY='clp_…'` from /developers/. Never commit keys.
+
+## Commands
+
+```bash
+cliptude templates
+cliptude estimate --template "Finance vector weekly" --script-file script.txt
+cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt --duration 6-8
+cliptude generate --template "Finance vector weekly" --title "Why index funds win" --prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" --duration 6-8
+cliptude generate --template "Finance vector weekly" --title "Why index funds win" --voiceover narration.mp3
+cliptude generate --template "My talking head" --title "Weekly recap" --talking-head clip.mp4
+cliptude generate --template "My avatar weekly" --title "Grandma egg trick" --script-file script.txt --avatar-ai-footage --avatar-intro-only
+cliptude script --template "Finance vector weekly" --title "Why index funds win" --prompt "why most retail traders underperform the S&P" --duration 6-8
+cliptude voiceover --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt
+cliptude continue <job-id>
+cliptude status <job-id>
+cliptude jobs
+cliptude account
+```
+
+`generate` returns immediately (`queued`). Poll `status` until `completed` or `failed`. Jobs take 10–40 minutes. Do not block waiting for the MP4.
+
+If the user asked **only for a script** or **only for narration audio**, use `cliptude script` / MCP `create_script` or `cliptude voiceover` / MCP `create_voiceover`. Do not call `create_job`. Poll `get_job` until `completed`, then read `script` or `voiceover.url`. If they then want the MP4, call `cliptude continue` / MCP `continue_job` on that job id (`can_continue` is true). Do not start a second job.
+
+If `templates` is empty, or none fits the video, create one: `get_template_options` (CLI `template-options`) for the format's fields and defaults, `list_voices` (CLI `voices`) for a voice, then `create_template` (CLI `template-create`) with the user's preferences. Set only the fields the user asked about and leave the rest at their defaults: every field in `get_template_options` has a `description` saying what turning it on or off does. Never switch a media source off to be "safe": `source_general_web_crawling` off removes YouTube, the main source of real footage, and `enable_broll_stock_footage` off removes video clips entirely; both turn most pictures into AI stills. `create_template` returns `warnings` for choices like these: tell the user each one and what it costs, and change it unless they confirm. Send the user to the wizard only if they want to pick the look themselves.
+
+Thumbnails: every video needs a thumbnail reference or brief; Cliptude no longer guesses one from the title (those made poor thumbnails), and a job without one is refused with code `thumbnail_required`. Ask the user for a YouTube video whose thumbnail they like, or search YouTube yourself for a well-made thumbnail in this video's niche, and share its link. To set the channel's look, put `thumbnail: {reference_url}` (a YouTube video link or image) or `thumbnail: {custom_prompt}` (people, style, branding; never one video's subject or text) in `create_template` settings (CLI `--thumbnail-reference` / `--thumbnail-prompt`). For one video's own thumbnail idea, pass `thumbnail_prompt` (or `thumbnail_reference_url`) on `create_job` / `create_plan_job` (CLI `--thumbnail-prompt` / `--thumbnail-reference` on `generate` and `plan-job`). A script or voiceover job picks its thumbnail when continued: pass the same on `continue_job` (CLI `continue --thumbnail-reference`).
+
+Custom script formatting: spoken words only (no Scene 1, no [Music plays]). See https://cliptude.com/docs/custom-script/
+
+Optional `--duration` (`6-8`, `10-12`, `18-20`, …; videos start at 6 minutes) overrides the template. Without it, prompt jobs use the template duration and script jobs estimate from word count. `--voiceover` and `--talking-head` ignore `--duration` (length comes from the file; an upload under 6 minutes is refused, like a script under 880 words). MCP: `create_job(..., voiceover_path="/abs/path/narration.mp3")` or `talking_head_path="/abs/path/clip.mp4"` — local stdio only; remote hosts should use the CLI.
+
+**Every job is reviewed first.** `create_job`, `create_plan_job`, `create_script` and `create_voiceover` (CLI `generate`, `plan-job`, `script`, `voiceover`) answer the first call with a review (status 428, `detail.review`) and create nothing. Show the user, in plain words, every setting in `review.settings` — the voice (name and ElevenLabs id), model tier, media sources (general web crawling, stock, archives), animations and motion graphics, charts, overlays, transitions, sound effects, music, A-roll — plus `review.warnings` and `review.credits`, and ask them to confirm. Then call the same tool again with the same arguments and `review_token` (CLI `--review-token`). Each item in `acknowledgements_required` needs the user's explicit approval after you explain it: `no_general_web_content` (General Web Crawling is off: no YouTube or general web content, so many pictures become AI stills and the video can look much worse), `no_video_footage`, `no_motion_graphics`, and `no_music`, `no_sound_effects`, `no_transitions` (music, sound effects and transitions are on by default; a template that turns one off makes the video silent or cut-only). Pass approved ids in `acknowledge` (CLI `--acknowledge`); never approve one yourself, and prefer fixing the template. A changed template or request needs a new review. In a terminal the CLI shows the review and asks.
+
+Before a long or costly job, or when the user asks what it will cost, call `estimate_credits` (CLI `estimate`) with the same template and prompt/script (an upload as `voiceover_seconds`). It uses the same pricing as `create_job`, creates nothing and returns `credits_required`, `credits_available` and `enough_credits`. An uploaded voiceover bills at the lowest voice rate.
+
+402 = not enough credits, code `insufficient_credits` (nothing queued, nothing lost). Tell the user the shortfall (`detail.credits_required`, `detail.credits_available`, `detail.shortfall`) and the link in `detail.billing_url`; once they add credits, make the same call again (for a script, voiceover or plan job that is `continue_job` on the same job id). 403 = need a paid plan (SaaS).
+
+Model tier (`generation_model`): `high` is **Cinder**, still pictures and motion graphics only, no video clips; `pro` is **Caldera**, which adds sourced video clips. Use `pro` whenever the video should have moving footage.
+
+Vector Explainer can carry a recurring character. `list_vector_characters` (CLI `vector-characters`) returns the built-in cast (Nova, Kai, Mira, …, with preview images) and the user's own uploads. Put an id in `create_template` settings as `vector_character_id`, or pass `vector_character_id` on `create_job` / `create_plan_job` (CLI `--vector-character`) for one video.
+
+Motion: `vector_reveal_mode` sets how the drawings move. `"none"` (default) keeps each drawing still and moves the camera across it (Ken Burns push, pan, tilt); `"video"` turns every picture beat into a short AI clip and costs more. Set it in `create_template` settings, or per video on `create_job` / `create_plan_job` / `estimate_credits` (CLI `--vector-motion none|video`). Quote the price with `estimate_credits` before switching to video.
+
+To add the user's own character, `upload_vector_character` (CLI `vector-character-upload --name … --file …` or `--url …`) with a picture they gave you, or one you made: one full-body, front-facing character in flat vector style on a plain or transparent background, 1024 px or more, no text. If you made it, show it to the user and upload only after they approve it. The upload returns the id to use; it also appears in the Cliptude wizard. `delete_vector_character` removes one the user no longer wants (refused while a template uses it).
+
+Avatar Video needs an avatar: `list_avatars` (CLI `avatars`, `--section mine` for the user's own) gives ids. Put one in `create_template` settings as `avatar_profile_id` with a voice of the same gender, or pass `avatar_profile_id` (CLI `--avatar`) on `create_job` to use a different avatar for one video. Before `create_template`, `create_job` or `create_plan_job`, show the user the avatar's `thumbnail_url` and name and wait for them to confirm it is the presenter they want: names repeat across avatars, and the avatar is rendered and paid for. A portrait photo avatar fills only the middle of a 16:9 frame; tell the user.
+
+Avatar Video templates store **Avatar Intro Only** and **AI Image + AI Video**. `list_templates` / `get_template` include `avatar_intro_only` and `avatar_ai_footage` for that format. Override per job with `--avatar-intro-only` / `--no-avatar-intro-only` and `--avatar-ai-footage` / `--no-avatar-ai-footage` (MCP: `avatar_intro_only`, `avatar_ai_footage`). Omit to keep the template. Other formats reject those fields.
+
+## Product videos from a store (Shopify, any store page)
+
+When the user wants a video that sells a product, make an educational video that earns its views and presents the product at the end:
+
+1. `fetch_product_context` (CLI `cliptude product fetch <url>`) with the product page URL. Any Shopify or WooCommerce store works with no setup (WooCommerce through its public Store API); other stores (Etsy, …) work through the page's structured data; a store the user connected on cliptude.com (or that installed the Cliptude Shopify app) also takes a product id, handle, or a search term with `store_domain`. It returns `product_id`, the product facts and real image URLs, and 3 educational angles.
+2. Show the user the 3 angles and ask which one, the length (`6-8`, `10-12`, `18-20`, `30-40` or `50-60` minutes), whether they have a discount code, and whether they want to feature up to 3 real customer reviews (pass them word for word as `reviews`; this enables the review card). Never invent a code, review, rating or spec.
+3. **Write the script yourself (the default).** Research the chosen angle with web search (current, sourced facts; follow **cliptude-script** for the voice and length) and write the narration: about 80% teaching, a bridge, and the product in the last ~20%, using only facts from `fetch_product_context` (real price and what it is; never an invented review, discount or claim). Show the user the script and get their OK, then `draft_product_script(product_id, angle, duration, script, discount_code?)` (CLI `cliptude product script --script-file narration.txt`): the job is `script_ready` at once and nothing is charged until the build. Only when the user asks Cliptude to write the script, leave `script` out and poll `get_product_video_status` until `stage` is `script_ready`, then show the user that script. The closing offer tells viewers to scan the on-screen QR code or use the link in the description or the pinned comment; the narration names no other brand, and any subscribe ask comes only at the very end.
+3b. **Plan it yourself (the default on Faceless Documentary, Top 10 and Avatar Video templates).** Pass `plan: true` to `draft_product_script` (CLI `--plan`; the MCP tool defaults to it). Cliptude voices the script and the job stops at `plan_ready`. Plan it as in **cliptude-plan**: `get_narration` gives every sentence's timing plus a `product` section (`json`: the product facts, photo URLs and QR link; `instructions`: the rules for `product_hero_showcase`, `feature_callout_pointers`, `offer_cta_end_card`, `shop_qr_overlay` and the comparison and review boards). Every product picture is a `url` from `product_image_urls`, never searched. `check_plan` until valid (it refuses a plan missing a core product board), `lock_plan`, then step 4. Use `plan: false` only when the user asks Cliptude to plan the visuals.
+4. After the user approves the script (and, with `plan`, once the plan is locked), `render_product_video(job_id, aspect_ratio)` (CLI `cliptude product render`). It returns at once and starts the **build**, not the final MP4; tell the user the video is being built. Poll `get_product_video_status` every few minutes. Cliptude plans the visuals and composites the merchant's real product photos into the closing product boards (hero, feature callouts, comparison table, review card when reviews were given, offer end card) without altering them, and puts a scan-to-shop QR code of the product link in a corner from the first product mention to the end (with or without a discount code).
+5. At `ready_for_review`, review the built video yourself first: `open_editor_project`, then `view_scenes(project_id)` from the start, calling again from `next_start_s` until the end (contact sheets of every picture, clip frame and graphic with its words; the media links may not open for you). Check every picture and graphic is present and fits the narration, no other brand's products or logos (look hardest at the product part: shop shelves, fridges and race banners carry other brands, and so can a board's background picture), no offensive or off-topic text on screen, no named athletes or celebrities, no leftover sample text, the product photos and QR code at the end and fix or report problems. Then give the user `editor_url` to preview and wait for their go-ahead. Only after they approve, render the MP4 with `render_project` + `get_render`.
+6. When the MP4 is ready, give the user `shop_link` from `get_product_video_status` (the same tracked link as the QR code) and tell them to paste it in the YouTube description and pin a comment with it, because the narration sends viewers there.
+7. Publishing to the store (blog article, product media) or YouTube happens only when the user explicitly asks.
+
+## Review, revise and render a finished video
+
+When a job completes you can take the video to final yourself:
+
+1. **Review.** Download `output.url`, sample frames (e.g. `ffmpeg -i video.mp4 -vf fps=1/10,scale=640:-1 frame_%03d.jpg`) and check them against the script: wrong or generic footage, unreadable text, mistimed overlays, music too loud.
+2. **Open the timeline.** `cliptude editor <job-id>` (MCP `open_editor_project`) returns the project id and each item as `{id, type, start_s, end_s, text}`. Map every problem to the item ids at that timestamp.
+3. **Edit.** One focused fix per run: `cliptude agent <project-id> --prompt "..." --items <ids> --wait` (MCP `run_agent`, then poll `get_agent_run`). One run at a time per project. `failed` or `conflict` → rephrase or retry; do not stack requests.
+4. **Check.** Render a draft (`cliptude render <project-id> --wait`, MCP `render_project` + `get_render`) and review it like step 1. Repeat until the video meets the bar the user set.
+5. **Finish.** Render the final and give the user `output_url`. Stop at the user's round or credit limit even if minor issues remain, and list them.
+
+Agent runs and renders charge credits.

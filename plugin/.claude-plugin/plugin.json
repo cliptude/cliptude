@@ -3,13 +3,23 @@
   "displayName": "Cliptude",
   "version": "1.0.0",
   "description": "Make 6–60 minute faceless YouTube videos from Claude: research and write the narration, plan every visual, then let Cliptude voice, source footage and render a 16:9 MP4 on your Cliptude account.",
-  "author": { "name": "Cliptude", "email": "support@mg.cliptude.com", "url": "https://cliptude.com" },
+  "author": {
+    "name": "Cliptude",
+    "email": "support@mg.cliptude.com",
+    "url": "https://cliptude.com"
+  },
   "homepage": "https://cliptude.com/docs/",
   "repository": "https://github.com/cliptude/cliptude",
   "license": "MIT",
-  "keywords": ["video", "youtube", "faceless", "documentary", "voiceover", "mcp"],
+  "keywords": [
+    "video",
+    "youtube",
+    "faceless",
+    "documentary",
+    "voiceover",
+    "mcp"
+  ],
   "icon": "./logo.png",
-  "skills": "./mcp_server/skills/",
   "documentationUrl": "https://cliptude.com/docs/",
   "supportUrl": "https://cliptude.com/docs/",
   "privacyPolicyUrl": "https://cliptude.com/privacy/",
