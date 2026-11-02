@@ -20,6 +20,9 @@ from cliptude_mcp.credentials import stored_access_token
 DEFAULT_SAAS_URL = "https://cliptude.com"
 TALKING_HEAD_EXTS = {".mp4", ".mov", ".webm", ".avi"}
 _request_token: ContextVar[str | None] = ContextVar("cliptude_request_token", default=None)
+# The MCP tool being run: sent as X-Cliptude-Tool so Cliptude's API call log (videos/api_call_log.py) says which
+# tool made each request. Set by server.name_tool_calls.
+current_tool: ContextVar[str | None] = ContextVar("cliptude_current_tool", default=None)
 
 
 def set_request_token(token: str | None):
@@ -402,6 +405,9 @@ class CliptudeClient:
         }
         if self.client_kind:
             headers["X-Cliptude-Client"] = self.client_kind
+        tool = current_tool.get()
+        if tool:
+            headers["X-Cliptude-Tool"] = tool
         if json_content:
             headers["Content-Type"] = "application/json"
         return headers

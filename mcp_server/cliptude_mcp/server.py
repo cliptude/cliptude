@@ -1541,7 +1541,46 @@ def build_server(*, with_http_auth: bool = False):
             "pass them on create_job to override the template."
         )
 
+    name_tool_calls(mcp)
     return mcp
+
+
+def name_tool_calls(mcp) -> int:
+    """Wrap every registered tool so the API requests it makes carry X-Cliptude-Tool (client.current_tool)."""
+    import functools
+    import inspect
+
+    from .client import current_tool
+
+    manager = getattr(mcp, "_tool_manager", None)
+    wrapped = 0
+    for tool in manager.list_tools() if manager is not None else []:
+        original = tool.fn
+        if getattr(original, "_cliptude_named", False):
+            continue
+        name = tool.name
+
+        if inspect.iscoroutinefunction(original):
+            @functools.wraps(original)
+            async def named(*args, __fn=original, __name=name, **kwargs):
+                token = current_tool.set(__name)
+                try:
+                    return await __fn(*args, **kwargs)
+                finally:
+                    current_tool.reset(token)
+        else:
+            @functools.wraps(original)
+            def named(*args, __fn=original, __name=name, **kwargs):
+                token = current_tool.set(__name)
+                try:
+                    return __fn(*args, **kwargs)
+                finally:
+                    current_tool.reset(token)
+
+        named._cliptude_named = True  # type: ignore[attr-defined]
+        tool.fn = named
+        wrapped += 1
+    return wrapped
 
 
 def _cors_json(payload: dict[str, Any]):
