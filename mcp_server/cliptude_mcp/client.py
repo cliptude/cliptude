@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 import sys
+import uuid
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -149,6 +152,64 @@ class CliptudeApiError(Exception):
         self.payload = payload
 
 
+LOCAL_FILES_REFUSED = (
+    "{param} reads a file on the machine running this MCP server, which a remote (hosted) server does not "
+    "allow. Upload the file instead: narration with start_voiceover_upload + finish_voiceover_upload and pass "
+    "the voiceover_url it returns; pictures and clips for a plan job with start_media_upload + "
+    "finish_media_upload; a character image as image_url (a public https link). Or run the local "
+    "`cliptude-mcp` / `cliptude` CLI, which can read your files."
+)
+
+
+def _uuid_seg(value: Any, label: str = "job_id") -> str:
+    """A UUID path segment in canonical form; anything else (slashes, ?, #, ..) is refused."""
+    try:
+        canonical = str(uuid.UUID(str(value).strip()))
+    except (ValueError, TypeError, AttributeError):
+        raise CliptudeApiError(f"{label} must be a UUID such as 1b4e28ba-2fa1-41d2-883f-0016d3cca427.", status=400) from None
+    return quote(canonical, safe="")
+
+
+def _int_seg(value: Any, label: str = "project_id") -> str:
+    """A positive integer path segment; anything else is refused."""
+    text = str(value).strip() if not isinstance(value, bool) else ""
+    if not re.fullmatch(r"[0-9]{1,18}", text):
+        raise CliptudeApiError(f"{label} must be a whole number.", status=400)
+    return quote(text, safe="")
+
+
+_PRIVATE_URL_RE = re.compile(
+    r"\b[a-z][a-z0-9+.-]*://"
+    r"(?:localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}"
+    r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|169\.254(?:\.\d{1,3}){2}|0\.0\.0\.0|\[[0-9a-f:]+\]"
+    r"|[a-z0-9_-]+(?:\.(?:internal|local|lan|svc|cluster\.local))*)"
+    r"(?::\d+)?(?![a-z0-9.-])[^\s'\"<>)]*",
+    re.IGNORECASE,
+)
+
+
+def scrub_internal(value: Any, internal_urls: list[str] | tuple[str, ...] = ()) -> Any:
+    """Remove internal API addresses (the server-side base URL, docker hosts, private IPs) from error text.
+
+    Strings, lists and dicts are scrubbed recursively; public https links (billing_url ...) are kept."""
+    if isinstance(value, dict):
+        return {k: scrub_internal(v, internal_urls) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [scrub_internal(v, internal_urls) for v in value]
+    if not isinstance(value, str):
+        return value
+    text = value
+    for url in internal_urls:
+        url = (url or "").strip().rstrip("/")
+        if not url:
+            continue
+        text = text.replace(url, "<cliptude-api>")
+        host = url.split("://", 1)[-1].split("/", 1)[0]
+        if host:
+            text = text.replace(host, "<cliptude-api>")
+    return _PRIVATE_URL_RE.sub("<cliptude-api>", text)
+
+
 def _talking_head_content_type(ext: str) -> str:
     return {
         ".mp4": "video/mp4",
@@ -261,6 +322,7 @@ def _motion_control_job_fields(
     disable_overlays: bool | None = None,
     disable_effects: bool | None = None,
     disable_transitions: bool | None = None,
+    disable_sound_effects: bool | None = None,
     excluded_animation_types: list[str] | None = None,
     excluded_transition_kinds: list[str] | None = None,
     as_strings: bool = False,
@@ -271,6 +333,7 @@ def _motion_control_job_fields(
         "disable_overlays": disable_overlays,
         "disable_effects": disable_effects,
         "disable_transitions": disable_transitions,
+        "disable_sound_effects": disable_sound_effects,
     }
     for key, value in bool_fields.items():
         if value is not None:
@@ -297,6 +360,8 @@ class CliptudeClient:
         self.client_kind = (client_kind or os.environ.get("CLIPTUDE_CLIENT_KIND") or "").strip().lower()
         self.timeout = timeout
         self.connection_error = ""
+        # False on a hosted (HTTP) MCP server: a remote caller must never make it read or write local files.
+        self.allow_local_files = True
         if base_url:
             self.base_url = base_url.rstrip("/")
             self.api_key = _resolve_token(api_key)
@@ -318,6 +383,12 @@ class CliptudeClient:
         self._session_file = not explicit_token and (
             self.runtime == "cloud" or (self.runtime == "custom" and _login_issuer() == self.base_url)
         )
+
+    def _local_file(self, value: str | Path, param: str) -> Path:
+        """A path on this machine, only when this client may touch local files (never on a hosted server)."""
+        if not self.allow_local_files:
+            raise CliptudeApiError(LOCAL_FILES_REFUSED.format(param=param), status=400)
+        return Path(value)
 
     def _headers(self, *, json_content: bool = True) -> dict[str, str]:
         if self.connection_error:
@@ -380,7 +451,7 @@ class CliptudeClient:
         return self.request("GET", "/api/v1/templates", params={"limit": limit, "offset": offset})
 
     def get_template(self, template_id: str) -> Any:
-        return self.request("GET", f"/api/v1/templates/{template_id}")
+        return self.request("GET", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}")
 
     def create_template(self, *, name: str, format: str, settings: dict[str, Any]) -> Any:
         """Create a ready-to-use template from settings (no create wizard)."""
@@ -417,6 +488,7 @@ class CliptudeClient:
         disable_overlays: bool | None = None,
         disable_effects: bool | None = None,
         disable_transitions: bool | None = None,
+        disable_sound_effects: bool | None = None,
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         render_only: bool | None = None,
@@ -440,6 +512,7 @@ class CliptudeClient:
             disable_overlays=disable_overlays,
             disable_effects=disable_effects,
             disable_transitions=disable_transitions,
+            disable_sound_effects=disable_sound_effects,
             excluded_animation_types=excluded_animation_types,
             excluded_transition_kinds=excluded_transition_kinds,
         )
@@ -448,12 +521,16 @@ class CliptudeClient:
             disable_overlays=disable_overlays,
             disable_effects=disable_effects,
             disable_transitions=disable_transitions,
+            disable_sound_effects=disable_sound_effects,
             excluded_animation_types=excluded_animation_types,
             excluded_transition_kinds=excluded_transition_kinds,
             as_strings=True,
         )
         th_path = (str(talking_head_path).strip() if talking_head_path else "") or None
         vo_path = (str(voiceover_path).strip() if voiceover_path else "") or None
+        for param, value in (("talking_head_path", th_path), ("voiceover_path", vo_path)):
+            if value:
+                self._local_file(value, param)
         output_kind = (output or "").strip().lower() or None
         if output_kind and output_kind not in ("video", "script", "voiceover", "plan"):
             raise CliptudeApiError('output must be "video", "script", "voiceover", or "plan".')
@@ -484,6 +561,7 @@ class CliptudeClient:
                 disable_overlays=disable_overlays,
                 disable_effects=disable_effects,
                 disable_transitions=disable_transitions,
+                disable_sound_effects=disable_sound_effects,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
                 thumbnail=thumbnail,
@@ -569,7 +647,7 @@ class CliptudeClient:
         extra_data: dict[str, str] | None = None,
         _retried: bool = False,
     ) -> Any:
-        path = Path(file_path)
+        path = self._local_file(file_path, file_field)
         if not path.is_file():
             raise CliptudeApiError(missing_message)
         data: dict[str, str] = {"template_id": str(template_id), "title": title}
@@ -633,6 +711,7 @@ class CliptudeClient:
         disable_overlays: bool | None = None,
         disable_effects: bool | None = None,
         disable_transitions: bool | None = None,
+        disable_sound_effects: bool | None = None,
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         thumbnail: dict[str, str] | None = None,
@@ -646,11 +725,12 @@ class CliptudeClient:
             disable_overlays=disable_overlays,
             disable_effects=disable_effects,
             disable_transitions=disable_transitions,
+            disable_sound_effects=disable_sound_effects,
             excluded_animation_types=excluded_animation_types,
             excluded_transition_kinds=excluded_transition_kinds,
             as_strings=True,
         )
-        path = Path(talking_head_path)
+        path = self._local_file(talking_head_path, "talking_head_path")
         if not path.is_file():
             raise CliptudeApiError(f"Talking head file not found: {path}")
         ext = path.suffix.lower()
@@ -728,6 +808,7 @@ class CliptudeClient:
                 disable_overlays=disable_overlays,
                 disable_effects=disable_effects,
                 disable_transitions=disable_transitions,
+                disable_sound_effects=disable_sound_effects,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
             )
@@ -773,12 +854,16 @@ class CliptudeClient:
                         )
 
     def get_job(self, job_id: str) -> Any:
-        return self.request("GET", f"/api/v1/jobs/{job_id}")
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}")
 
-    def continue_job(self, job_id: str, *, thumbnail: dict[str, str] | None = None) -> Any:
-        """Queue a completed script/voiceover job, or a plan job with a locked plan, as a full video."""
-        body = _thumbnail_job_field(thumbnail)
-        return self.request("POST", f"/api/v1/jobs/{job_id}/continue", json_body=body or None)
+    def continue_job(
+        self, job_id: str, *, thumbnail: dict[str, str] | None = None, review_token: str | None = None,
+    ) -> Any:
+        """Queue a completed script/voiceover job, or a plan job with a locked plan, as a full video.
+
+        Without review_token Cliptude answers with the review (HTTP 428) and queues nothing."""
+        body = {**_thumbnail_job_field(thumbnail), **_review_job_fields(review_token, None, None)}
+        return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/continue", json_body=body or None)
 
     # Product videos (store products: Shopify, any store page) --------------------------------------
 
@@ -804,8 +889,12 @@ class CliptudeClient:
         reviews: list[dict] | None = None,
         script: str | None = None,
         plan: bool = False,
+        review_token: str | None = None,
+        acknowledge: list[str] | None = None,
     ) -> Any:
         """Queue the 80/20 educational script for a product; returns {script_id, ...} immediately.
+
+        A paid draft (plan, or no script) first answers with the review (HTTP 428): resend with review_token.
 
         script: narration you researched and wrote yourself; the job is script_ready at once.
         plan: you plan every visual; the job stops at plan_ready with the sentence timings."""
@@ -819,19 +908,23 @@ class CliptudeClient:
                 body[key] = value
         if plan:
             body["plan"] = True
+        body.update(_review_job_fields(review_token, acknowledge, None))
         return self.request("POST", "/api/v1/commerce/scripts", json_body=body)
 
     def render_product_video(
         self, job_id: str, *, aspect_ratio: str = "16:9", thumbnail: dict[str, str] | None = None,
+        review_token: str | None = None,
     ) -> Any:
         """Turn a ready product script into the video on the same job id (returns immediately).
 
-        thumbnail: {custom_prompt} or {reference_url} for this video's thumbnail (optional)."""
-        body = {"aspect_ratio": aspect_ratio, **_thumbnail_job_field(thumbnail)}
-        return self.request("POST", f"/api/v1/commerce/videos/{job_id}/render", json_body=body)
+        thumbnail: {custom_prompt} or {reference_url} for this video's thumbnail (optional).
+        Without review_token Cliptude answers with the review (HTTP 428) and builds nothing."""
+        body = {"aspect_ratio": aspect_ratio, **_thumbnail_job_field(thumbnail),
+                **_review_job_fields(review_token, None, None)}
+        return self.request("POST", f"/api/v1/commerce/videos/{_uuid_seg(job_id)}/render", json_body=body)
 
     def get_product_video_status(self, job_id: str) -> Any:
-        return self.request("GET", f"/api/v1/commerce/videos/{job_id}")
+        return self.request("GET", f"/api/v1/commerce/videos/{_uuid_seg(job_id)}")
 
     # Agent-planned videos -------------------------------------------------------------------------
 
@@ -840,10 +933,10 @@ class CliptudeClient:
 
         split_shots: a long source (a trailer, a featurette) is also cut into clips on its cuts, each checked and
         kept like an upload: shots=[{keep, from_s, seconds, notes?} or {from_s, skipped}]."""
-        path = Path(path)
+        path = self._local_file(path, "path")
         if not path.is_file():
             raise CliptudeApiError(f"File not found: {path}")
-        base = f"/api/v1/jobs/{job_id}/media"
+        base = f"/api/v1/jobs/{_uuid_seg(job_id)}/media"
         init = self.request(
             "POST",
             f"{base}/init",
@@ -888,14 +981,14 @@ class CliptudeClient:
 
     def start_media_upload(self, job_id: str, *, filename: str, size: int, content_type: str | None = None) -> dict[str, Any]:
         """Signed PUT URLs for a picture or clip of a plan job, for a host that sends the bytes itself."""
-        return self._start_signed_upload(f"/api/v1/jobs/{job_id}/media", filename=filename, size=size, content_type=content_type)
+        return self._start_signed_upload(f"/api/v1/jobs/{_uuid_seg(job_id)}/media", filename=filename, size=size, content_type=content_type)
 
     def finish_media_upload(self, job_id: str, *, key: str, upload_id: str, split_shots: bool = False) -> Any:
         body = {"key": key, "upload_id": upload_id, **({"split_shots": True} if split_shots else {})}
-        return self.request("POST", f"/api/v1/jobs/{job_id}/media/complete", json_body=body)
+        return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/media/complete", json_body=body)
 
     def abort_media_upload(self, job_id: str, *, key: str, upload_id: str) -> Any:
-        return self.request("POST", f"/api/v1/jobs/{job_id}/media/abort", json_body={"key": key, "upload_id": upload_id})
+        return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/media/abort", json_body={"key": key, "upload_id": upload_id})
 
     def start_voiceover_upload(self, *, filename: str, size: int, content_type: str | None = None) -> dict[str, Any]:
         """Signed PUT URLs for a narration file, before the job exists."""
@@ -910,7 +1003,7 @@ class CliptudeClient:
 
     def get_narration(self, job_id: str) -> Any:
         """Numbered sentences (with word timings), digest, pricing and template flags of a plan job."""
-        return self.request("GET", f"/api/v1/jobs/{job_id}/narration")
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/narration")
 
     def get_kind_catalog(
         self,
@@ -934,7 +1027,7 @@ class CliptudeClient:
 
     def put_plan(self, job_id: str, plan: dict[str, Any], *, dry_run: bool = True) -> Any:
         """Check a plan (dry_run) or lock it. A failing check returns its report, not an exception."""
-        path = f"/api/v1/jobs/{job_id}/plan" + ("?dry_run=1" if dry_run else "")
+        path = f"/api/v1/jobs/{_uuid_seg(job_id)}/plan" + ("?dry_run=1" if dry_run else "")
         try:
             return self.request("PUT", path, json_body=plan)
         except CliptudeApiError as exc:
@@ -943,18 +1036,19 @@ class CliptudeClient:
             raise
 
     def get_plan(self, job_id: str) -> Any:
-        return self.request("GET", f"/api/v1/jobs/{job_id}/plan")
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan")
 
     def get_plan_report(self, job_id: str) -> Any:
         """What sourcing used for each media request of the locked plan, and every fallback."""
-        return self.request("GET", f"/api/v1/jobs/{job_id}/plan/report")
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/report")
 
     def get_plan_review(self, job_id: str) -> Any:
         """The built design, beat by beat and graphic by graphic, with links to the media (review before render)."""
-        return self.request("GET", f"/api/v1/jobs/{job_id}/plan/review")
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/review")
 
     def download_voiceover_file(self, job_id: str, dest: Path) -> Path:
-        url = f"{self.base_url}/api/v1/jobs/{job_id}/voiceover"
+        dest = self._local_file(dest, "dest")
+        url = f"{self.base_url}/api/v1/jobs/{_uuid_seg(job_id)}/voiceover"
         try:
             with httpx.stream(
                 "GET",
@@ -993,24 +1087,24 @@ class CliptudeClient:
         return self.request("GET", "/api/v1/jobs", params=params)
 
     def cancel_job(self, job_id: str) -> Any:
-        return self.request("POST", f"/api/v1/jobs/{job_id}/cancel")
+        return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/cancel")
 
     # --- Timeline editor + Cliptude Agent -------------------------------------------------
 
     def open_editor_project(self, job_id: str) -> Any:
         """Open (or create) the editor project for a completed video job; includes a compact timeline."""
-        return self.request("GET", f"/api/v1/jobs/{job_id}/editor-project")
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/editor-project")
 
     def get_editor_project(self, project_id: int | str, *, design: bool = False) -> Any:
         params = {"design": "1"} if design else None
-        return self.request("GET", f"/api/v1/editor-projects/{project_id}", params=params)
+        return self.request("GET", f"/api/v1/editor-projects/{_int_seg(project_id)}", params=params)
 
     def view_scenes(self, project_id: int | str, *, start_s: float = 0.0, end_s: float | None = None) -> Any:
         """Contact sheets (base64 JPEG) of the timeline's pictures, clip frames and graphics, with a legend."""
         params: dict[str, Any] = {"start_s": start_s}
         if end_s is not None:
             params["end_s"] = end_s
-        return self.request("GET", f"/api/v1/editor-projects/{project_id}/scenes", params=params)
+        return self.request("GET", f"/api/v1/editor-projects/{_int_seg(project_id)}/scenes", params=params)
 
     def agent_tiers(self) -> Any:
         return self.request("GET", "/api/v1/agent/tiers")
@@ -1025,8 +1119,11 @@ class CliptudeClient:
         chat_id: str | None = None,
         expected_revision: int | None = None,
         idempotency_key: str | None = None,
+        review_token: str | None = None,
     ) -> Any:
-        """Ask Cliptude Agent to edit the timeline. Uses the project's current revision unless given."""
+        """Ask Cliptude Agent to edit the timeline. Uses the project's current revision unless given.
+
+        Without review_token Cliptude answers with the review (HTTP 428) and starts nothing."""
         import uuid
 
         if expected_revision is None:
@@ -1041,21 +1138,27 @@ class CliptudeClient:
         }
         if chat_id:
             body["chat_id"] = chat_id
-        return self.request("POST", f"/api/v1/editor-projects/{project_id}/agent/runs", json_body=body)
+        body.update(_review_job_fields(review_token, None, None))
+        return self.request("POST", f"/api/v1/editor-projects/{_int_seg(project_id)}/agent/runs", json_body=body)
 
     def get_agent_run(self, project_id: int | str, run_id: str) -> Any:
-        return self.request("GET", f"/api/v1/editor-projects/{project_id}/agent/runs/{run_id}")
+        return self.request("GET", f"/api/v1/editor-projects/{_int_seg(project_id)}/agent/runs/{_uuid_seg(run_id, 'run_id')}")
 
     def cancel_agent_run(self, project_id: int | str, run_id: str) -> Any:
-        return self.request("POST", f"/api/v1/editor-projects/{project_id}/agent/runs/{run_id}/cancel")
+        return self.request("POST", f"/api/v1/editor-projects/{_int_seg(project_id)}/agent/runs/{_uuid_seg(run_id, 'run_id')}/cancel")
 
-    def render_project(self, project_id: int | str, *, accept_quality_findings: bool = False) -> Any:
-        """Render the edited timeline to a new MP4: free the first time, then 10% of the original generation."""
-        body = {"accept_quality_findings": True} if accept_quality_findings else None
-        return self.request("POST", f"/api/v1/editor-projects/{project_id}/render", json_body=body)
+    def render_project(
+        self, project_id: int | str, *, accept_quality_findings: bool = False, review_token: str | None = None,
+    ) -> Any:
+        """Render the edited timeline to a new MP4: free the first time, then 10% of the original generation.
+
+        A paid export first answers with the review (HTTP 428): resend with review_token."""
+        body: dict[str, Any] = {"accept_quality_findings": True} if accept_quality_findings else {}
+        body.update(_review_job_fields(review_token, None, None))
+        return self.request("POST", f"/api/v1/editor-projects/{_int_seg(project_id)}/render", json_body=body or None)
 
     def get_render(self, render_id: int | str) -> Any:
-        return self.request("GET", f"/api/v1/editor-renders/{render_id}")
+        return self.request("GET", f"/api/v1/editor-renders/{_int_seg(render_id, 'render_id')}")
 
     def get_account(self) -> Any:
         return self.request("GET", "/api/v1/account")
@@ -1117,7 +1220,7 @@ class CliptudeClient:
             return self.request(
                 "POST", "/api/v1/vector-characters", json_body={"image_url": image_url.strip(), "name": name}
             )
-        path = Path(image_path)
+        path = self._local_file(image_path, "image_path")
         if not path.is_file():
             raise CliptudeApiError(f"Character image not found: {path}")
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -1144,7 +1247,7 @@ class CliptudeClient:
 
     def delete_vector_character(self, character_id: str) -> Any:
         """Delete one of your uploaded characters (refused while a template uses it)."""
-        return self.request("DELETE", f"/api/v1/vector-characters/{character_id}")
+        return self.request("DELETE", f"/api/v1/vector-characters/{_uuid_seg(character_id, 'character_id')}")
 
     def list_avatars(
         self,

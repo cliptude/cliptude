@@ -37,13 +37,13 @@ class ClientTests(TestCase):
         with patch.object(client, "request", return_value={"builtin": []}) as req:
             client.list_vector_characters()
             client.upload_vector_character(image_url="https://example.org/maya.png", name="Maya")
-            client.delete_vector_character("abc-123")
+            client.delete_vector_character("0b7e6a52-1111-4222-8333-444455556666")
             client.create_job(template_id="tmpl", title="T", script="Words.", vector_character_id="nova")
         calls = [(c.args[0], c.args[1], c.kwargs.get("json_body")) for c in req.call_args_list]
         self.assertEqual(calls[0][:2], ("GET", "/api/v1/vector-characters"))
         self.assertEqual(calls[1], ("POST", "/api/v1/vector-characters",
                                     {"image_url": "https://example.org/maya.png", "name": "Maya"}))
-        self.assertEqual(calls[2][:2], ("DELETE", "/api/v1/vector-characters/abc-123"))
+        self.assertEqual(calls[2][:2], ("DELETE", "/api/v1/vector-characters/0b7e6a52-1111-4222-8333-444455556666"))
         self.assertEqual(calls[3][2]["vector_character_id"], "nova")
         with self.assertRaises(CliptudeApiError):
             client.upload_vector_character(name="x")  # neither a file nor a URL
@@ -213,18 +213,18 @@ class ClientTests(TestCase):
     def test_continue_job_posts_to_continue_endpoint(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "request", return_value={"id": "abc", "status": "queued", "output_kind": "video"}) as req:
-            client.continue_job("abc")
+            client.continue_job("1b4e28ba-2fa1-41d2-883f-0016d3cca427")
         req.assert_called_once()
         args, kwargs = req.call_args
         self.assertEqual(args[0], "POST")
-        self.assertEqual(args[1], "/api/v1/jobs/abc/continue")
+        self.assertEqual(args[1], "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/continue")
         self.assertIsNone(kwargs.get("json_body"))
 
     def test_continue_job_posts_to_continue(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "request", return_value={"id": "abc", "status": "queued"}) as req:
-            client.continue_job("abc")
-        self.assertEqual(req.call_args.args, ("POST", "/api/v1/jobs/abc/continue"))
+            client.continue_job("1b4e28ba-2fa1-41d2-883f-0016d3cca427")
+        self.assertEqual(req.call_args.args, ("POST", "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/continue"))
 
     def test_create_job_multipart_voiceover(self):
         import tempfile
@@ -367,7 +367,7 @@ class ClientTests(TestCase):
             with patch.object(client, "request", side_effect=fake_request), patch("httpx.put") as put:
                 put.return_value = MagicMock(status_code=put_status)
                 try:
-                    result = client.upload_plan_media("job1", path)
+                    result = client.upload_plan_media("1b4e28ba-2fa1-41d2-883f-0016d3cca427", path)
                 except CliptudeApiError as exc:
                     result = exc
         finally:
@@ -379,14 +379,14 @@ class ClientTests(TestCase):
         self.assertEqual(result["keep"], "3f9a1c0d2b7e")
         put.assert_called_once()
         self.assertEqual([url for _m, url, _b in requests],
-                         ["/api/v1/jobs/job1/media/init", "/api/v1/jobs/job1/media/sign-parts",
-                          "/api/v1/jobs/job1/media/complete"])
+                         ["/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/media/init", "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/media/sign-parts",
+                          "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/media/complete"])
         self.assertEqual(requests[0][2]["size"], 64)
 
     def test_upload_plan_media_aborts_when_a_part_fails(self):
         result, requests, _put = self._media_upload(500)
         self.assertIsInstance(result, CliptudeApiError)
-        self.assertEqual(requests[-1][1], "/api/v1/jobs/job1/media/abort")
+        self.assertEqual(requests[-1][1], "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/media/abort")
 
     def test_missing_auth_asks_for_login(self):
         with patch.dict("os.environ", {"CLIPTUDE_API_KEY": ""}, clear=False):
@@ -514,18 +514,18 @@ class AgentPlanClientTests(TestCase):
     def test_check_plan_returns_the_report_on_400(self):
         report = {"valid": False, "errors": [{"code": "phrase_not_found"}]}
         with patch.object(self.client, "request", side_effect=CliptudeApiError("bad", status=400, payload=report)) as req:
-            out = self.client.put_plan("j1", {"version": "cliptude.plan/v1"}, dry_run=True)
-        self.assertEqual(req.call_args.args[:2], ("PUT", "/api/v1/jobs/j1/plan?dry_run=1"))
+            out = self.client.put_plan("1b4e28ba-2fa1-41d2-883f-0016d3cca427", {"version": "cliptude.plan/v1"}, dry_run=True)
+        self.assertEqual(req.call_args.args[:2], ("PUT", "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/plan?dry_run=1"))
         self.assertEqual(out["errors"][0]["code"], "phrase_not_found")
         self.assertEqual(out["http_status"], 400)
 
     def test_lock_plan_and_other_errors(self):
         with patch.object(self.client, "request", return_value={"locked": True}) as req:
-            self.client.put_plan("j1", {}, dry_run=False)
-        self.assertEqual(req.call_args.args[1], "/api/v1/jobs/j1/plan")
+            self.client.put_plan("1b4e28ba-2fa1-41d2-883f-0016d3cca427", {}, dry_run=False)
+        self.assertEqual(req.call_args.args[1], "/api/v1/jobs/1b4e28ba-2fa1-41d2-883f-0016d3cca427/plan")
         with patch.object(self.client, "request", side_effect=CliptudeApiError("Not found", status=404, payload={"error": "x"})):
             with self.assertRaises(CliptudeApiError):
-                self.client.put_plan("j1", {}, dry_run=True)
+                self.client.put_plan("1b4e28ba-2fa1-41d2-883f-0016d3cca427", {}, dry_run=True)
 
     def test_catalog_params(self):
         with patch.object(self.client, "request", return_value={}) as req:
@@ -554,18 +554,18 @@ class ProductVideoClientTests(TestCase):
         with patch.object(client, "request", return_value={}) as req:
             client.fetch_product_context("https://store.com/products/pan", store_domain="store.com")
             client.draft_product_script("pid", angle=1, duration="10-12", discount_code="YT15")
-            client.render_product_video("job", aspect_ratio="9:16")
-            client.get_product_video_status("job")
-            client.render_product_video("job", thumbnail={"custom_prompt": "Ethan beside a card reader"})
+            client.render_product_video("1b4e28ba-2fa1-41d2-883f-0016d3cca427", aspect_ratio="9:16")
+            client.get_product_video_status("1b4e28ba-2fa1-41d2-883f-0016d3cca427")
+            client.render_product_video("1b4e28ba-2fa1-41d2-883f-0016d3cca427", thumbnail={"custom_prompt": "Ethan beside a card reader"})
             client.draft_product_script("pid", script="Words.", plan=True)
         calls = [(c.args[0], c.args[1], c.kwargs.get("json_body")) for c in req.call_args_list]
         self.assertEqual(calls[0], ("POST", "/api/v1/commerce/products/fetch",
                                     {"url_or_query": "https://store.com/products/pan", "store_domain": "store.com"}))
         self.assertEqual(calls[1], ("POST", "/api/v1/commerce/scripts",
                                     {"product_id": "pid", "angle": 1, "duration": "10-12", "discount_code": "YT15"}))
-        self.assertEqual(calls[2], ("POST", "/api/v1/commerce/videos/job/render", {"aspect_ratio": "9:16"}))
-        self.assertEqual(calls[3], ("GET", "/api/v1/commerce/videos/job", None))
-        self.assertEqual(calls[4], ("POST", "/api/v1/commerce/videos/job/render",
+        self.assertEqual(calls[2], ("POST", "/api/v1/commerce/videos/1b4e28ba-2fa1-41d2-883f-0016d3cca427/render", {"aspect_ratio": "9:16"}))
+        self.assertEqual(calls[3], ("GET", "/api/v1/commerce/videos/1b4e28ba-2fa1-41d2-883f-0016d3cca427", None))
+        self.assertEqual(calls[4], ("POST", "/api/v1/commerce/videos/1b4e28ba-2fa1-41d2-883f-0016d3cca427/render",
                                     {"aspect_ratio": "16:9", "thumbnail": {"custom_prompt": "Ethan beside a card reader"}}))
         self.assertEqual(calls[5], ("POST", "/api/v1/commerce/scripts", {"product_id": "pid", "script": "Words.", "plan": True}))
 

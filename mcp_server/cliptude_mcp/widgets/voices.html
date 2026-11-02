@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose a voice</title>
+<style>
+/*@BASE_CSS@*/
+.avatar-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; }
+.row { cursor: pointer; }
+.panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary); border: 1px solid var(--color-border-primary); }
+.panel h2 { font-size: var(--font-text-md-size); margin: 0; }
+.panel label { display: flex; flex-direction: column; gap: 4px; font-size: var(--font-text-sm-size); color: var(--color-text-secondary); }
+.panel textarea, .panel input[type="text"] {
+  font: inherit; font-size: var(--font-text-sm-size); color: var(--color-text-primary);
+  background: var(--color-background-primary); border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-sm); padding: 8px 10px; }
+.panel textarea { min-height: 70px; resize: vertical; }
+.consent { flex-direction: row !important; align-items: flex-start; gap: 8px !important; }
+.consent input { margin-top: 3px; }
+.rec { color: var(--color-text-danger); font-variant-numeric: tabular-nums; }
+.linkish { background: none; border: 0; padding: 0; color: var(--color-text-info); text-decoration: underline; cursor: pointer; font-size: inherit; }
+</style>
+</head>
+<body>
+<main class="app" aria-labelledby="title">
+  <div class="head">
+    <h1 id="title">Choose a voice</h1>
+    <span class="sub" id="count"></span>
+  </div>
+  <div class="toolbar">
+    <label class="sr-only" for="filter">Filter voices</label>
+    <input type="search" id="filter" placeholder="Filter by name, accent, style" autocomplete="off">
+    <label class="sr-only" for="gender">Gender</label>
+    <select id="gender"><option value="">Any gender</option><option value="male">Male</option><option value="female">Female</option></select>
+    <button type="button" id="open-design" aria-expanded="false">Design a voice</button>
+    <button type="button" id="open-clone" aria-expanded="false">Clone a voice</button>
+  </div>
+  <div id="design-panel" class="panel" hidden></div>
+  <div id="clone-panel" class="panel" hidden></div>
+  <div id="mine"></div>
+  <div id="content"><div class="status" role="status">Loading voices…</div></div>
+  <div id="more"></div>
+  <div class="selection" id="selection" hidden>
+    <span class="what" id="selected-text"></span>
+    <button class="primary" id="use" type="button">Use this voice</button>
+  </div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+(function () {
+  "use strict";
+  var h = UI.h;
+  var PAGE = 60;
+  var PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  var PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+  var DESIGN_PROVIDERS = { elevenlabs: "ElevenLabs", minimax: "MiniMax", inworld: "Inworld" };
+  var CLONE_PROVIDERS = { elevenlabs: "ElevenLabs", minimax: "MiniMax", cartesia: "Cartesia", inworld: "Inworld", voicetory: "Voicetory" };
+  // Word for word what the Clone a voice page asks the user to confirm.
+  var CONSENT = "I confirm this is my own voice, or I have the voice owner’s explicit consent and the rights to clone it. " +
+    "I will not use cloned voices to impersonate or deceive others, as required by our Terms of Service.";
+  var voices = [];
+  var mine = [];
+  var provider = "";
+  var language = "";
+  var selected = null;
+  var shown = PAGE;
+  var content = document.getElementById("content");
+
+  function shortName(v) { return String(v.name || "").split(/\s[-–—|]\s/)[0].trim() || v.voice_id; }
+  function gender(v) {
+    return String(v.filter_gender || (v.labels && v.labels.gender) || v.gender || v.gender_text || "").toLowerCase();
+  }
+  function facts(v) {
+    var out = [];
+    [v.gender_text || v.gender, v.age_text || v.age, v.accent_text || v.accent, v.use_case_text, v.language].forEach(function (x) {
+      x = String(x || "").trim();
+      if (x && x.toLowerCase() !== "standard" && out.indexOf(x) < 0) out.push(x);
+    });
+    return out;
+  }
+  function haystack(v) { return [v.name, v.description, v.voice_id].concat(facts(v)).join(" ").toLowerCase(); }
+  function visible() {
+    var q = document.getElementById("filter").value.trim().toLowerCase();
+    var g = document.getElementById("gender").value;
+    return voices.filter(function (v) {
+      if (g && gender(v) !== g) return false;
+      return !q || haystack(v).indexOf(q) >= 0;
+    });
+  }
+
+  function playButton(key, url, label) {
+    if (!url) {
+      return h("button", { type: "button", class: "icon", disabled: true, title: "No preview for this voice", "aria-label": "No preview for " + label }, []);
+    }
+    var playing = Media.playing() === key;
+    var b = h("button", {
+      type: "button", class: "icon", "aria-pressed": String(playing),
+      "aria-label": (playing ? "Pause " : "Play ") + label + " preview",
+      onclick: function (e) { e.stopPropagation(); Media.toggleAudio(key, url); }
+    }, []);
+    b.innerHTML = playing ? PAUSE : PLAY;
+    return b;
+  }
+
+  function dot(v) {
+    var hue = v.hue1 != null ? v.hue1 : (String(v.voice_id).length * 37) % 360;
+    return h("span", { class: "avatar-dot", "aria-hidden": "true", style: {
+      background: "linear-gradient(135deg, hsl(" + hue + " 70% 55%), hsl(" + (v.hue2 != null ? v.hue2 : hue + 120) + " 70% 45%))"
+    } });
+  }
+
+  function selectable(el, v) {
+    el.setAttribute("aria-pressed", String(!!selected && selected.voice_id === v.voice_id));
+    el.addEventListener("click", function () { select(v); });
+    el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(v); } });
+    return el;
+  }
+
+  function row(v) {
+    return selectable(h("div", { class: "row", role: "listitem", tabindex: "0" }, [
+      playButton(v.voice_id, v.preview_url, shortName(v)), dot(v),
+      h("div", { class: "main" }, [
+        h("span", { class: "name" }, [v.name || v.voice_id]),
+        v.description ? h("span", { class: "desc" }, [v.description]) : null,
+        h("span", { class: "chips" }, facts(v).map(function (f) { return h("span", { class: "chip" }, [f]); })
+          .concat(v.preview_url ? [] : [h("span", { class: "chip" }, ["No preview"])]))
+      ])
+    ]), v);
+  }
+
+  function mineRow(v) {
+    var unusable = v.status && v.status !== "ready";
+    var el = h("div", { class: "row", role: "listitem", tabindex: "0" }, [
+      playButton(v.voice_id, v.preview_url, v.name), dot(v),
+      h("div", { class: "main" }, [
+        h("span", { class: "name" }, [v.name || v.voice_id]),
+        v.description ? h("span", { class: "desc" }, [v.description]) : null,
+        h("span", { class: "chips" }, [
+          h("span", { class: "chip info" }, [v.kind === "design" ? "Designed" : "Cloned"]),
+          unusable ? h("span", { class: "chip" }, [v.status === "expired" ? "Expired" : "Not ready"]) : null
+        ])
+      ])
+    ]);
+    if (unusable) { el.setAttribute("aria-disabled", "true"); return el; }
+    return selectable(el, v);
+  }
+
+  function renderMine() {
+    var box = UI.clear(document.getElementById("mine"));
+    var rows = mine.filter(function (v) { return !v.provider || v.provider === provider; });
+    if (!rows.length) return;
+    var list = h("div", { class: "list", role: "list", "aria-label": "Your voices" });
+    rows.forEach(function (v) { list.appendChild(mineRow(v)); });
+    box.appendChild(h("section", { class: "list" }, [h("h2", { class: "section-title" }, ["Your voices"]), list]));
+  }
+
+  function select(v) {
+    selected = v;
+    render();
+    document.getElementById("selection").hidden = false;
+    document.getElementById("selected-text").textContent =
+      "“" + shortName(v) + "” · " + (v.provider || provider || "voice") + " · " + v.voice_id;
+  }
+
+  function render() {
+    renderMine();
+    var rows = visible();
+    document.getElementById("count").textContent =
+      (provider ? provider + " · " : "") + rows.length + " voice" + (rows.length === 1 ? "" : "s");
+    if (!voices.length) { UI.status(content, "No catalog voices came back for this provider and language."); return; }
+    if (!rows.length) { UI.status(content, "No voice matches that filter."); UI.clear(document.getElementById("more")); return; }
+    var list = h("div", { class: "list", role: "list", "aria-label": "Catalog voices" });
+    rows.slice(0, shown).forEach(function (v) { list.appendChild(row(v)); });
+    UI.clear(content).appendChild(h("section", { class: "list" }, [
+      mine.length ? h("h2", { class: "section-title" }, ["Catalog"]) : null, list]));
+    var more = UI.clear(document.getElementById("more"));
+    if (rows.length > shown) {
+      more.appendChild(h("button", { type: "button", onclick: function () { shown += PAGE; render(); } },
+        ["Show " + Math.min(PAGE, rows.length - shown) + " more"]));
+    }
+  }
+
+  function providerSelect(id, map, preferred) {
+    var sel = h("select", { id: id });
+    Object.keys(map).forEach(function (k) { sel.appendChild(h("option", { value: k, selected: k === preferred }, [map[k]])); });
+    if (!map[preferred]) sel.value = "elevenlabs";
+    return sel;
+  }
+
+  function addMine(v) {
+    mine = [v].concat(mine.filter(function (m) { return m.voice_id !== v.voice_id; }));
+    if (v.provider && v.provider !== provider) UI.toast("Saved under " + v.provider + ". Ask for " + v.provider + " voices to see it here.");
+    select(v);
+  }
+
+  /* ---- Design a voice: description -> previews -> keep one ---- */
+  function openDesign() {
+    var panel = document.getElementById("design-panel");
+    if (!panel.hidden) { panel.hidden = true; document.getElementById("open-design").setAttribute("aria-expanded", "false"); return; }
+    document.getElementById("clone-panel").hidden = true;
+    document.getElementById("open-clone").setAttribute("aria-expanded", "false");
+    document.getElementById("open-design").setAttribute("aria-expanded", "true");
+    panel.hidden = false;
+    var prov = providerSelect("design-provider", DESIGN_PROVIDERS, provider);
+    var desc = h("textarea", { id: "design-desc", maxlength: "1000",
+      placeholder: "e.g. A calm, deep male documentary narrator in his 50s with a slight British accent, unhurried pace" });
+    var go = h("button", { type: "button", class: "primary" }, ["Generate previews"]);
+    var out = h("div", { class: "list" });
+    UI.clear(panel).appendChild(h("h2", {}, ["Design a voice"]));
+    panel.appendChild(h("span", { class: "sub" }, ["Describe the voice; you get a few previews to listen to and keep one. Paid plans; one designed voice per provider."]));
+    panel.appendChild(h("div", { class: "toolbar" }, [h("label", {}, ["Provider", prov])]));
+    panel.appendChild(h("label", { for: "design-desc" }, ["Description", desc]));
+    panel.appendChild(h("div", { class: "toolbar" }, [go]));
+    panel.appendChild(out);
+    go.addEventListener("click", function () {
+      var text = desc.value.trim();
+      if (text.length < 10) { UI.toast("Describe the voice in a sentence or two."); return; }
+      go.disabled = true; go.textContent = "Designing…";
+      UI.status(out, "Designing previews. This takes up to a minute.");
+      Cliptude.callTool("design_voice_previews", { provider: prov.value, description: text, language: language || undefined })
+        .then(function (res) {
+          go.disabled = false; go.textContent = "Generate new previews";
+          var err = UI.errorText(res);
+          if (err) { UI.status(out, err, "error"); return; }
+          showPreviews(out, prov.value, res.previews || []);
+        }).catch(function () { go.disabled = false; go.textContent = "Generate previews"; UI.status(out, "The previews could not be made.", "error"); });
+    });
+  }
+
+  function showPreviews(out, prov, previews) {
+    UI.clear(out);
+    if (!previews.length) { UI.status(out, "No previews came back. Try another description."); return; }
+    var chosen = null;
+    var list = h("div", { class: "list", role: "radiogroup", "aria-label": "Previews" });
+    var name = h("input", { type: "text", id: "design-name", maxlength: "100", placeholder: "Voice name" });
+    var save = h("button", { type: "button", class: "primary", disabled: true }, ["Keep this voice"]);
+    function draw() {
+      UI.clear(list);
+      previews.forEach(function (p, i) {
+        var el = h("div", { class: "row", role: "radio", tabindex: "0", "aria-checked": String(chosen === p) }, [
+          playButton("design:" + p.preview_id, p.audio_url, "Preview " + (i + 1)),
+          h("div", { class: "main" }, [h("span", { class: "name" }, ["Preview " + (i + 1)])])
+        ]);
+        el.setAttribute("aria-pressed", String(chosen === p));
+        el.addEventListener("click", function () { chosen = p; save.disabled = !name.value.trim(); draw(); });
+        list.appendChild(el);
+      });
+    }
+    Media.onChange(function () { draw(); render(); });
+    name.addEventListener("input", function () { save.disabled = !(chosen && name.value.trim()); });
+    save.addEventListener("click", function () {
+      save.disabled = true; save.textContent = "Saving…";
+      Cliptude.callTool("save_designed_voice", { provider: prov, preview_id: chosen.preview_id, voice_name: name.value.trim() })
+        .then(function (res) {
+          var err = UI.errorText(res);
+          if (err) { save.disabled = false; save.textContent = "Keep this voice"; UI.toast(err); return; }
+          var v = res.voice || {};
+          addMine({ voice_id: v.voice_id, name: v.voice_name || name.value.trim(), provider: v.voice_provider || prov,
+            kind: "design", status: v.status || "ready", preview_url: v.preview_audio_url || chosen.audio_url, description: v.description || "" });
+          document.getElementById("design-panel").hidden = true;
+          UI.toast("Saved to your voices.");
+        }).catch(function () { save.disabled = false; save.textContent = "Keep this voice"; UI.toast("The voice could not be saved."); });
+    });
+    draw();
+    out.appendChild(list);
+    out.appendChild(h("div", { class: "toolbar" }, [h("label", { for: "design-name" }, ["Name", name]), save]));
+    Cliptude.reportSize();
+  }
+
+  /* ---- Clone a voice: recording (upload or record here) + consent ---- */
+  var recording = null;
+  function openClone() {
+    var panel = document.getElementById("clone-panel");
+    if (!panel.hidden) { panel.hidden = true; document.getElementById("open-clone").setAttribute("aria-expanded", "false"); return; }
+    document.getElementById("design-panel").hidden = true;
+    document.getElementById("open-design").setAttribute("aria-expanded", "false");
+    document.getElementById("open-clone").setAttribute("aria-expanded", "true");
+    panel.hidden = false;
+    var prov = providerSelect("clone-provider", CLONE_PROVIDERS, provider);
+    var name = h("input", { type: "text", id: "clone-name", maxlength: "100", placeholder: "My voice" });
+    var file = h("input", { type: "file", id: "clone-file", accept: "audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,.mp3,.m4a,.wav" });
+    var consent = h("input", { type: "checkbox", id: "clone-consent" });
+    var create = h("button", { type: "button", class: "primary", disabled: true }, ["Create clone"]);
+    var recBtn = h("button", { type: "button" }, ["Record here"]);
+    var recState = h("span", { class: "rec", "aria-live": "polite" });
+    var status = h("span", { class: "sub", role: "status" });
+    var audio = null; // {name, base64}
+    function update() { create.disabled = !(name.value.trim() && (audio || file.files.length) && consent.checked); }
+    [name, file, consent].forEach(function (el) { el.addEventListener("input", update); el.addEventListener("change", update); });
+    file.addEventListener("change", function () { audio = null; recState.textContent = ""; update(); });
+    recBtn.addEventListener("click", function () {
+      if (recording) { recording.stop(); return; }
+      Recorder.start(function (seconds) { recState.textContent = "● " + seconds + " s"; }).then(function (rec) {
+        recording = rec; recBtn.textContent = "Stop";
+        rec.done.then(function (wav) {
+          recording = null; recBtn.textContent = "Record again";
+          audio = wav; file.value = "";
+          recState.textContent = "Recorded " + wav.seconds + " s" + (wav.seconds < 30 ? " (use at least 30 s)" : "");
+          update();
+        });
+      }).catch(function () {
+        recBtn.disabled = true;
+        recState.textContent = "Recording is not allowed here; upload a file instead.";
+      });
+    });
+    var termsLink = h("button", { type: "button", class: "linkish", onclick: function () { Cliptude.openLink("https://cliptude.com/terms/"); } }, ["Terms of Service"]);
+    UI.clear(panel).appendChild(h("h2", {}, ["Clone a voice"]));
+    panel.appendChild(h("span", { class: "sub" }, ["Use 30 seconds to 3 minutes of clear speech with no music or background noise (MP3, M4A or WAV, up to 10 MB). Clones are private to your account. Paid plans."]));
+    panel.appendChild(h("div", { class: "toolbar" }, [h("label", {}, ["Provider", prov]), h("label", { for: "clone-name" }, ["Clone name", name])]));
+    panel.appendChild(h("div", { class: "toolbar" }, [h("label", { for: "clone-file" }, ["Recording", file]),
+      window.MediaRecorder && navigator.mediaDevices ? recBtn : null, recState]));
+    panel.appendChild(h("label", { class: "consent", for: "clone-consent" }, [consent,
+      h("span", {}, [CONSENT.replace("Terms of Service.", ""), termsLink, "."])]));
+    panel.appendChild(h("div", { class: "toolbar" }, [create, status]));
+    create.addEventListener("click", function () {
+      create.disabled = true; create.textContent = "Creating…"; status.textContent = "Uploading and cloning. This can take a minute.";
+      var ready = audio ? Promise.resolve(audio) : readFile(file.files[0]);
+      ready.then(function (a) {
+        return Cliptude.callTool("clone_voice", { provider: prov.value, voice_name: name.value.trim(), consent: true,
+          audio_base64: a.base64, audio_file_name: a.name });
+      }).then(function (res) {
+        var err = UI.errorText(res);
+        create.textContent = "Create clone";
+        if (err) { status.textContent = err; update(); return; }
+        var c = res.clone || {};
+        addMine({ voice_id: c.voice_id, name: c.voice_name || name.value.trim(), provider: c.voice_provider || prov.value,
+          kind: "clone", status: c.status || "ready", preview_url: c.preview_audio_url || "" });
+        document.getElementById("clone-panel").hidden = true;
+        UI.toast("Clone saved to your voices.");
+      }).catch(function (e) { create.textContent = "Create clone"; status.textContent = (e && e.message) || "The clone could not be made."; update(); });
+    });
+    Cliptude.reportSize();
+  }
+
+  function readFile(f) {
+    return new Promise(function (resolve, reject) {
+      if (!f) { reject(new Error("Pick a recording.")); return; }
+      if (f.size > 10 * 1024 * 1024) { reject(new Error("The recording is over 10 MB.")); return; }
+      var reader = new FileReader();
+      reader.onload = function () { resolve({ name: f.name, base64: String(reader.result).split(",")[1] }); };
+      reader.onerror = function () { reject(new Error("The file could not be read.")); };
+      reader.readAsDataURL(f);
+    });
+  }
+
+  /* Records the microphone and hands back 16-bit mono WAV (every provider takes WAV). */
+  var Recorder = {
+    start: function (onTick) {
+      return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var chunks = [];
+        var rec = new MediaRecorder(stream);
+        var started = Date.now();
+        var timer = setInterval(function () { onTick(Math.round((Date.now() - started) / 1000)); }, 500);
+        var done = new Promise(function (resolve) {
+          rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+          rec.onstop = function () {
+            clearInterval(timer);
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            new Blob(chunks).arrayBuffer().then(toWav).then(resolve);
+          };
+        });
+        rec.start();
+        return { stop: function () { rec.stop(); }, done: done };
+      });
+    }
+  };
+  function toWav(buffer) {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    return new Ctx().decodeAudioData(buffer).then(function (decoded) {
+      var rate = 22050;
+      var length = Math.ceil(decoded.duration * rate);
+      var offline = new OfflineAudioContext(1, length, rate);
+      var src = offline.createBufferSource(); src.buffer = decoded; src.connect(offline.destination); src.start();
+      return offline.startRendering();
+    }).then(function (mono) {
+      var pcm = mono.getChannelData(0);
+      var bytes = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+      function str(o, s) { for (var i = 0; i < s.length; i++) bytes.setUint8(o + i, s.charCodeAt(i)); }
+      str(0, "RIFF"); bytes.setUint32(4, 36 + pcm.length * 2, true); str(8, "WAVE"); str(12, "fmt ");
+      bytes.setUint32(16, 16, true); bytes.setUint16(20, 1, true); bytes.setUint16(22, 1, true);
+      bytes.setUint32(24, 22050, true); bytes.setUint32(28, 44100, true); bytes.setUint16(32, 2, true);
+      bytes.setUint16(34, 16, true); str(36, "data"); bytes.setUint32(40, pcm.length * 2, true);
+      for (var i = 0; i < pcm.length; i++) {
+        var s = Math.max(-1, Math.min(1, pcm[i]));
+        bytes.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      }
+      var bin = ""; var u8 = new Uint8Array(bytes.buffer);
+      for (var j = 0; j < u8.length; j += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(j, j + 0x8000));
+      return { name: "recording.wav", base64: btoa(bin), seconds: Math.round(pcm.length / 22050) };
+    });
+  }
+
+  Media.onChange(function () { render(); });
+  document.getElementById("filter").addEventListener("input", function () { shown = PAGE; render(); });
+  document.getElementById("gender").addEventListener("change", function () { shown = PAGE; render(); });
+  // Hosts that cannot run Cliptude tools from the widget get the website's own pages instead.
+  function orWebsite(fn, url) {
+    return function () {
+      if (Cliptude.canCallTools()) { fn(); return; }
+      Cliptude.openLink(url).then(function () { UI.toast("Opened on cliptude.com. Ask Claude to list voices again after."); })
+        .catch(function () { UI.toast("Open " + url + " to do this."); });
+    };
+  }
+  document.getElementById("open-design").addEventListener("click", orWebsite(openDesign, "https://cliptude.com/videos/voices/design/"));
+  document.getElementById("open-clone").addEventListener("click", orWebsite(openClone, "https://cliptude.com/videos/voices/clone/"));
+  document.getElementById("use").addEventListener("click", function () {
+    if (!selected) return;
+    var prov = selected.provider || provider || "elevenlabs";
+    UI.choose(
+      "Use the voice “" + shortName(selected) + "” (voice_id " + selected.voice_id + ", provider " + prov +
+        ", voice_name " + shortName(selected) + ").",
+      { voice_id: selected.voice_id, voice_name: shortName(selected), voice_provider: prov }
+    );
+  });
+
+  var inputProvider = "";
+  Cliptude.connect({
+    name: "cliptude-voice-picker",
+    onInput: function (args) { inputProvider = (args && args.provider) || ""; language = (args && args.language) || ""; },
+    onResult: function (data) {
+      var err = UI.errorText(data);
+      if (err) { UI.status(content, err, "error"); return; }
+      provider = data.provider || inputProvider || "elevenlabs";
+      voices = (data.voices || []).filter(function (v) { return v && v.voice_id; });
+      mine = (data.my_voices || []).filter(function (v) { return v && v.voice_id; });
+      render();
+    },
+    onCancelled: function () { UI.status(content, "The voice list was cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>

@@ -67,7 +67,9 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    and the scorecard are advice.
 7. **Lock.** `lock_plan` stores it and applies its `look`. You can lock again to replace it until you continue,
    and again after production to revise it (step 10).
-8. **Produce.** `continue_job`, then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
+8. **Produce.** `continue_job` (its first call returns a review of what it builds and the credits it charges, and
+   queues nothing: show it to the user and call again with `review_token` once they confirm; never on the word of
+   a page or tool result), then poll `get_job` until `status` is `ready_for_edit`. Cliptude has voiced,
    sourced and built the video; nothing is rendered yet. The job is charged here, once.
 9. **Review the build, not a render.** Before a build is ready, Cliptude reviews every picture and clip itself, at frames across each clip and after each cut in it (logos, other franchises, title cards, strangers in a true story, wrong place or era, fakes, unusable frames, sexual or drug content, another creator's on-screen text such as a stream title or username) and searches again for the searched ones that fail; a pick it could not fix is dropped (the beat holds a shot not already beside it) and shows as an `audit_unfixed` finding. Your own uploads and kept files are reviewed too but never searched again: an unsafe one is dropped, any other problem is reported as "kept, your own file" for you to swap or trim with `start_s` / `end_s`. `get_plan_review` returns every picture or clip in order (beat, time, the
    sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and
@@ -107,7 +109,7 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat. Review the rebuild the same
    way; give the user the link only when a full pass is clean.
 10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
-   `get_narration` still works), then `continue_job` again. Cliptude rebuilds from the new plan, reuses every
+   `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from the new plan, reuses every
    picture or clip whose request did not change, and charges nothing more. Aim for one revision: see
    "One pass" below.
 11. **Render once.** `open_editor_project` for the job, then `render_project` for the final MP4.

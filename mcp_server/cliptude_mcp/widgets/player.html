@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliptude video</title>
+<style>
+/*@BASE_CSS@*/
+.player { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--border-radius-md); display: block; }
+.meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.progress { height: 6px; border-radius: 99px; background: var(--color-background-tertiary); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--accent); }
+.pending { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); }
+</style>
+</head>
+<body>
+<main class="app" aria-labelledby="title">
+  <div class="head">
+    <h1 id="title">Your video</h1>
+    <span class="sub" id="facts"></span>
+  </div>
+  <div id="content"><div class="status" role="status">Loading the video…</div></div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+(function () {
+  "use strict";
+  var h = UI.h;
+  var content = document.getElementById("content");
+
+  /** One shape for get_render, get_product_video_status and show_video results. */
+  function normalize(data) {
+    if (!data) return null;
+    if (data.render && typeof data.render === "object") {
+      var r = data.render;
+      return { title: r.title || data.title || "Edited video", url: r.output_url || "", status: r.status || "",
+        progress: r.progress, step: r.current_step || "", error: r.error_message || "", expires: r.output_url_expires_in_s,
+        kind: "render", id: r.id };
+    }
+    if (data.stage !== undefined) {
+      var out = data.output || {};
+      return { title: (data.product && data.product.title) ? "Video for " + data.product.title : (data.title || "Product video"),
+        url: out.url || "", status: data.stage, progress: data.progress, step: data.current_step || "",
+        error: data.error || "", duration: data.duration, editorUrl: data.editor_url || "", kind: "product", id: data.job_id };
+    }
+    return { title: data.title || "Your video", url: data.url || (data.output && data.output.url) || "",
+      status: data.status || "", progress: data.progress, step: data.current_step || "", error: data.error || "",
+      duration: data.duration_s || data.duration, editorUrl: data.editor_url || "", kind: "job", id: data.job_id };
+  }
+
+  function fmtDuration(s) {
+    s = Number(s);
+    if (!s || !isFinite(s)) return "";
+    s = Math.round(s);
+    var m = Math.floor(s / 60), sec = s % 60;
+    return m + ":" + (sec < 10 ? "0" : "") + sec;
+  }
+
+  function setFacts(parts) {
+    document.getElementById("facts").textContent = parts.filter(Boolean).join(" · ");
+  }
+
+  function linkButton(label, url, primary) {
+    return h("button", { type: "button", class: primary ? "primary" : "", onclick: function () {
+      Cliptude.openLink(url).catch(function () { UI.toast("The link could not be opened here."); });
+    } }, [label]);
+  }
+
+  function renderPending(v) {
+    var pct = typeof v.progress === "number" ? Math.max(0, Math.min(100, Math.round(v.progress))) : null;
+    var failed = /fail|error|cancel/i.test(v.status || "") || (!!v.error && !v.url);
+    var box = h("div", { class: "pending", role: "status" }, [
+      h("strong", {}, [failed ? "This video did not render." : "Not rendered yet"]),
+      h("span", { class: "sub" }, [failed ? (v.error || "The render failed.")
+        : (v.step || (v.status ? "Status: " + v.status.replace(/_/g, " ") : "Still working on it.")) +
+          ". Ask Claude to check again in a minute."]),
+      pct !== null && !failed ? h("div", { class: "progress", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100",
+        "aria-valuenow": String(pct), "aria-label": "Render progress" }, [h("span", { style: { width: pct + "%" } })]) : null,
+      v.editorUrl ? h("div", { class: "toolbar" }, [linkButton("Open in the editor", v.editorUrl)]) : null
+    ]);
+    UI.clear(content).appendChild(box);
+  }
+
+  function renderVideo(v) {
+    var video = h("video", { class: "player", controls: true, preload: "metadata", playsinline: true, src: v.url,
+      "aria-label": v.title });
+    var durationText = fmtDuration(v.duration);
+    video.addEventListener("loadedmetadata", function () {
+      if (!durationText && video.duration) setFacts([fmtDuration(video.duration), "MP4"]);
+      Cliptude.reportSize();
+    });
+    video.addEventListener("play", function () { Media.claimVideo("player", video); });
+    video.addEventListener("error", function () {
+      UI.toast("The video could not play here. Use Open MP4.");
+    });
+    var actions = h("div", { class: "toolbar" }, [
+      linkButton("Open MP4", v.url, true),
+      v.editorUrl ? linkButton("Open in the editor", v.editorUrl) : null
+    ]);
+    UI.clear(content).appendChild(h("div", { class: "list" }, [
+      video,
+      h("div", { class: "meta" }, [
+        actions,
+        v.expires ? h("span", { class: "muted" }, ["The link expires in " + Math.round(v.expires / 86400) +
+          " days; ask Claude for a fresh one any time. The MP4 stays in your account."]) : null
+      ])
+    ]));
+  }
+
+  Cliptude.connect({
+    name: "cliptude-video-player",
+    onResult: function (data) {
+      var err = UI.errorText(data);
+      if (err) { UI.status(content, err, "error"); return; }
+      var v = normalize(data);
+      document.getElementById("title").textContent = v.title;
+      setFacts([fmtDuration(v.duration), v.url ? "MP4" : (v.status || "").replace(/_/g, " ")]);
+      if (v.url) renderVideo(v); else renderPending(v);
+    },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>
