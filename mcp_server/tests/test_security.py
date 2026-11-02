@@ -260,6 +260,8 @@ class AnnotationsAndUntrustedTextTests(TestCase):
             "cancel_job", "open_editor_project", "run_agent", "cancel_agent_run", "render_project",
             # MCP Apps: the publish kit opens the editor project; the creation tools make avatars and voices.
             "show_publish_kit", "create_avatar", "design_voice_previews", "save_designed_voice", "clone_voice",
+            # A widget keeps the user's pick on Cliptude.
+            "save_choice",
         }
         destructive = {"delete_vector_character", "abort_media_upload", "cancel_job", "cancel_agent_run",
                        "lock_plan", "run_agent"}

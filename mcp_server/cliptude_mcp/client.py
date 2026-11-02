@@ -1172,6 +1172,14 @@ class CliptudeClient:
     def get_pick(self, pick_id: str) -> Any:
         return self.request("GET", f"/api/v1/picks/{_uuid_seg(pick_id, 'pick_id')}")
 
+    def save_choice(self, message: str, choice: dict | None = None) -> Any:
+        """Keep the user's pick from a widget on Cliptude (the agent reads it with get_choice)."""
+        return self.request("POST", "/api/v1/choices", json_body={"message": message, "choice": choice or {}})
+
+    def get_choice(self) -> Any:
+        """The user's latest pick from a Cliptude widget, or choice null."""
+        return self.request("GET", "/api/v1/choices")
+
     def estimate_credits(
         self,
         *,

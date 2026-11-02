@@ -212,6 +212,35 @@ def add_browser_fallback(mcp: Any, client: Callable[[], Any]) -> list[str]:
 def register_pick_tools(mcp: Any, client: Callable[[], Any], err: Callable[[Exception], dict[str, Any]]) -> None:
     from mcp.types import ToolAnnotations
 
+    # A click in a widget (Claude): the pick is kept on Cliptude, because claude.ai warns on messages a widget
+    # drafts and does not pass ui/update-model-context to the model (videos/widget_choices.py).
+    @mcp.tool(
+        title="Save choice",
+        annotations=ToolAnnotations(title="Save choice", read_only_hint=False, destructive_hint=False,
+                                    idempotent_hint=True, open_world_hint=False),
+        meta={"ui": {"visibility": ["app"]}, "openai/widgetAccessible": True},
+    )
+    def save_choice(
+        message: Annotated[str, Field(min_length=1, max_length=2000, description="The pick in words, with its exact id")],
+        choice: Annotated[dict[str, Any] | None, Field(description="The pick's fields, e.g. {template_id: ...}")] = None,
+    ) -> dict[str, Any]:
+        """Called by Cliptude's picker widgets when the user clicks a choice; not for the agent. The agent reads the pick with get_choice."""
+        try:
+            return client().save_choice(message, choice)
+        except Exception as exc:
+            return err(exc)
+
+    @mcp.tool(
+        title="Get choice",
+        annotations=ToolAnnotations(title="Get choice", read_only_hint=True, open_world_hint=False),
+    )
+    def get_choice() -> dict[str, Any]:
+        """The user's latest click in a Cliptude picker (template, voice, avatar, character, music, background, style), saved in the last two hours. Call it when the user says next, continue or proceed after you showed a picker: message names the pick and its exact id, choice has the fields (e.g. template_id, voice_id, avatar_profile_id), saved_at says when. If choice is null or older than the picker you showed, ask the user to click their pick in the widget."""
+        try:
+            return client().get_choice()
+        except Exception as exc:
+            return err(exc)
+
     @mcp.tool(
         title="Get pick",
         annotations=ToolAnnotations(title="Get pick", read_only_hint=True, open_world_hint=False),

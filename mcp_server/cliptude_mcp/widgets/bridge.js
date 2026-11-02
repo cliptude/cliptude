@@ -333,13 +333,15 @@ var UI = (function () {
     toastTimer = setTimeout(function () { el.classList.remove("show"); }, 3200);
   }
   /** Save a choice for the agent without writing in the user's message box.
-   *  Claude shows "Use caution before running this prompt" on any message an app drafts (ui/message), which
-   *  reads as if Cliptude were up to something. So the choice goes into model context (ui/update-model-context)
-   *  and the widget asks the user to type "next". ChatGPT has no model context for apps and no such warning, so
-   *  there (and wherever saving fails) the choice is sent as a message, as before. */
+   *  Claude shows "Use caution before running this prompt" on any message an app drafts (ui/message), and it
+   *  does not hand ui/update-model-context to the model (a pick saved only that way was lost). So the pick is
+   *  kept on Cliptude (save_choice), the widget asks the user to type "next", and the agent reads it with
+   *  get_choice. ChatGPT has no such warning: there, and wherever saving fails, the pick is sent as a message. */
   function choose(text, structured) {
-    if (Cliptude.state.openai) return sendAsMessage(text);
-    return Cliptude.updateModelContext(text, structured).then(function () {
+    if (Cliptude.state.openai || !Cliptude.canCallTools()) return sendAsMessage(text);
+    return Cliptude.callTool("save_choice", { message: text, choice: structured || {} }).then(function (res) {
+      if (!res || res.error || res.saved !== true) throw new Error("not saved");
+      Cliptude.updateModelContext(text, structured).catch(function () {});
       saved(text);
       return true;
     }).catch(function () { return sendAsMessage(text); });

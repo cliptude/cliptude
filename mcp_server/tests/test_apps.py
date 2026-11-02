@@ -457,3 +457,20 @@ class CreationToolTests(TestCase):
             self.assertTrue(result.structured_content["previews"][0]["audio_url"].startswith("data:audio"))
 
         run(_with_client(check))
+
+
+class ChoiceToolsTests(TestCase):
+    """A click in a Claude widget is kept on Cliptude (save_choice, hidden from the model); get_choice reads it."""
+
+    def test_save_choice_is_for_the_widget_and_get_choice_for_the_agent(self):
+        server = build_server()
+        tools = {t.name: t for t in asyncio.run(server.list_tools())}
+        meta = tools["save_choice"].meta or {}
+        self.assertEqual(meta.get("ui", {}).get("visibility"), ["app"])
+        self.assertTrue(meta.get("openai/widgetAccessible"))
+        self.assertIn("get_choice", tools)
+
+    def test_bridge_saves_the_pick_and_asks_for_next(self):
+        bridge = (Path(apps.__file__).parent / "widgets" / "bridge.js").read_text()
+        self.assertIn('callTool("save_choice"', bridge)
+        self.assertIn("in the chat to continue", bridge)
