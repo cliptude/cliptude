@@ -505,6 +505,8 @@ def main(argv: list[str] | None = None) -> None:
                     help='A real customer review, "quote|author|rating" (repeat up to 3 times)')
     ps.add_argument("--script-file", default="",
                     help="Narration you wrote (text file); the job is script_ready at once. Omit to let Cliptude write it")
+    ps.add_argument("--plan", action="store_true",
+                    help="You plan every visual: the job is voiced and stops at plan_ready (plan-check, plan-lock, then product render)")
     pr = prod_sub.add_parser("render", help="Produce the video from a ready product script")
     pr.add_argument("job_id")
     pr.add_argument("--aspect-ratio", default="16:9")
@@ -818,6 +820,7 @@ def main(argv: list[str] | None = None) -> None:
                     title=args.title or None, discount_code=args.discount_code or None, cta_url=args.cta_url or None,
                     reviews=[_review_arg(r) for r in args.review] or None,
                     script=Path(args.script_file).read_text(encoding="utf-8") if args.script_file else None,
+                    plan=args.plan,
                 ))
             elif args.product_cmd == "render":
                 _print(client.render_product_video(

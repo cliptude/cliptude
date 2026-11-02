@@ -803,10 +803,12 @@ class CliptudeClient:
         image_urls: list[str] | None = None,
         reviews: list[dict] | None = None,
         script: str | None = None,
+        plan: bool = False,
     ) -> Any:
         """Queue the 80/20 educational script for a product; returns {script_id, ...} immediately.
 
-        script: narration you researched and wrote yourself; the job is script_ready at once."""
+        script: narration you researched and wrote yourself; the job is script_ready at once.
+        plan: you plan every visual; the job stops at plan_ready with the sentence timings."""
         body: dict[str, Any] = {"product_id": product_id}
         for key, value in (
             ("angle", angle), ("duration", duration), ("template_id", template_id), ("title", title),
@@ -815,6 +817,8 @@ class CliptudeClient:
         ):
             if value not in (None, "", []):
                 body[key] = value
+        if plan:
+            body["plan"] = True
         return self.request("POST", "/api/v1/commerce/scripts", json_body=body)
 
     def render_product_video(

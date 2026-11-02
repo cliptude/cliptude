@@ -184,6 +184,9 @@ def build_server(*, with_http_auth: bool = False):
         "on the same job id, use continue_job (do not create a second job). "
         "Never set prompt to the video title. If the user only named a topic or title, "
         "web-search current facts, write spoken narration, show it to the user to review, and pass it as script. "
+        "Size it to the length the user asked for, else the template's duration (list_templates shows it), at about "
+        "150 spoken words a minute: 6-8 min 900-1200 words, 8-10 1250-1540, 10-12 1550-1850, 18-20 2800-3090, "
+        "30-40 4700-6180, 50-60 7800-9270 (880 is the minimum), and pass the same bucket as duration. "
         "Let Cliptude write it (prompt = a brief) only when the user asks for that. "
         "If the user pastes a full narration, pass it as script, not prompt. "
         "If they provide a voiceover file, pass voiceover_path and omit prompt/script. "
@@ -209,7 +212,10 @@ def build_server(*, with_http_auth: bool = False):
         "no_transitions) tell the user what it costs and pass "
         "its id in acknowledge only after they explicitly approve; otherwise fix the template. "
         "AGENT-PLANNED VIDEOS (Faceless Documentary, Top 10, Avatar Video, Vector Explainer): you plan every visual "
-        "and Cliptude only voices, sources and renders. Unless the user gave a script or a voiceover, research the "
+        "and Cliptude only voices, sources and renders. This is the default for these four formats: use "
+        "create_plan_job, not create_job, unless the user asks Cliptude to plan the visuals (\"just make it\") or "
+        "Cliptude runs in the Desktop app (no plan jobs there). A voiceover the user brings works the same way: "
+        "pass it as voiceover_path/voiceover_url and Cliptude aligns it before plan_ready. Unless the user gave a script or a voiceover, research the "
         "topic with web search, write the narration yourself and show it to the user to review first; then "
         "create_plan_job with script (prompt only when the user asks Cliptude to write it), poll get_job until "
         "plan_ready, get_narration (numbered sentences), get_kind_catalog (compact first), write the "
@@ -237,8 +243,11 @@ def build_server(*, with_http_auth: bool = False):
         "with web search and write the narration yourself: ~80% teaching with sourced facts, ~20% a bridge to the "
         "product using only facts from fetch_product_context. Show the user the script, then draft_product_script "
         "with angle, duration (6-8 to 50-60 minutes) and script (script_ready at once; omit script only when the "
-        "user asks Cliptude to write it, then poll get_product_video_status until script_ready), "
-        "render_product_video (this starts the build, not the final MP4), poll until "
+        "user asks Cliptude to write it, then poll get_product_video_status until script_ready) and plan "
+        "(default true on Faceless Documentary, Top 10 and Avatar Video templates: you plan the visuals). With plan, "
+        "poll until stage is plan_ready, then plan it as any agent-planned video: get_narration (its product "
+        "section has the product facts and the product-board rules), get_kind_catalog, check_plan until valid, "
+        "lock_plan. Then render_product_video (this starts the build, not the final MP4), poll until "
         "ready_for_review, open_editor_project and look at every picture and graphic yourself with "
         "view_scenes (contact sheets; media links may not open for you), check no picture or board shows another brand "
         "(shop shelves in the product part especially), give the user editor_url, and only after they approve render with "
@@ -503,7 +512,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         duration: Annotated[
             str | None,
-            Field(description="Wizard duration bucket such as 3-4 or 6-8. Omit to use the template (or estimate from script). Ignored when voiceover_path or talking_head_path is set — duration comes from the file."),
+            Field(description="Duration bucket such as 6-8 or 10-12 (videos start at 6 minutes). Omit to use the template (or estimate from script). Ignored when voiceover_path or talking_head_path is set — duration comes from the file."),
         ] = None,
         avatar_intro_only: Annotated[
             bool | None,
@@ -644,7 +653,7 @@ def build_server(*, with_http_auth: bool = False):
         prompt: Annotated[str, Field(min_length=1, description="Topic or brief. Cliptude researches and writes spoken narration. Never the video title.")],
         duration: Annotated[
             str | None,
-            Field(description="Wizard duration bucket such as 3-4 or 6-8. Omit to use the template."),
+            Field(description="Duration bucket such as 6-8 or 10-12 (videos start at 6 minutes). Omit to use the template."),
         ] = None,
         review_token: Annotated[
             str | None,
@@ -680,7 +689,7 @@ def build_server(*, with_http_auth: bool = False):
         script: Annotated[str | None, Field(description="Spoken narration to voice as-is. Omit prompt when you pass this.")] = None,
         duration: Annotated[
             str | None,
-            Field(description="Wizard duration bucket such as 3-4 or 6-8. Omit to use the template (or estimate from script)."),
+            Field(description="Duration bucket such as 6-8 or 10-12 (videos start at 6 minutes). Omit to use the template (or estimate from script)."),
         ] = None,
         review_token: Annotated[
             str | None,
@@ -781,13 +790,18 @@ def build_server(*, with_http_auth: bool = False):
             "bridges to the product with only facts from fetch_product_context (real price, what it is; never "
             "invented reviews, discounts or claims). Show it to the user before render_product_video. Omit it only "
             "when the user asks Cliptude to write the script."))] = None,
+        plan: Annotated[bool, Field(description=(
+            "True (the default for a Faceless Documentary, Top 10 or Avatar Video template): you plan every visual "
+            "yourself. Cliptude voices the script and stops at plan_ready; get_narration then gives the sentence "
+            "timings plus the product facts and product-board rules, and you check_plan, lock_plan and call "
+            "render_product_video to build it. False: Cliptude's planner plans the visuals."))] = True,
     ) -> dict[str, Any]:
-        """Save the narration for a product video: an educational documentary for about 80% of its length, then a natural bridge to the product (real specs, price, offer) in the last 20%. By default pass script, written by you from your own research: the job is script_ready at once and costs nothing until the build. Without script, Cliptude writes it (poll get_product_video_status until script_ready). Either way show the user the script and get their approval before render_product_video."""
+        """Save the narration for a product video: an educational documentary for about 80% of its length, then a natural bridge to the product (real specs, price, offer) in the last 20%. By default pass script, written by you from your own research: the job is script_ready at once and costs nothing until the build. Without script, Cliptude writes it (poll get_product_video_status until script_ready). Either way show the user the script and get their approval first. With plan (the default) the job is voiced and stops at plan_ready for you to plan; without it, render_product_video builds it with Cliptude's planner."""
         try:
             return _client().draft_product_script(
                 product_id, angle=angle, duration=duration, template_id=template_id, title=title,
                 discount_code=discount_code, cta_url=cta_url, image_urls=image_urls, reviews=reviews,
-                script=script,
+                script=script, plan=plan,
             )
         except Exception as exc:
             return _err(exc)
@@ -808,7 +822,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description="A YouTube video link or https image whose thumbnail style to copy. Optional; not with thumbnail_prompt."),
         ] = None,
     ) -> dict[str, Any]:
-        """Start BUILDING the video from the approved script on the same job id: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. This does not render the final MP4: when the build is done (ready_for_review) review it, show the user the editor_url and wait for their go-ahead before render_project. Returns {job_id, status, stage, editor_url, estimated_minutes, credits_reserved, credits} immediately (credits: charged so far, held while it builds, and the full-generation estimate); quote them to the user. Never wait in this call. Poll get_product_video_status."""
+        """Start BUILDING the video on the same job id, from the approved script or, for a plan job (plan=true), from the plan you locked with lock_plan: voiceover, sourcing, motion graphics, and the merchant's real product photos composited into the closing product boards. This does not render the final MP4: when the build is done (ready_for_review) review it, show the user the editor_url and wait for their go-ahead before render_project. Returns {job_id, status, stage, editor_url, estimated_minutes, credits_reserved, credits} immediately (credits: charged so far, held while it builds, and the full-generation estimate); quote them to the user. Never wait in this call. Poll get_product_video_status."""
         try:
             return _client().render_product_video(
                 script_id, aspect_ratio=aspect_ratio,

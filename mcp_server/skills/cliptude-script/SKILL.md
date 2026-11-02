@@ -22,7 +22,7 @@ Cliptude production does **not** voice the title. It web-researches, then writes
 Then generate:
 
 ```bash
-cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt --duration 3-4
+cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt --duration 6-8
 ```
 
 Spoken-words-only. See https://cliptude.com/docs/custom-script/
@@ -65,9 +65,6 @@ Word budget (hard max — never exceed):
 
 | `--duration` | Words |
 |---|---|
-| `1-2` | 150–300 |
-| `3-4` | 450–600 |
-| `5-6` | 750–900 |
 | `6-8` | 900–1200 |
 | `8-10` | 1250–1540 |
 | `10-12` | 1550–1850 |
@@ -75,7 +72,7 @@ Word budget (hard max — never exceed):
 | `30-40` | 4700–6180 |
 | `50-60` | 7800–9270 |
 
-If duration is omitted, use the template’s bucket if you know it; otherwise `3-4` for short explainers and `6-8` for documentary templates.
+Cliptude videos start at 6 minutes and a custom script must be **880–9,270 words** (shorter is refused). Write for the length the user asked for; otherwise for the template's `duration` (`list_templates` / `get_template` show it). About 150 spoken words make a minute. Count the words before you show the user the script, and pass the same bucket as `duration`.
 
 ## Step 3 — Write the narration
 

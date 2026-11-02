@@ -12,6 +12,11 @@ nothing.
 
 Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_explainer`. Not available in the desktop app yet.
 
+**This is the default for those four formats:** plan the video yourself unless the user asks Cliptude to plan
+the visuals ("just make it"). Product videos too: `draft_product_script(..., plan=true)` stops at `plan_ready`,
+`get_narration` adds a `product` section (facts, photo URLs, QR link and the product-board rules), and after
+`lock_plan` you build with `render_product_video` instead of `continue_job`.
+
 ## Flow
 
 1. **Template.** `list_templates`; or `get_template_options` + `list_voices` + `create_template`. The template fixes the

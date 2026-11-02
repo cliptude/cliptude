@@ -22,7 +22,7 @@ To direct every visual yourself (theme, colours, graphics, text, timing and the 
 Then generate with a saved template name (prompt, script, voiceover, or talking-head — pick one):
 
 ```bash
-cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt --duration 3-4
+cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt --duration 6-8
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --voiceover narration.mp3
 cliptude generate --template "My talking head" --title "Weekly recap" --talking-head clip.mp4
 ```

@@ -557,6 +557,7 @@ class ProductVideoClientTests(TestCase):
             client.render_product_video("job", aspect_ratio="9:16")
             client.get_product_video_status("job")
             client.render_product_video("job", thumbnail={"custom_prompt": "Ethan beside a card reader"})
+            client.draft_product_script("pid", script="Words.", plan=True)
         calls = [(c.args[0], c.args[1], c.kwargs.get("json_body")) for c in req.call_args_list]
         self.assertEqual(calls[0], ("POST", "/api/v1/commerce/products/fetch",
                                     {"url_or_query": "https://store.com/products/pan", "store_domain": "store.com"}))
@@ -566,6 +567,7 @@ class ProductVideoClientTests(TestCase):
         self.assertEqual(calls[3], ("GET", "/api/v1/commerce/videos/job", None))
         self.assertEqual(calls[4], ("POST", "/api/v1/commerce/videos/job/render",
                                     {"aspect_ratio": "16:9", "thumbnail": {"custom_prompt": "Ethan beside a card reader"}}))
+        self.assertEqual(calls[5], ("POST", "/api/v1/commerce/scripts", {"product_id": "pid", "script": "Words.", "plan": True}))
 
 
 class StoredLoginRefreshTests(TestCase):
