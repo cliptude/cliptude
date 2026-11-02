@@ -23,38 +23,55 @@ def _add_review_args(parser) -> None:
     )
 
 
-def _create_reviewed(client: CliptudeClient, args, **kwargs):
-    """create_job behind the job review: in a terminal, show it and ask; otherwise print it and stop.
+def _reviewed(args, call, *, heading: str = "Review this video before it is created:",
+              question: str = "Create this video?"):
+    """A call that spends credits, behind its review: in a terminal, show it and ask; otherwise print it and stop.
 
-    Cliptude answers a job without a review_token with the review (HTTP 428) and creates nothing.
+    Cliptude answers create_job, continue, product script/render, agent and paid render without a review_token
+    with the review (HTTP 428) and does nothing. ``call(review_token, acknowledge)`` makes the request.
     """
     token = (getattr(args, "review_token", "") or "").strip() or None
     acks = [a.strip() for raw in (getattr(args, "acknowledge", None) or []) for a in raw.split(",") if a.strip()]
     try:
-        return client.create_job(review_token=token, acknowledge=acks or None, **kwargs)
+        return call(token, acks or None)
     except CliptudeApiError as exc:
         detail = exc.payload if isinstance(exc.payload, dict) else {}
         if exc.status != 428 or "review" not in detail or not sys.stdin.isatty():
             raise
     review = detail["review"]
     out = sys.stderr
-    out.write("\nReview this video before it is created:\n")
+    out.write(f"\n{heading}\n")
+    if review.get("summary"):
+        out.write(f"  {review['summary']}\n")
     for item in review.get("settings") or []:
         out.write(f"  {item.get('label')}: {item.get('value')}\n")
     credits = review.get("credits") or {}
     if credits.get("credits_required") is not None:
         out.write(f"  Credits: about {credits['credits_required']} (you have {credits.get('credits_available')})\n")
+    else:
+        for key, value in credits.items():
+            out.write(f"  Credits, {key.replace('_', ' ')}: {value}\n")
     for warning in review.get("warnings") or []:
         out.write(f"  ! {warning}\n")
     approved = []
     for ack in review.get("acknowledgements_required") or []:
         out.write(f"\n  {ack['message']}\n")
         if input(f"  Approve ({ack['id']})? [y/N] ").strip().lower() != "y":
-            raise CliptudeApiError("Not created: change the template and run again.")
+            raise CliptudeApiError("Not done: change the template and run again.")
         approved.append(ack["id"])
-    if input("\nCreate this video? [y/N] ").strip().lower() != "y":
-        raise CliptudeApiError("Not created.")
-    return client.create_job(review_token=detail["review_token"], acknowledge=approved or None, **kwargs)
+    if input(f"\n{question} [y/N] ").strip().lower() != "y":
+        raise CliptudeApiError("Not done: nothing was spent.")
+    return call(detail["review_token"], approved or None)
+
+
+def _create_reviewed(client: CliptudeClient, args, **kwargs):
+    """create_job behind the job review (see _reviewed)."""
+    return _reviewed(args, lambda token, acks: client.create_job(review_token=token, acknowledge=acks, **kwargs))
+
+
+def _spend_reviewed(args, call, question: str):
+    """A call on an existing job or project that spends credits, behind its review (see _reviewed)."""
+    return _reviewed(args, lambda token, _acks: call(token), heading="This spends credits:", question=question)
 
 
 def _die(exc: Exception, code: int = 1) -> None:
@@ -482,6 +499,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     cont.add_argument("job_id")
     _add_thumbnail_args(cont, scope="this video")
+    _add_review_args(cont)
 
     prod = sub.add_parser(
         "product",
@@ -513,10 +531,12 @@ def main(argv: list[str] | None = None) -> None:
                     help="Narration you wrote (text file); the job is script_ready at once. Omit to let Cliptude write it")
     ps.add_argument("--plan", action="store_true",
                     help="You plan every visual: the job is voiced and stops at plan_ready (plan-check, plan-lock, then product render)")
+    _add_review_args(ps)
     pr = prod_sub.add_parser("render", help="Produce the video from a ready product script")
     pr.add_argument("job_id")
     pr.add_argument("--aspect-ratio", default="16:9")
     _add_thumbnail_args(pr, scope="this video")
+    _add_review_args(pr)
     pst = prod_sub.add_parser("status", help="Stage, script, preview link and MP4 of a product video")
     pst.add_argument("job_id")
 
@@ -597,6 +617,7 @@ def main(argv: list[str] | None = None) -> None:
     ag.add_argument("--tier", default="fast", help="fast or smart (see cliptude agent-tiers)")
     ag.add_argument("--chat", default="", help="Continue an existing agent chat id")
     ag.add_argument("--wait", action="store_true", help="Poll until the run finishes")
+    _add_review_args(ag)
 
     ags = sub.add_parser("agent-status", help="Get a Cliptude Agent run")
     ags.add_argument("project_id")
@@ -613,6 +634,7 @@ def main(argv: list[str] | None = None) -> None:
     rn.add_argument("--wait", action="store_true", help="Poll until the render finishes")
     rn.add_argument("--accept-quality-findings", action="store_true",
                     help="Agent-planned jobs: render although plan-review still lists plan quality findings")
+    _add_review_args(rn)
 
     rs = sub.add_parser("render-status", help="Get an editor render (output_url when done)")
     rs.add_argument("render_id")
@@ -816,23 +838,28 @@ def main(argv: list[str] | None = None) -> None:
             client.download_voiceover_file(args.job_id, dest)
             _print({"ok": True, "path": str(dest.resolve())})
         elif args.cmd == "continue":
-            _print(client.continue_job(args.job_id, thumbnail=_thumbnail_from_args(args)))
+            thumbnail = _thumbnail_from_args(args)
+            _print(_spend_reviewed(
+                args, lambda token: client.continue_job(args.job_id, thumbnail=thumbnail, review_token=token),
+                "Build this video?",
+            ))
         elif args.cmd == "product":
             if args.product_cmd == "fetch":
                 _print(client.fetch_product_context(args.url_or_query, store_domain=args.store or None))
             elif args.product_cmd == "script":
                 angle = int(args.angle) if str(args.angle).isdigit() else args.angle
-                _print(client.draft_product_script(
+                script = Path(args.script_file).read_text(encoding="utf-8") if args.script_file else None
+                _print(_reviewed(args, lambda token, acks: client.draft_product_script(
                     args.product_id, angle=angle, duration=args.duration, template_id=args.template or None,
                     title=args.title or None, discount_code=args.discount_code or None, cta_url=args.cta_url or None,
-                    reviews=[_review_arg(r) for r in args.review] or None,
-                    script=Path(args.script_file).read_text(encoding="utf-8") if args.script_file else None,
-                    plan=args.plan,
-                ))
+                    reviews=[_review_arg(r) for r in args.review] or None, script=script, plan=args.plan,
+                    review_token=token, acknowledge=acks,
+                ), question="Start this product video?"))
             elif args.product_cmd == "render":
-                _print(client.render_product_video(
-                    args.job_id, aspect_ratio=args.aspect_ratio, thumbnail=_thumbnail_from_args(args),
-                ))
+                thumbnail = _thumbnail_from_args(args)
+                _print(_spend_reviewed(args, lambda token: client.render_product_video(
+                    args.job_id, aspect_ratio=args.aspect_ratio, thumbnail=thumbnail, review_token=token,
+                ), "Build this product video?"))
             else:
                 _print(client.get_product_video_status(args.job_id))
         elif args.cmd == "editor":
@@ -844,9 +871,10 @@ def main(argv: list[str] | None = None) -> None:
             if not (prompt or "").strip():
                 raise CliptudeApiError("Provide --prompt or --prompt-file.")
             items = [i.strip() for i in (args.items or "").split(",") if i.strip()]
-            payload = client.run_agent(
-                args.project_id, prompt=prompt, tier=args.tier, referenced_item_ids=items, chat_id=args.chat or None
-            )
+            payload = _spend_reviewed(args, lambda token: client.run_agent(
+                args.project_id, prompt=prompt, tier=args.tier, referenced_item_ids=items, chat_id=args.chat or None,
+                review_token=token,
+            ), "Run the agent?")
             if args.wait:
                 run_id = (payload.get("run") or {}).get("id")
                 payload = _wait(lambda: client.get_agent_run(args.project_id, run_id), lambda p: (p.get("run") or {}).get("status"))
@@ -858,7 +886,9 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "agent-tiers":
             _print(client.agent_tiers())
         elif args.cmd == "render":
-            payload = client.render_project(args.project_id, accept_quality_findings=args.accept_quality_findings)
+            payload = _spend_reviewed(args, lambda token: client.render_project(
+                args.project_id, accept_quality_findings=args.accept_quality_findings, review_token=token,
+            ), "Render this MP4?")
             if args.wait:
                 render_id = (payload.get("render") or {}).get("id")
                 payload = _wait(lambda: client.get_render(render_id), lambda p: (p.get("render") or {}).get("status"))

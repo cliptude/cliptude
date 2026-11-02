@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose a character</title>
+<style>
+/*@BASE_CSS@*/
+.thumb img { object-fit: contain; background: #fff; }
+.card .desc { color: var(--color-text-secondary); font-size: var(--font-text-xs-size); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+</style>
+</head>
+<body>
+<main class="app" aria-labelledby="title">
+  <div class="head">
+    <h1 id="title">Choose a Vector Explainer character</h1>
+    <span class="sub" id="count"></span>
+  </div>
+  <div class="toolbar">
+    <label class="sr-only" for="filter">Filter characters</label>
+    <input type="search" id="filter" placeholder="Filter characters" autocomplete="off">
+  </div>
+  <div id="content"><div class="status" role="status">Loading characters…</div></div>
+  <div class="selection" id="selection">
+    <span class="what" id="selected-text">Pick a character, or go without one.</span>
+    <span class="toolbar">
+      <button id="none" type="button">No character</button>
+      <button class="primary" id="use" type="button" disabled>Use this character</button>
+    </span>
+  </div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+(function () {
+  "use strict";
+  var h = UI.h;
+  var data = { builtin: [], uploads: [] };
+  var selected = null;
+  var content = document.getElementById("content");
+
+  function matches(c, q) {
+    return !q || [c.name, c.descriptor, c.description, c.id].join(" ").toLowerCase().indexOf(q) >= 0;
+  }
+
+  function card(c) {
+    return h("button", {
+      type: "button", class: "card", role: "listitem", "aria-pressed": String(!!selected && selected.id === c.id),
+      "aria-label": c.name + (c.descriptor ? ", " + c.descriptor : ""),
+      onclick: function () { select(c); }
+    }, [
+      UI.img(c.preview_url, "", UI.initials(c.name)),
+      h("span", { class: "body" }, [
+        h("span", { class: "name" }, [c.name || "Character"]),
+        c.descriptor ? h("span", { class: "chips" }, [h("span", { class: "chip" }, [c.descriptor])]) : null,
+        c.description ? h("span", { class: "desc" }, [c.description]) : null
+      ])
+    ]);
+  }
+
+  function section(title, rows) {
+    if (!rows.length) return null;
+    var grid = h("div", { class: "grid", role: "list", "aria-label": title });
+    rows.forEach(function (c) { grid.appendChild(card(c)); });
+    return h("section", { class: "list" }, [h("h2", { class: "section-title" }, [title]), grid]);
+  }
+
+  function render() {
+    var q = document.getElementById("filter").value.trim().toLowerCase();
+    var mine = (data.uploads || []).filter(function (c) { return matches(c, q); });
+    var cast = (data.builtin || []).filter(function (c) { return matches(c, q); });
+    document.getElementById("count").textContent =
+      (data.builtin || []).length + " built-in" + ((data.uploads || []).length ? " · " + data.uploads.length + " yours" : "");
+    if (!mine.length && !cast.length) { UI.status(content, q ? "No character matches that filter." : "No characters yet."); return; }
+    UI.clear(content).appendChild(h("div", { class: "list" }, [section("Your characters", mine), section("Built-in cast", cast)]));
+  }
+
+  function select(c) {
+    selected = c;
+    render();
+    document.getElementById("use").disabled = false;
+    document.getElementById("selected-text").textContent = "“" + c.name + "” · " + c.id;
+  }
+
+  document.getElementById("filter").addEventListener("input", render);
+  document.getElementById("use").addEventListener("click", function () {
+    if (!selected) return;
+    UI.choose("Use the Vector Explainer character “" + selected.name + "” (vector_character_id " + selected.id + ").",
+      { vector_character_id: selected.id, vector_character_name: selected.name });
+  });
+  document.getElementById("none").addEventListener("click", function () {
+    UI.choose("Make the Vector Explainer video with no character (leave vector_character_id unset).", { vector_character_id: null });
+  });
+
+  Cliptude.connect({
+    name: "cliptude-character-picker",
+    onResult: function (result) {
+      var err = UI.errorText(result);
+      if (err) { UI.status(content, err, "error"); return; }
+      data = result || data;
+      render();
+    },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose a setting</title>
+<style>
+/*@BASE_CSS@*/
+.row { cursor: pointer; }
+.desc-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; color: var(--color-text-secondary); font-size: var(--font-text-xs-size); }
+.caption-stage { aspect-ratio: 16 / 9; display: flex; align-items: flex-end; justify-content: center; padding: 12px;
+  background: linear-gradient(160deg, #3b4a5c, #10161f); }
+.caption-stage span { font-size: 18px; text-align: center; line-height: 1.2; }
+.theme-stage { aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700;
+  background: var(--color-background-tertiary); color: var(--color-text-tertiary); }
+.video-toggle { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.6); color: #fff; border: 0; }
+.play-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.play-overlay span { background: rgba(0,0,0,.55); color: #fff; border-radius: 99px; padding: 6px 12px; font-size: 12px; }
+.current { border-style: dashed; }
+</style>
+</head>
+<body>
+<main class="app" aria-labelledby="title">
+  <div class="head">
+    <h1 id="title">Choose a setting</h1>
+    <span class="sub" id="count"></span>
+  </div>
+  <p class="sub" id="description" hidden></p>
+  <div class="toolbar" id="toolbar" hidden>
+    <label class="sr-only" for="filter">Filter</label>
+    <input type="search" id="filter" placeholder="Filter" autocomplete="off">
+  </div>
+  <div id="content"><div class="status" role="status">Loading choices…</div></div>
+  <div class="selection" id="selection" hidden>
+    <span class="what" id="selected-text"></span>
+    <button class="primary" id="use" type="button">Use this</button>
+  </div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+(function () {
+  "use strict";
+  var h = UI.h;
+  var PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  var PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+  var NOUN = { music: "music", image: "background", style: "style", caption: "caption style", theme: "theme", text: "option" };
+  var info = { field: "", kind: "text", choices: [] };
+  var selected = null;
+  var muted = true;
+  var content = document.getElementById("content");
+
+  function noun() { return NOUN[info.kind] || "option"; }
+  function isCurrent(c) { return info.current !== undefined && info.current !== null && String(info.current) === String(c.value); }
+
+  function visible() {
+    var q = document.getElementById("filter").value.trim().toLowerCase();
+    return (info.choices || []).filter(function (c) {
+      return !q || [c.value, c.label, c.hint, c.blurb, c.group].join(" ").toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function select(c) {
+    selected = c;
+    render();
+    document.getElementById("selection").hidden = false;
+    document.getElementById("use").textContent = c.none ? "Use no music" : "Use this " + noun();
+    document.getElementById("selected-text").textContent = c.none ? "No background music"
+      : "“" + (c.label || c.value) + "” · " + info.field + "=" + c.value;
+  }
+
+  function messageFor(c) {
+    if (c.none) return "Use no background music (background_music_mode=none).";
+    var label = c.label && c.label !== c.value ? " (“" + c.label + "”)" : "";
+    var where = info.usage ? " " + info.usage : "";
+    return "Use " + info.field + "=" + c.value + label + "." + where;
+  }
+
+  function selectable(el, c) {
+    el.setAttribute("aria-pressed", String(!!selected && selected.value === c.value && !!selected.none === !!c.none));
+    el.addEventListener("click", function () { select(c); });
+    if (el.tagName !== "BUTTON") {
+      el.tabIndex = 0;
+      el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(c); } });
+    }
+    if (isCurrent(c)) el.classList.add("current");
+    return el;
+  }
+
+  /* ---- music: list with play/pause ---- */
+  function musicRow(c) {
+    var key = "m:" + c.value;
+    var playing = Media.playing() === key;
+    var play = null;
+    if (c.preview_url) {
+      play = h("button", { type: "button", class: "icon", "aria-pressed": String(playing),
+        "aria-label": (playing ? "Pause " : "Play ") + (c.label || c.value),
+        onclick: function (e) { e.stopPropagation(); Media.toggleAudio(key, c.preview_url); } }, []);
+      play.innerHTML = playing ? PAUSE : PLAY;
+    }
+    var chips = [];
+    if (c.group) chips.push(h("span", { class: "chip" }, [c.group === "theme" ? "Documentary bed" : c.group === "library" ? "Library" : c.group]));
+    if (isCurrent(c)) chips.push(h("span", { class: "chip info" }, ["Default"]));
+    return selectable(h("div", { class: "row", role: "listitem" }, [
+      play,
+      h("div", { class: "main" }, [
+        h("span", { class: "name" }, [c.none ? "No music" : (c.label || c.value)]),
+        c.hint ? h("span", { class: "desc" }, [c.hint]) : null,
+        c.none ? h("span", { class: "desc" }, ["Narration only, no background track."]) :
+          (c.label && c.label !== c.value ? h("span", { class: "muted" }, [c.value]) : null),
+        chips.length ? h("span", { class: "chips" }, chips) : null
+      ])
+    ]), c);
+  }
+
+  /* ---- style video previews: poster, click to play, one at a time ---- */
+  function videoThumb(c) {
+    var box = h("span", { class: "thumb r16x9" });
+    var key = "v:" + c.value;
+    var video = null;
+    if (c.poster_url) box.appendChild(h("img", { src: c.poster_url, alt: "", loading: "lazy" }));
+    var overlay = h("span", { class: "play-overlay" }, [h("span", {}, ["▶ Preview"])]);
+    box.appendChild(overlay);
+    var sound = h("button", { type: "button", class: "icon video-toggle", "aria-label": muted ? "Unmute preview" : "Mute preview",
+      hidden: true, onclick: function (e) {
+        e.stopPropagation();
+        muted = !muted;
+        if (video) video.muted = muted;
+        sound.textContent = muted ? "🔇" : "🔊";
+        sound.setAttribute("aria-label", muted ? "Unmute preview" : "Mute preview");
+      } }, [muted ? "🔇" : "🔊"]);
+    box.appendChild(sound);
+    function start() {
+      if (!video) {
+        video = h("video", { src: c.preview_video_url, poster: c.poster_url || null, playsinline: true, loop: true, preload: "none" });
+        video.muted = muted;
+        video.addEventListener("error", function () { overlay.hidden = false; UI.toast("That preview could not be played."); });
+        box.insertBefore(video, box.firstChild);
+        var still = box.querySelector("img"); if (still) still.remove();
+      }
+      Media.claimVideo(key, video);
+      overlay.hidden = true;
+      sound.hidden = false;
+      var p = video.play(); if (p && p.catch) p.catch(function () { overlay.hidden = false; });
+    }
+    function pause() { if (video) { video.pause(); Media.release(video); } overlay.hidden = false; }
+    box.addEventListener("mouseenter", function () { if (Cliptude.state.hostContext.deviceCapabilities && Cliptude.state.hostContext.deviceCapabilities.hover === false) return; start(); });
+    box.addEventListener("mouseleave", pause);
+    box.addEventListener("click", function () { if (video && !video.paused) pause(); else start(); });
+    return box;
+  }
+
+  function captionStage(c) {
+    var css = c.caption_css || {};
+    return h("span", { class: "caption-stage", "aria-hidden": "true" }, [h("span", { style: {
+      fontFamily: css.font_family || "inherit", color: css.color || "#fff", textShadow: css.text_shadow || "none",
+      background: css.background || "transparent", padding: css.padding || "0", fontWeight: css.font_weight || "bold",
+      fontStyle: css.font_style || "normal"
+    } }, [c.sample_text || "YOUR CAPTION"])]);
+  }
+
+  function card(c) {
+    var media = null;
+    if (c.preview_video_url) media = videoThumb(c);
+    else if (c.image_url) { media = UI.img(c.image_url, "", ""); media.classList.add("r16x9"); }
+    else if (c.caption_css) media = captionStage(c);
+    else if (c.swatches && c.swatches.length) {
+      media = h("span", { class: "theme-stage", "aria-hidden": "true", style: { background: c.swatches[2] || c.swatches[0] } },
+        [h("span", { style: { color: c.swatches[0], borderBottom: "4px solid " + (c.swatches[1] || c.swatches[0]) } }, [c.label || c.value])]);
+    }
+    var chips = [];
+    if (c.group === "upload") chips.push(h("span", { class: "chip info" }, ["Your upload"]));
+    if (isCurrent(c)) chips.push(h("span", { class: "chip info" }, ["Default"]));
+    if (c.hint) chips.push(h("span", { class: "chip" }, [c.hint]));
+    return selectable(h("div", { class: "card", role: "listitem", "aria-label": c.label || c.value }, [
+      media,
+      h("span", { class: "body" }, [
+        h("span", { class: "name" }, [c.label || c.value]),
+        c.swatches && c.swatches.length ? h("span", { class: "swatches", "aria-label": "Colours " + c.swatches.join(", ") },
+          c.swatches.map(function (col) { return h("span", { class: "swatch", title: col, style: { background: col } }); })) : null,
+        c.blurb ? h("span", { class: "desc-clamp" }, [c.blurb]) : null,
+        chips.length ? h("span", { class: "chips" }, chips) : null,
+        c.label && c.label !== c.value ? h("span", { class: "muted" }, [c.value]) : null
+      ])
+    ]), c);
+  }
+
+  function render() {
+    var rows = visible();
+    document.getElementById("count").textContent = (info.choices || []).length + " choices";
+    if (!(info.choices || []).length) { UI.status(content, "No choices for this setting."); return; }
+    if (!rows.length) { UI.status(content, "Nothing matches that filter."); return; }
+    var box;
+    if (info.kind === "music") {
+      box = h("div", { class: "list", role: "list" });
+      if (!document.getElementById("filter").value) box.appendChild(musicRow({ value: "", none: true }));
+      rows.forEach(function (c) { box.appendChild(musicRow(c)); });
+    } else {
+      box = h("div", { class: info.kind === "image" ? "grid" : "grid wide", role: "list" });
+      rows.forEach(function (c) { box.appendChild(card(c)); });
+    }
+    UI.clear(content).appendChild(box);
+  }
+
+  Media.onChange(function (key) { if (String(key || "").indexOf("m:") === 0) render(); });
+  document.getElementById("filter").addEventListener("input", render);
+  document.getElementById("use").addEventListener("click", function () {
+    if (!selected) return;
+    var structured = {}; structured[info.field] = selected.none ? null : selected.value;
+    if (selected.none) structured = { background_music_mode: "none" };
+    UI.choose(messageFor(selected), structured);
+  });
+
+  Cliptude.connect({
+    name: "cliptude-choice-picker",
+    onResult: function (data) {
+      var err = UI.errorText(data);
+      if (err) { UI.status(content, err, "error"); return; }
+      info = data;
+      document.getElementById("title").textContent = data.label || ("Choose " + data.field);
+      if (data.description) { var d = document.getElementById("description"); d.textContent = data.description; d.hidden = false; }
+      document.getElementById("toolbar").hidden = (data.choices || []).length < 8;
+      render();
+    },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>
