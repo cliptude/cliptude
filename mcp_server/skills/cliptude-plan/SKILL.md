@@ -33,9 +33,12 @@ Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_expl
    transitions, sound effects, music) and every warning and the credits, and ask them to confirm. Then call again
    with `review_token`; for each `acknowledgements_required` item (`no_general_web_content`, `no_video_footage`,
    `no_motion_graphics`, `no_music`, `no_sound_effects`, `no_transitions`) explain what it costs and pass it in `acknowledge` only after the user approves it.
-   `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (your narration, voiced as is),
-   `prompt` (a brief; Cliptude writes the narration — never the bare title), or `voiceover_path` (audio you already
-   have). Needs the full website price in credits; charges only the narration now. Names, places and borrowed
+   `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (the default: narration you
+   researched and wrote, voiced as is), `prompt` (a brief, only when the user asks Cliptude to write the narration;
+   never the bare title), or `voiceover_path` (audio you already have). **Write the script yourself first**:
+   unless the user gave a script or a voiceover, follow **cliptude-script** (web search, then spoken narration),
+   show the user the script, and start the job only after they approve it; the narration cannot change once it
+   is voiced. Needs the full website price in credits; charges only the narration now. Names, places and borrowed
    words the voice may get wrong go in `pronunciations` (ElevenLabs voices): `[{"word": "Gmay", "alias":
    "guh-MAY"}]` or `{"word", "phoneme", "alphabet": "ipa"}`, on the template or the job (CLI `--pronunciations
    file.json`). Keep the real spelling in the script: captions, phrases and searches use it.
@@ -172,7 +175,7 @@ this order, and the video needs two builds: one to review, one to ship.
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
    `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
    `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `person_on_pointer_label`,
-   `person_not_shown`, `slow_pictures`, `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
+   `person_not_shown`, `filler_props`, `slow_pictures`, `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
    upload (its length, how bright it is, what each part looks like), so these know the same shot cut into two
    differently named clips, and a clip that is black or a white flash where it plays.
    **Have enough footage before you build:** `footage_too_thin` means the clips cannot fill the video without
@@ -304,7 +307,7 @@ send each file to Cliptude: upload it (`upload_plan_media` / `cliptude upload-me
 
 The total for the job equals the website price for the same video. Render-only jobs: 15 credits per minute flat. Re-rendering a finished video costs 10% of the job's credits, and never less than 6 credits per minute of timeline. The narration (charged per minute by voice — 18 credits/min with
 ElevenLabs, 4 with Voicetory — plus the script at cost, or `max(2, minutes)` credits to align an uploaded voiceover) is charged when it is ready and is kept if you abandon the
-job. The rest is charged when the video completes. `check_plan` returns `cost.due_at_continue`. Avatar Video prices
+job. The rest is charged when the video completes. `check_plan` returns `cost.due_at_continue`; compare it with the balance before `continue_job`. If `continue_job` answers 402 `insufficient_credits`, the job stays `plan_ready` with its locked plan and narration until `plan_expires_at`: tell the user how many credits are missing and give them `detail.billing_url`, then call `continue_job` again on the same job once they have topped up. Never lock or plan again. Avatar Video prices
 the presenter seconds you plan.
 
 ## Plan schema (`cliptude.plan/v1`)
@@ -592,6 +595,11 @@ libraries, archives), so write them the way a clip is titled, not the way a shot
   Show a real person only by naming them (`media.person`) or with their own photo (`url`, `keep`, an upload).
   Show each person the narration keeps naming at least once, by name (`person_not_shown`): a name card or portrait
   board with `person`, the unidentified one too (a police sketch, a wanted poster).
+  When the event itself was filmed or broadcast (a TV hijack, a launch, a speech, a trial on camera), ask for that
+  footage by name on the lines that tell it (`"Max Headroom broadcast intrusion WTTW 1987"`).
+  Lines about sources, records and what is known are not about paper: a plan that fills them with folders,
+  contracts, archive shelves, hourglasses and gavels warns `filler_props`. Show the place, the people by name, the
+  event or a board, and keep a document for the line that reads from it.
   Before about 1960, `"typed letter 1940s"` returns modern stock: ask for an archive photograph of a named place,
   unit, machine or event (`"de Havilland Hatfield factory 1942"`, `"Latchmere House"`) with `"modern"` in
   `negatives`, and reuse the few real pictures with `keep` rather than fill with modern stand-ins.

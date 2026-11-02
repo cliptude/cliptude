@@ -107,7 +107,10 @@ If the user asked **Cliptude** to write a script and stop (no video), skip this 
 ## Step 4 — Hand off
 
 1. Write `script.txt` (plain text, spoken words only).
-2. Generate with `--script-file` (or MCP `create_job` `script=`). Do **not** also dump the same text into `prompt`.
+1a. **Show the user the script and wait for their OK** (or their edits) before any job: once it is voiced it
+    cannot change. This is the default for every format; let Cliptude write the script only when the user asks.
+2. Generate with `--script-file` (or MCP `create_job` `script=`; for Faceless Documentary, Top 10, Avatar Video
+   and Vector Explainer plans, `create_plan_job` `script=`; for product videos, `draft_product_script` `script=`). Do **not** also dump the same text into `prompt`.
 3. `generate` / `create_job` returns immediately. Poll status. Do not wait for the MP4.
 
 If the user gave a **voiceover file**, skip steps 1–3. Hand off with `--voiceover` / `voiceover_path` only.

@@ -802,21 +802,29 @@ class CliptudeClient:
         cta_text: str | None = None,
         image_urls: list[str] | None = None,
         reviews: list[dict] | None = None,
+        script: str | None = None,
     ) -> Any:
-        """Queue the 80/20 educational script for a product; returns {script_id, ...} immediately."""
+        """Queue the 80/20 educational script for a product; returns {script_id, ...} immediately.
+
+        script: narration you researched and wrote yourself; the job is script_ready at once."""
         body: dict[str, Any] = {"product_id": product_id}
         for key, value in (
             ("angle", angle), ("duration", duration), ("template_id", template_id), ("title", title),
             ("discount_code", discount_code), ("cta_url", cta_url), ("cta_text", cta_text),
-            ("image_urls", image_urls), ("reviews", reviews),
+            ("image_urls", image_urls), ("reviews", reviews), ("script", script),
         ):
             if value not in (None, "", []):
                 body[key] = value
         return self.request("POST", "/api/v1/commerce/scripts", json_body=body)
 
-    def render_product_video(self, job_id: str, *, aspect_ratio: str = "16:9") -> Any:
-        """Turn a ready product script into the video on the same job id (returns immediately)."""
-        return self.request("POST", f"/api/v1/commerce/videos/{job_id}/render", json_body={"aspect_ratio": aspect_ratio})
+    def render_product_video(
+        self, job_id: str, *, aspect_ratio: str = "16:9", thumbnail: dict[str, str] | None = None,
+    ) -> Any:
+        """Turn a ready product script into the video on the same job id (returns immediately).
+
+        thumbnail: {custom_prompt} or {reference_url} for this video's thumbnail (optional)."""
+        body = {"aspect_ratio": aspect_ratio, **_thumbnail_job_field(thumbnail)}
+        return self.request("POST", f"/api/v1/commerce/videos/{job_id}/render", json_body=body)
 
     def get_product_video_status(self, job_id: str) -> Any:
         return self.request("GET", f"/api/v1/commerce/videos/{job_id}")
