@@ -24,6 +24,7 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 /*@BRIDGE_JS@*/
+/*@VIEWS_JS@*/
 (function () {
   "use strict";
   var h = UI.h;
@@ -36,7 +37,7 @@
       var r = data.render;
       return { title: r.title || data.title || "Edited video", url: r.output_url || "", status: r.status || "",
         progress: r.progress, step: r.current_step || "", error: r.error_message || "", expires: r.output_url_expires_in_s,
-        kind: "render", id: r.id };
+        kind: "render", id: r.id, jobId: r.job_id || "" };
     }
     if (data.stage !== undefined) {
       var out = data.output || {};
@@ -116,7 +117,17 @@
       var v = normalize(data);
       document.getElementById("title").textContent = v.title;
       setFacts([fmtDuration(v.duration), v.url ? "MP4" : (v.status || "").replace(/_/g, " ")]);
-      if (v.url) renderVideo(v); else renderPending(v);
+      if (!v.url) { renderPending(v); return; }
+      renderVideo(v);
+      // A finished export: show its publish kit (the kit plays this export at the top), as a finished job does.
+      if (v.kind === "render" && v.jobId && Cliptude.canCallTools()) {
+        Cliptude.callTool("show_publish_kit", { job_id: v.jobId }).then(function (kit) {
+          if (!kit || UI.errorText(kit)) return;
+          document.getElementById("title").textContent = kit.title ? "Publish kit · " + kit.title : "Publish kit";
+          Views.publishKit(content, kit);
+          Cliptude.reportSize();
+        }).catch(function () {});
+      }
     },
     onCancelled: function () { UI.status(content, "Cancelled."); }
   }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
