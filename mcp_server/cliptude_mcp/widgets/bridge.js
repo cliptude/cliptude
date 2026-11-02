@@ -5,6 +5,9 @@
  * Host -> View notifications: ui/notifications/tool-input, ui/notifications/tool-result,
  *   ui/notifications/tool-cancelled, ui/notifications/host-context-changed
  * Host -> View requests: ui/resource-teardown, ping
+ * ChatGPT speaks this same bridge (Apps SDK "Build a ChatGPT UI"); when a host does not answer ui/initialize but
+ * offers window.openai (the Apps SDK's own API), the widget uses that instead: toolInput/toolOutput, callTool,
+ * sendFollowUpMessage, openExternal and the openai:set_globals event.
  * Inlined into every widget by cliptude_mcp/apps.py, so the served HTML has no external script. */
 var Cliptude = (function () {
   "use strict";
@@ -12,13 +15,17 @@ var Cliptude = (function () {
   var nextId = 1;
   var pending = {};
   var handlers = { input: null, result: null, cancelled: null, context: null };
-  var state = { hostContext: {}, hostCapabilities: {}, toolInput: null, connected: false };
+  var state = { hostContext: {}, hostCapabilities: {}, toolInput: null, connected: false, openai: false };
+
+  function openaiApi() {
+    try { return window.openai && typeof window.openai === "object" ? window.openai : null; } catch (e) { return null; }
+  }
 
   function post(message) {
     if (window.parent && window.parent !== window) window.parent.postMessage(message, "*");
   }
 
-  function request(method, params) {
+  function request(method, params, timeoutMs) {
     var id = nextId++;
     return new Promise(function (resolve, reject) {
       pending[id] = { resolve: resolve, reject: reject };
@@ -28,7 +35,7 @@ var Cliptude = (function () {
           delete pending[id];
           reject(new Error(method + " timed out"));
         }
-      }, 60000);
+      }, timeoutMs || 60000);
     });
   }
 
@@ -130,7 +137,46 @@ var Cliptude = (function () {
     var key = width + "x" + height;
     if (key === lastSize) return;
     lastSize = key;
+    if (state.openai) {
+      // Apps SDK: notifyIntrinsicHeight (argument shape not documented; ChatGPT also sizes the frame itself).
+      try { if (window.openai.notifyIntrinsicHeight) window.openai.notifyIntrinsicHeight(height); } catch (e) {}
+      return;
+    }
     notify("ui/notifications/size-changed", { width: width, height: height });
+  }
+
+  /** ChatGPT's window.openai: the tool's arguments and result are globals, updated by openai:set_globals. */
+  var lastOutput = null;
+  function connectOpenai() {
+    var api = openaiApi();
+    state.openai = true;
+    state.connected = true;
+    state.hostCapabilities = { serverTools: typeof api.callTool === "function" ? {} : undefined };
+    if (!state.hostCapabilities.serverTools) delete state.hostCapabilities.serverTools;
+    state.hostContext = { theme: api.theme, displayMode: api.displayMode,
+      containerDimensions: api.maxHeight ? { maxHeight: api.maxHeight } : {} };
+    applyContext(state.hostContext);
+    function deliver() {
+      var input = api.toolInput || null;
+      if (input && input !== state.toolInput) {
+        state.toolInput = input;
+        if (handlers.input) handlers.input(input);
+      }
+      var output = api.toolOutput;
+      if (output && output !== lastOutput) {
+        lastOutput = output;
+        if (handlers.result) handlers.result(output && output.structuredContent ? resultData(output) : output, {});
+      }
+    }
+    window.addEventListener("openai:set_globals", function (event) {
+      var globals = (event && event.detail && event.detail.globals) || {};
+      if (globals.theme) applyContext({ theme: globals.theme });
+      deliver();
+    });
+    deliver();
+    if (window.ResizeObserver) new ResizeObserver(reportSize).observe(document.body);
+    reportSize();
+    return true;
   }
 
   function connect(options) {
@@ -138,12 +184,19 @@ var Cliptude = (function () {
     handlers.result = options.onResult || null;
     handlers.cancelled = options.onCancelled || null;
     handlers.context = options.onContext || null;
-    if (!window.parent || window.parent === window) return Promise.resolve(false);
+    if (!window.parent || window.parent === window) {
+      return Promise.resolve(openaiApi() ? connectOpenai() : false);
+    }
+    // A host with window.openai answers quickly or not at all; do not keep its user waiting a minute.
     return request("ui/initialize", {
       appInfo: { name: options.name, version: "1.0.0" },
       appCapabilities: { availableDisplayModes: ["inline"] },
       protocolVersion: PROTOCOL_VERSION
+    }, openaiApi() ? 4000 : 60000).catch(function (error) {
+      if (openaiApi()) return null;
+      throw error;
     }).then(function (result) {
+      if (result === null) return connectOpenai();
       state.hostContext = result.hostContext || {};
       state.hostCapabilities = result.hostCapabilities || {};
       state.connected = true;
@@ -157,6 +210,9 @@ var Cliptude = (function () {
 
   /** Post a user message into the conversation (ui/message); falls back to model context. */
   function sendMessage(text) {
+    if (state.openai) {
+      return Promise.resolve(window.openai.sendFollowUpMessage({ prompt: text }));
+    }
     return request("ui/message", { role: "user", content: [{ type: "text", text: text }] }).then(function (res) {
       if (res && res.isError) throw new Error("The host did not accept the message");
       return res;
@@ -164,16 +220,24 @@ var Cliptude = (function () {
   }
 
   function updateModelContext(text, structured) {
+    if (state.openai) return Promise.reject(new Error("Not supported here"));
     var params = { content: [{ type: "text", text: text }] };
     if (structured) params.structuredContent = structured;
     return request("ui/update-model-context", params);
   }
 
   function openLink(url) {
+    if (state.openai) return Promise.resolve(window.openai.openExternal({ href: url }));
     return request("ui/open-link", { url: url });
   }
 
+  /** Call a server tool from the widget. Only ever from a user's click (see review.html). */
   function callTool(name, args) {
+    if (state.openai) {
+      return Promise.resolve(window.openai.callTool(name, args || {})).then(function (res) {
+        return res && (res.structuredContent || res.content) ? resultData(res) : res;
+      });
+    }
     return request("tools/call", { name: name, arguments: args || {} }).then(resultData);
   }
 

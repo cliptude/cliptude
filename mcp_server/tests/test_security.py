@@ -22,7 +22,8 @@ RUN = "0b7e6a52-1111-4222-8333-444455556666"
 def setUpModule():
     # Never discover the desktop app or a real login while these tests run.
     global _env
-    _env = patch.dict(os.environ, {"CLIPTUDE_BASE_URL": "https://api.test.invalid", "CLIPTUDE_API_KEY": "clp_test"})
+    _env = patch.dict(os.environ, {"CLIPTUDE_BASE_URL": "https://api.test.invalid", "CLIPTUDE_API_KEY": "clp_test",
+                                   "CLIPTUDE_BROWSER_PICKER": "0"})
     _env.start()
 
 

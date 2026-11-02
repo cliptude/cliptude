@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Template</title>
+<style>
+/*@BASE_CSS@*/
+.hero { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: start; }
+.hero .thumb { aspect-ratio: 16 / 9; border-radius: var(--border-radius-md); }
+.hero .thumb.portrait { aspect-ratio: 1 / 1; }
+.parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.part { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary); border: 1px solid var(--color-border-secondary); min-width: 0; }
+.part .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.part .k { font-size: var(--font-text-xs-size); color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: .04em; }
+.part .v { font-weight: 600; font-size: var(--font-text-sm-size); overflow-wrap: anywhere; }
+.part .pic { width: 64px; flex: none; border-radius: var(--border-radius-sm); }
+.part .pic.r16x9 { aspect-ratio: 16 / 9; }
+@media (max-width: 420px) { .hero { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main class="app" id="content" aria-live="polite"><div class="status" role="status">Loading the template…</div></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+(function () {
+  "use strict";
+  var h = UI.h;
+  var PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  var PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+  var content = document.getElementById("content");
+  var tpl = null;
+
+  function playButton(key, url, name) {
+    if (!url) return null;
+    var playing = Media.playing() === key;
+    var b = h("button", { type: "button", class: "icon", "aria-pressed": String(playing),
+      "aria-label": (playing ? "Pause " : "Play ") + name, onclick: function () { Media.toggleAudio(key, url); } }, []);
+    b.innerHTML = playing ? PAUSE : PLAY;
+    return b;
+  }
+
+  // The product names of the model tiers (videos.models.Video.GenerationModel): the old high-family values
+  // (xhigh, v1_video, medium, low) all run as Cinder now.
+  var MODEL_NAMES = { pro: "Caldera", high: "Cinder", xhigh: "Cinder", v1_video: "Cinder", medium: "Cinder", low: "Cinder" };
+  function modelName(value) {
+    return MODEL_NAMES[String(value).toLowerCase()] || String(value);
+  }
+
+  function part(label, value, extra, pic) {
+    return h("div", { class: "part" }, [pic || null, h("span", { class: "main" }, [
+      h("span", { class: "k" }, [label]), h("span", { class: "v" }, [value || "—"])
+    ]), extra || null]);
+  }
+
+  /** The look from the server (newer Cliptude), else what the summary itself says. */
+  function look(t) {
+    if (t.look) return t.look;
+    return {
+      voice: t.voice_name ? { name: t.voice_name, provider: t.voice_provider, preview_url: "" } : null,
+      avatar: t.avatar_name ? { name: t.avatar_name, image_url: t.avatar_preview_url || "" } : null,
+      switches: [
+        { key: "animations", label: "Animations", on: !t.disable_animations },
+        { key: "overlays", label: "Text overlays", on: !t.disable_overlays },
+        { key: "sound_effects", label: "Sound effects", on: !t.disable_sound_effects },
+        { key: "transitions", label: "Transitions", on: !t.disable_transitions }
+      ]
+    };
+  }
+
+  function render() {
+    var t = tpl, l = look(t);
+    var presenter = l.avatar || l.character || null;
+    var heroPic = presenter && presenter.image_url ? UI.img(presenter.image_url, presenter.name, UI.initials(presenter.name))
+      : l.background && l.background.image_url ? UI.img(l.background.image_url, "Background", "")
+      : UI.img("", "", UI.initials(t.name));
+    if (l.character) heroPic.classList.add("portrait");
+    var facts = [t.format_label || t.format, t.duration ? t.duration + " min" : "", t.aspect_ratio || "16:9", t.language || ""]
+      .filter(Boolean).map(function (x) { return h("span", { class: "chip" }, [x]); });
+
+    var parts = [];
+    if (l.voice) {
+      parts.push(part("Voice", l.voice.name + (l.voice.provider ? " · " + l.voice.provider : ""),
+        playButton("voice", l.voice.preview_url, "the voice " + l.voice.name)));
+    } else if (t.format !== "talking_head") {
+      parts.push(part("Voice", "None set"));
+    }
+    if (l.avatar) parts.push(part("Presenter", l.avatar.name, null, l.avatar.image_url ? UI.img(l.avatar.image_url, "", "") : null));
+    if (t.format === "avatar_video" && !l.avatar) parts.push(part("Presenter", "No avatar chosen"));
+    if (l.character) parts.push(part("Character", l.character.name, null, l.character.image_url ? UI.img(l.character.image_url, "", "") : null));
+    if (l.music) {
+      parts.push(part("Music", l.music.on ? (l.music.label || l.music.file) + (l.music.default ? " (default)" : "") : "No music",
+        l.music.on ? playButton("music", l.music.preview_url, "the music") : null));
+    }
+    if (l.background) {
+      var bg = UI.img(l.background.image_url, "", "");
+      bg.classList.add("r16x9");
+      parts.push(part("Background", l.background.value.indexOf("upload:") === 0 ? "Your upload" : l.background.value, null, bg));
+    }
+    parts.forEach(function (p) { var pic = p.querySelector(".thumb"); if (pic) pic.classList.add("pic"); });
+
+    var styleChips = [];
+    if (l.style_pack) styleChips.push(h("span", { class: "chip info" }, [
+      h("span", { class: "swatches", style: { display: "inline-flex", verticalAlign: "middle", marginRight: "4px" } },
+        (l.style_pack.swatches || []).map(function (c) { return h("span", { class: "swatch", style: { background: c, width: "10px", height: "10px" } }); })),
+      "Style: " + l.style_pack.label]));
+    if (l.visual_theme) styleChips.push(h("span", { class: "chip info" }, ["Theme: " + l.visual_theme.label]));
+    if (l.caption_style) styleChips.push(h("span", { class: "chip info" }, ["Captions: " + l.caption_style.label]));
+    if (t.generation_model) styleChips.push(h("span", { class: "chip" }, ["Model: " + modelName(t.generation_model)]));
+
+    var switches = (l.switches || []).map(function (s) {
+      return h("span", { class: "chip " + (s.on ? "ok" : "warn off"), "aria-label": s.label + (s.on ? " on" : " off") },
+        [(s.on ? "✓ " : "✕ ") + s.label]);
+    });
+
+    UI.clear(content);
+    content.appendChild(h("div", { class: "hero" }, [heroPic, h("div", { class: "sec" }, [
+      h("h1", { style: { margin: 0, fontSize: "var(--font-heading-sm-size)" } }, [t.name || "Template"]),
+      h("span", { class: "chips" }, facts),
+      styleChips.length ? h("span", { class: "chips" }, styleChips) : null
+    ])]));
+    (t.warnings || []).forEach(function (w) { content.appendChild(h("div", { class: "callout warn", role: "note" }, [String(w)])); });
+    if (parts.length) content.appendChild(h("div", { class: "parts" }, parts));
+    if (switches.length) content.appendChild(h("section", { class: "sec" }, [h("h2", {}, ["Switches"]), h("div", { class: "chips" }, switches)]));
+    content.appendChild(h("div", { class: "selection" }, [
+      h("button", { type: "button", onclick: function () {
+        UI.choose("I want to change something in the template “" + t.name + "” (template_id " + t.id + "). Ask me what to change.",
+          { template_id: t.id, change: true });
+      } }, ["Change something"]),
+      h("button", { type: "button", class: "primary", onclick: function () {
+        UI.choose("Make a video with the template “" + t.name + "” (template_id " + t.id + ").", { template_id: t.id });
+      } }, ["Make a video with this template"])
+    ]));
+  }
+
+  Media.onChange(function () { if (tpl) render(); });
+  Cliptude.connect({
+    name: "cliptude-template",
+    onResult: function (data) {
+      var err = UI.errorText(data);
+      if (err) { UI.status(content, err, "error"); return; }
+      tpl = data.template && !data.id ? data.template : data;
+      render();
+    },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>

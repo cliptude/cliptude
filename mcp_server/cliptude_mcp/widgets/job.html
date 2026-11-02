@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job</title>
+<style>
+/*@BASE_CSS@*/
+</style>
+</head>
+<body>
+<main class="app" id="content" aria-live="polite"></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+/*@VIEWS_JS@*/
+(function () {
+  "use strict";
+  // get_job, get_product_video_status and get_narration. The agent polls these often, so the card draws once,
+  // straight from the data, with no loading animation: a script to approve, a progress card, or (when the video
+  // is ready) the progress card with the publish kit under it.
+  var content = document.getElementById("content");
+  var ctx = { mode: "job", input: function () { return Cliptude.state.toolInput; } };
+  Cliptude.connect({
+    name: "cliptude-job",
+    onResult: function (data) { Views.mount(content, data || {}, ctx); },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>

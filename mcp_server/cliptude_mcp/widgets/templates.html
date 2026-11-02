@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Templates</title>
+<style>
+/*@BASE_CSS@*/
+.card { cursor: default; }
+.card .thumb { aspect-ratio: 16 / 9; }
+.tile { width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 10px; color: #fff; font-weight: 700; font-size: 15px; }
+.card .body .chips { margin-top: 2px; }
+.card .actions { padding: 0 10px 10px; margin-top: auto; }
+.card .actions button { width: 100%; }
+</style>
+</head>
+<body>
+<main class="app" aria-labelledby="title">
+  <div class="head">
+    <h1 id="title">Your templates</h1>
+    <span class="toolbar"><span class="sub" id="count"></span><button type="button" id="all" hidden aria-pressed="false">Show all</button></span>
+  </div>
+  <div id="content"><div class="status" role="status">Loading templates…</div></div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+(function () {
+  "use strict";
+  var h = UI.h;
+  // Formats Cliptude makes today; templates of retired formats (whiteboard, sketch, stickman, low_poly_3d,
+  // monkey_explained, vox_animation, infographic, mannequin_3d, faceless_explainer, music, ...) hide behind "Show all".
+  var LIVE = { faceless_documentary: 1, faceless_top_10: 1, avatar_video: 1, talking_head: 1, vector_explainer: 1 };
+  var TILE = { faceless_documentary: "#1e3a5f, #0b1220", faceless_top_10: "#5b2130, #1a0b10", avatar_video: "#2d3b2a, #0e140c",
+               talking_head: "#4a3a1e, #171008", vector_explainer: "#3a2a5f, #120b20" };
+  var content = document.getElementById("content");
+  var all = document.getElementById("all");
+  var data = { results: [] };
+  var showAll = false;
+
+  function card(t) {
+    var pic;
+    if (t.format === "avatar_video" && t.avatar_preview_url) pic = UI.img(t.avatar_preview_url, "", UI.initials(t.avatar_name || t.name));
+    else pic = h("span", { class: "thumb" }, [h("span", { class: "tile", style: { background: "linear-gradient(150deg, " + (TILE[t.format] || "#444, #111") + ")" } },
+      [t.format_label || t.format || ""])]);
+    var chips = [t.duration ? t.duration + " min" : "", t.aspect_ratio || "", LIVE[t.format] ? "" : "Retired format"]
+      .filter(Boolean).map(function (x) { return h("span", { class: "chip" + (x === "Retired format" ? " warn" : "") }, [x]); });
+    return h("div", { class: "card", role: "listitem" }, [
+      pic,
+      h("span", { class: "body" }, [
+        h("span", { class: "name" }, [t.name || "Untitled"]),
+        h("span", { class: "muted" }, [(t.format_label || t.format || "") + (t.voice_name ? " · " + t.voice_name : "") +
+          (t.avatar_name ? " · " + t.avatar_name : "")]),
+        chips.length ? h("span", { class: "chips" }, chips) : null
+      ]),
+      h("span", { class: "actions" }, [h("button", { type: "button", class: LIVE[t.format] ? "primary" : "",
+        onclick: function () { UI.choose("Use the template “" + t.name + "” (template_id " + t.id + ").", { template_id: t.id }); } },
+        ["Use this template"])])
+    ]);
+  }
+
+  function render() {
+    var rows = data.results || [];
+    var live = rows.filter(function (t) { return LIVE[t.format]; });
+    var hidden = rows.length - live.length;
+    var shown = showAll ? rows : live;
+    all.hidden = hidden === 0;
+    all.textContent = showAll ? "Live formats only" : "Show all (" + hidden + " more)";
+    all.setAttribute("aria-pressed", String(showAll));
+    var total = data.count || rows.length;
+    document.getElementById("count").textContent = total > rows.length ? rows.length + " of " + total : rows.length + " saved";
+    if (!rows.length) { UI.status(content, "No templates yet. Ask Claude to make one: it walks you through the voice, look and music."); return; }
+    if (!shown.length) { UI.status(content, "None of your templates uses a format Cliptude makes today. Show all to see them, or ask Claude to make a new one."); return; }
+    var grid = h("div", { class: "grid wide", role: "list" });
+    shown.forEach(function (t) { grid.appendChild(card(t)); });
+    UI.clear(content).appendChild(grid);
+  }
+
+  all.addEventListener("click", function () { showAll = !showAll; render(); });
+  Cliptude.connect({
+    name: "cliptude-templates",
+    onResult: function (d) {
+      var err = UI.errorText(d);
+      if (err) { UI.status(content, err, "error"); return; }
+      data = d || { results: [] };
+      render();
+    },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>

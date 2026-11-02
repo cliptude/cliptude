@@ -6,22 +6,6 @@
 <title>Publish kit</title>
 <style>
 /*@BASE_CSS@*/
-section { display: flex; flex-direction: column; gap: 8px; }
-h2 { font-size: var(--font-text-md-size); margin: 0; font-weight: 600; }
-.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.stage-video { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--border-radius-md); background: #000; display: block; }
-.card .play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.7); pointer-events: none; }
-.card .thumb-wrap { position: relative; display: block; }
-.big { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--border-radius-md); background: var(--color-background-tertiary); display: block; }
-.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.thumbs .card .thumb { aspect-ratio: 16 / 9; }
-pre.copy {
-  margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-sans); font-size: var(--font-text-sm-size);
-  background: var(--color-background-secondary); border: 1px solid var(--color-border-secondary); border-radius: var(--border-radius-md);
-  padding: 10px 12px; max-height: 260px; overflow: auto; user-select: text;
-}
-.title-row .name { font-weight: 500; }
-.tag { user-select: text; }
 </style>
 </head>
 <body>
@@ -35,151 +19,19 @@ pre.copy {
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 /*@BRIDGE_JS@*/
+/*@VIEWS_JS@*/
 (function () {
   "use strict";
-  var h = UI.h;
   var content = document.getElementById("content");
-  var kit = null;
-  var current = 0;  // -1 is the video; 0..n-1 a thumbnail
-
-  function selectText(el) {
-    try {
-      var range = document.createRange(); range.selectNodeContents(el);
-      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-    } catch (e) {}
-  }
-
-  /** Clipboard API (clipboardWrite permission), else execCommand, else select the text for the user. */
-  function copy(text, el) {
-    function fallback() {
-      var area = h("textarea", { style: { position: "fixed", opacity: "0", top: "0", left: "0" } });
-      area.value = text; document.body.appendChild(area); area.select();
-      var ok = false;
-      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
-      area.remove();
-      if (ok) { UI.toast("Copied."); return; }
-      if (el) selectText(el);
-      UI.toast("Selected. Press ⌘C or Ctrl+C to copy.");
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { UI.toast("Copied."); }, fallback);
-    } else fallback();
-  }
-
-  function open(url) { Cliptude.openLink(url).catch(function () { UI.toast("The link could not be opened here."); }); }
-
-  /** The stage: the video when it is ready (the default), else the chosen thumbnail; a strip below picks. */
-  function stageSection(items, status, video) {
-    var hasVideo = !!(video && video.url);
-    if (!hasVideo && current < 0) current = 0;
-    if (!items.length && !hasVideo) {
-      return h("section", {}, [h("h2", {}, ["Video and thumbnails"]),
-        h("div", { class: "status" }, [video && video.note ? video.note :
-          status && status !== "completed" ? "Thumbnails are " + status.replace(/_/g, " ") + "." : "No video or thumbnails yet."])]);
-    }
-    var showVideo = hasVideo && current < 0;
-    var item = showVideo ? null : (items[current] || items[0]);
-    var poster = items.length ? items[0].url : "";
-    var stage = showVideo
-      ? h("video", { class: "stage-video", src: video.url, poster: poster, controls: "", playsinline: "", preload: "metadata",
-          "aria-label": "The finished video" })
-      : h("img", { class: "big", src: item.url, alt: (item.label || "Thumbnail") + " preview" });
-    var strip = h("div", { class: "thumbs", role: "list" });
-    if (hasVideo) {
-      strip.appendChild(h("button", { type: "button", class: "card", role: "listitem", "aria-pressed": String(showVideo),
-        "aria-label": "Play the video", onclick: function () { current = -1; render(); } },
-        [h("span", { class: "thumb-wrap" }, [UI.img(poster, "", "▶"), h("span", { class: "play", "aria-hidden": "true" }, ["▶"])]),
-         h("span", { class: "body" }, [h("span", { class: "name" }, ["Video"])])]));
-    }
-    items.forEach(function (t, i) {
-      strip.appendChild(h("button", { type: "button", class: "card", role: "listitem", "aria-pressed": String(!showVideo && i === current),
-        "aria-label": "Show " + (t.label || "thumbnail " + (i + 1)), onclick: function () { current = i; render(); } },
-        [UI.img(t.url, "", String(i + 1)), h("span", { class: "body" }, [h("span", { class: "name" }, [t.label || "Thumbnail " + (i + 1)])])]));
-    });
-    var tools = showVideo
-      ? [h("button", { type: "button", onclick: function () { open(video.url); } }, ["Open video"])]
-      : [h("button", { type: "button", onclick: function () { open(item.url); } }, ["Open full size"]),
-         h("button", { type: "button", onclick: function () {
-           UI.choose("I will use “" + (item.label || "this thumbnail") + "” as the thumbnail: " + item.url, { thumbnail_url: item.url });
-         } }, ["Use this thumbnail"])];
-    var heading = showVideo ? "Video" : "Thumbnails (" + items.length + ")";
-    var children = [h("div", { class: "sec-head" }, [h("h2", {}, [heading]), h("span", { class: "toolbar" }, tools)]), stage];
-    if (!hasVideo && video && video.note) children.push(h("div", { class: "status" }, [video.note]));
-    children.push(strip);
-    return h("section", {}, children);
-  }
-
-  function titlesSection(titles) {
-    if (!titles.length) return null;
-    var list = h("div", { class: "list", role: "list" });
-    titles.forEach(function (t) {
-      list.appendChild(h("div", { class: "row title-row", role: "listitem" }, [
-        h("div", { class: "main" }, [h("span", { class: "name" }, [t])]),
-        h("button", { type: "button", "aria-label": "Copy title: " + t, onclick: function () { copy(t); } }, ["Copy"]),
-        h("button", { type: "button", onclick: function () { UI.choose("Use this title for the video: “" + t + "”", { title: t }); } }, ["Use"])
-      ]));
-    });
-    return h("section", {}, [h("h2", {}, ["Title ideas"]), list]);
-  }
-
-  function textSection(title, text) {
-    if (!text) return null;
-    var pre = h("pre", { class: "copy", tabindex: "0" }, [text]);
-    return h("section", {}, [
-      h("div", { class: "sec-head" }, [h("h2", {}, [title]),
-        h("button", { type: "button", onclick: function () { copy(text, pre); } }, ["Copy " + title.toLowerCase()])]),
-      pre
-    ]);
-  }
-
-  function tagsSection(tags) {
-    if (!tags.length) return null;
-    var box = h("div", { class: "chips", role: "list" });
-    tags.forEach(function (t) { box.appendChild(h("span", { class: "chip tag", role: "listitem" }, [t])); });
-    return h("section", {}, [
-      h("div", { class: "sec-head" }, [h("h2", {}, ["Tags (" + tags.length + ")"]),
-        h("button", { type: "button", onclick: function () { copy(tags.join(", "), box); } }, ["Copy all tags"])]),
-      box
-    ]);
-  }
-
-  function render() {
-    var meta = kit.publish_metadata || {};
-    var thumbs = (kit.thumbnails && kit.thumbnails.items) || [];
-    var tags = meta.tags || [];
-    var description = String(meta.description || "");
-    if (tags.length) {
-      // The generated description ends with its tags line; show it once, as chips.
-      var line = tags.join(", ").toLowerCase();
-      description = description.split(/\n\s*\n/).filter(function (p) {
-        var flat = p.split(",").map(function (x) { return x.trim().replace(/^#/, "").toLowerCase(); }).filter(Boolean);
-        return !(flat.length >= 5 && flat.every(function (x) { return line.indexOf(x) >= 0; }));
-      }).join("\n\n");
-    }
-    var downloads = meta.downloads || {};
-    UI.clear(content);
-    [stageSection(thumbs, kit.thumbnails && kit.thumbnails.status, kit.video),
-     titlesSection(meta.title_variants || []),
-     textSection("Description", description.trim()),
-     textSection("Chapters", meta.chapters || ""),
-     tagsSection(tags),
-     downloads.voiceover_url || downloads.project_zip_url ? h("section", {}, [h("h2", {}, ["Downloads"]), h("div", { class: "toolbar" }, [
-       downloads.voiceover_url ? h("button", { type: "button", onclick: function () { open(downloads.voiceover_url); } }, ["Voiceover"]) : null,
-       downloads.project_zip_url ? h("button", { type: "button", onclick: function () { open(downloads.project_zip_url); } }, ["Project files"]) : null
-     ])]) : null
-    ].forEach(function (s) { if (s) content.appendChild(s); });
-    if (!content.childNodes.length) UI.status(content, "Nothing to publish yet.");
-  }
-
   Cliptude.connect({
     name: "cliptude-publish-kit",
     onResult: function (data) {
       var err = UI.errorText(data);
       if (err) { UI.status(content, err, "error"); return; }
-      kit = data.project && !data.publish_metadata ? data.project : data;
-      current = kit.video && kit.video.url ? -1 : 0;
+      // The video stage opens first when there is one: current = kit.video && kit.video.url ? -1 : 0 (views.js).
+      var kit = data.project && !data.publish_metadata ? data.project : data;
       document.getElementById("title").textContent = kit.title ? "Publish kit · " + kit.title : "Publish kit";
-      render();
+      Views.publishKit(content, kit);
     },
     onCancelled: function () { UI.status(content, "Cancelled."); }
   }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });

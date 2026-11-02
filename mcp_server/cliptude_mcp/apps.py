@@ -1,4 +1,4 @@
-"""MCP Apps (interactive widgets) for hosts that render them: Claude Desktop, claude.ai.
+"""MCP Apps (interactive widgets) for hosts that render them: Claude Desktop, claude.ai, ChatGPT.
 
 Spec: https://modelcontextprotocol.io/specification/draft/extensions/apps (SEP-1865, `io.modelcontextprotocol/ui`).
 
@@ -8,23 +8,30 @@ sandboxed iframe next to a tool's result:
 - list_avatars           -> ui://cliptude/avatars.html      avatar thumbnails, pick one
 - list_voices            -> ui://cliptude/voices.html       play voice previews, pick one
 - list_vector_characters -> ui://cliptude/characters.html   Vector Explainer cast and uploads, pick one
-- get_render, get_product_video_status, show_video
-                         -> ui://cliptude/player.html       watch the MP4, or "not rendered yet"
+- get_render, show_video -> ui://cliptude/player.html       watch the MP4, or "not rendered yet"
 - show_choices           -> ui://cliptude/choices.html      music (play), backgrounds, style packs, themes, captions
 - show_publish_kit       -> ui://cliptude/publish-kit.html  thumbnails, title ideas, description, chapters, tags
+- list_templates         -> ui://cliptude/templates.html    template gallery, "Use this template"
+- create_template, get_template
+                         -> ui://cliptude/template.html     one template's card: voice, presenter, music, look, switches
+- create_job, create_plan_job, create_script, create_voiceover, continue_job, render_product_video,
+  draft_product_script, run_agent, render_project, create_avatar
+                         -> ui://cliptude/review.html       the 428 review to confirm (or the result card)
+- get_job, get_product_video_status, get_narration
+                         -> ui://cliptude/job.html          progress card, the script to approve, or the publish kit
 
 The existing tools keep their names, parameters and JSON (the text content stays the same for clients without
-Apps); only `_meta.ui.resourceUri` is added to them (`bind_existing_tools`). show_choices, show_video and
-show_publish_kit are new, thin tools: binding a widget to get_template_options, get_job or the editor-project
-tools would draw a widget on every one of their (frequent, polling) calls.
+Apps); `bind_existing_tools` adds `_meta.ui.resourceUri` (plus ChatGPT's `openai/outputTemplate` alias) and tags a
+428 review with the tool that returned it (`tool`), so the review widget knows what to call again.
 
 A widget picks by posting a `ui/message` into the chat ("Use the voice ... (voice_id ...)"), so the model gets the
-id without the user typing it. The avatar and voice pickers can also make new ones in the chat (create_avatar,
-design_voice_previews / save_designed_voice, clone_voice in creation.py), calling those tools with `tools/call`.
+id without the user typing it. Calls a widget makes itself (`tools/call`) happen only on the user's click: the
+review widget's Confirm resends the reviewed call with its review_token, never on its own.
 """
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from importlib import resources
 from typing import Annotated, Any
@@ -44,6 +51,10 @@ CHARACTERS_URI = "ui://cliptude/characters.html"
 PLAYER_URI = "ui://cliptude/player.html"
 CHOICES_URI = "ui://cliptude/choices.html"
 PUBLISH_KIT_URI = "ui://cliptude/publish-kit.html"
+TEMPLATES_URI = "ui://cliptude/templates.html"
+TEMPLATE_URI = "ui://cliptude/template.html"
+REVIEW_URI = "ui://cliptude/review.html"
+JOB_URI = "ui://cliptude/job.html"
 
 # uri -> (file, name, description)
 WIDGETS: dict[str, tuple[str, str, str]] = {
@@ -53,7 +64,21 @@ WIDGETS: dict[str, tuple[str, str, str]] = {
     PLAYER_URI: ("player.html", "Video player", "Plays a finished Cliptude MP4, or shows that it is not rendered yet."),
     CHOICES_URI: ("choices.html", "Setting picker", "Previews of music, backgrounds and styles to pick a template setting."),
     PUBLISH_KIT_URI: ("publish-kit.html", "Publish kit", "Thumbnails, title ideas, description, chapters and tags."),
+    TEMPLATES_URI: ("templates.html", "Templates", "The user's saved templates, to pick one for a video."),
+    TEMPLATE_URI: ("template.html", "Template", "One template: voice, presenter, music, background, style and switches."),
+    REVIEW_URI: ("review.html", "Review and confirm", "What a job or spend does and costs, for the user to confirm."),
+    JOB_URI: ("job.html", "Job", "A job's progress, its script to approve, or its publish kit when ready."),
 }
+
+# Tools whose first call answers with a 428 review (detail.review + review_token) before they spend credits.
+REVIEW_TOOLS: tuple[str, ...] = (
+    "create_job", "create_plan_job", "create_script", "create_voiceover", "continue_job", "render_product_video",
+    "draft_product_script", "run_agent", "render_project", "create_avatar",
+)
+# Of those, the ones that take acknowledge ids (the job review's acknowledgements_required).
+ACKNOWLEDGE_TOOLS: frozenset[str] = frozenset({
+    "create_job", "create_plan_job", "create_script", "create_voiceover", "draft_product_script",
+})
 
 # Existing tools that get a widget, by name.
 BOUND_TOOLS: dict[str, str] = {
@@ -61,7 +86,36 @@ BOUND_TOOLS: dict[str, str] = {
     "list_voices": VOICES_URI,
     "list_vector_characters": CHARACTERS_URI,
     "get_render": PLAYER_URI,
-    "get_product_video_status": PLAYER_URI,
+    "list_templates": TEMPLATES_URI,
+    "create_template": TEMPLATE_URI,
+    "get_template": TEMPLATE_URI,
+    "get_job": JOB_URI,
+    "get_product_video_status": JOB_URI,
+    "get_narration": JOB_URI,
+    **{name: REVIEW_URI for name in REVIEW_TOOLS},
+}
+
+# Tools a widget calls itself (tools/call). ChatGPT wants openai/widgetAccessible on them.
+WIDGET_CALLED_TOOLS: frozenset[str] = frozenset({
+    *REVIEW_TOOLS, "list_avatars", "design_voice_previews", "save_designed_voice", "clone_voice", "show_publish_kit",
+})
+
+# ChatGPT's short status lines while a widget tool runs and after (openai/toolInvocation/*, at most 64 chars).
+INVOCATION_TEXT: dict[str, tuple[str, str]] = {
+    "list_avatars": ("Loading avatars…", "Avatars ready"),
+    "list_voices": ("Loading voices…", "Voices ready"),
+    "list_vector_characters": ("Loading characters…", "Characters ready"),
+    "get_render": ("Checking the export…", "Export checked"),
+    "show_video": ("Loading the video…", "Video ready"),
+    "show_choices": ("Loading choices…", "Choices ready"),
+    "show_publish_kit": ("Opening the publish kit…", "Publish kit ready"),
+    "list_templates": ("Loading templates…", "Templates ready"),
+    "create_template": ("Saving the template…", "Template saved"),
+    "get_template": ("Loading the template…", "Template ready"),
+    "get_job": ("Checking the job…", "Job checked"),
+    "get_product_video_status": ("Checking the product video…", "Product video checked"),
+    "get_narration": ("Loading the narration…", "Narration ready"),
+    **{name: ("Preparing the review…", "Review ready") for name in REVIEW_TOOLS},
 }
 
 # Where the widgets' pictures, audio and video come from (CSP img-src/media-src via resourceDomains).
@@ -124,17 +178,48 @@ def widget_html(file_name: str) -> str:
     html = (pkg / file_name).read_text(encoding="utf-8")
     bridge = (pkg / "bridge.js").read_text(encoding="utf-8")
     css = (pkg / "base.css").read_text(encoding="utf-8")
-    return html.replace("/*@BASE_CSS@*/", css).replace("/*@BRIDGE_JS@*/", bridge)
+    views = (pkg / "views.js").read_text(encoding="utf-8")
+    html = html.replace("/*@BASE_CSS@*/", css).replace("/*@BRIDGE_JS@*/", bridge)
+    return html.replace("/*@VIEWS_JS@*/", views)
 
 
 def media_domains(*, local: bool) -> list[str]:
     return list(MEDIA_DOMAINS) + (list(LOCAL_MEDIA_DOMAINS) if local else [])
 
 
-def _ui_meta(uri: str) -> dict[str, Any]:
+def _openai_meta(name: str, uri: str) -> dict[str, Any]:
+    """ChatGPT's aliases (Apps SDK reference): it reads `_meta.ui.resourceUri` too, and documents these."""
+    meta: dict[str, Any] = {"openai/outputTemplate": uri}
+    invoking, invoked = INVOCATION_TEXT.get(name, ("", ""))
+    if invoking:
+        meta["openai/toolInvocation/invoking"] = invoking[:64]
+        meta["openai/toolInvocation/invoked"] = invoked[:64]
+    if name in WIDGET_CALLED_TOOLS:
+        meta["openai/widgetAccessible"] = True
+    return meta
+
+
+def _ui_meta(uri: str, name: str = "") -> dict[str, Any]:
     # `ui.resourceUri` is the spec's key; the flat `ui/resourceUri` is its deprecated form, kept for hosts that
     # shipped before the rename.
-    return {"ui": {"resourceUri": uri}, "ui/resourceUri": uri}
+    return {"ui": {"resourceUri": uri}, "ui/resourceUri": uri, **_openai_meta(name, uri)}
+
+
+def _resource_meta(uri: str, description: str, *, local: bool) -> dict[str, Any]:
+    """`_meta` of a widget resource: the spec's `ui` block plus ChatGPT's openai/widget* aliases."""
+    domains = media_domains(local=local)
+    ui: dict[str, Any] = {"csp": ResourceCsp(resource_domains=domains).model_dump(by_alias=True, exclude_none=True)}
+    permissions = _PERMISSIONS.get(uri)
+    if permissions is not None:
+        ui["permissions"] = permissions.model_dump(by_alias=True, exclude_none=True)
+    ui["prefersBorder"] = True
+    return {
+        "ui": ui,
+        # The widgets fetch nothing themselves (no connect_domains); pictures, audio and video come from these.
+        "openai/widgetCSP": {"connect_domains": [], "resource_domains": domains},
+        "openai/widgetDescription": description,
+        "openai/widgetPrefersBorder": True,
+    }
 
 
 def build_apps(
@@ -148,23 +233,25 @@ def build_apps(
         return None
     from mcp.types import ToolAnnotations
 
+    from mcp.server.mcpserver.resources import TextResource
+
     apps = Apps()
-    csp = ResourceCsp(resource_domains=media_domains(local=local))
     for uri, (file_name, name, description) in WIDGETS.items():
-        apps.add_html_resource(
-            uri,
-            widget_html(file_name),
-            name=name,
-            title=name,
-            description=description,
-            csp=csp,
-            permissions=_PERMISSIONS.get(uri),
-            prefers_border=True,
+        apps.add_resource(
+            TextResource(
+                uri=uri,
+                name=name,
+                title=name,
+                description=description,
+                mime_type=APP_MIME_TYPE,
+                meta=_resource_meta(uri, description, local=local),
+                text=widget_html(file_name),
+            )
         )
 
     @apps.tool(
         resource_uri=CHOICES_URI,
-        meta={"ui/resourceUri": CHOICES_URI},
+        meta={"ui/resourceUri": CHOICES_URI, **_openai_meta("show_choices", CHOICES_URI)},
         name="show_choices",
         title="Show setting choices",
         annotations=ToolAnnotations(title="Show setting choices", read_only_hint=True, open_world_hint=False),
@@ -188,7 +275,7 @@ def build_apps(
 
     @apps.tool(
         resource_uri=PLAYER_URI,
-        meta={"ui/resourceUri": PLAYER_URI},
+        meta={"ui/resourceUri": PLAYER_URI, **_openai_meta("show_video", PLAYER_URI)},
         name="show_video",
         title="Show video",
         annotations=ToolAnnotations(title="Show video", read_only_hint=True, open_world_hint=False),
@@ -205,7 +292,7 @@ def build_apps(
 
     @apps.tool(
         resource_uri=PUBLISH_KIT_URI,
-        meta={"ui/resourceUri": PUBLISH_KIT_URI},
+        meta={"ui/resourceUri": PUBLISH_KIT_URI, **_openai_meta("show_publish_kit", PUBLISH_KIT_URI)},
         name="show_publish_kit",
         title="Show publish kit",
         annotations=ToolAnnotations(title="Show publish kit", read_only_hint=False, destructive_hint=False, open_world_hint=False),
@@ -232,10 +319,28 @@ def build_apps(
     return apps
 
 
+def _tag_reviews(tool: Any, name: str) -> None:
+    """A 428 review result also names the tool that returned it, so the review widget can call it again."""
+    original = tool.fn
+    if getattr(original, "_cliptude_tagged", False) or getattr(tool, "is_async", False):
+        return
+
+    @functools.wraps(original)
+    def tagged(*args: Any, **kwargs: Any) -> Any:
+        result = original(*args, **kwargs)
+        if isinstance(result, dict) and result.get("status") == 428 and "tool" not in result:
+            return {**result, "tool": name}
+        return result
+
+    tagged._cliptude_tagged = True  # type: ignore[attr-defined]
+    tool.fn = tagged
+
+
 def bind_existing_tools(mcp: Any) -> list[str]:
     """Stamp `_meta.ui.resourceUri` on the existing tools that have a widget; returns the names bound.
 
-    The tools are registered by server.py as before, so their names, parameters and results do not change.
+    The tools are registered by server.py (and creation.py) as before, so their names and parameters do not
+    change; a 428 review also says which tool returned it (`tool`).
     """
     manager = getattr(mcp, "_tool_manager", None)
     bound = []
@@ -243,8 +348,14 @@ def bind_existing_tools(mcp: Any) -> list[str]:
         tool = manager.get_tool(name) if manager is not None else None
         if tool is None:
             continue
-        tool.meta = {**(tool.meta or {}), **_ui_meta(uri)}
+        tool.meta = {**(tool.meta or {}), **_ui_meta(uri, name)}
+        if name in REVIEW_TOOLS:
+            _tag_reviews(tool, name)
         bound.append(name)
+    for name in sorted(WIDGET_CALLED_TOOLS - set(BOUND_TOOLS)):
+        tool = manager.get_tool(name) if manager is not None else None
+        if tool is not None:
+            tool.meta = {**(tool.meta or {}), "openai/widgetAccessible": True}
     return bound
 
 

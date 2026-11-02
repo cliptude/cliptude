@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review and confirm</title>
+<style>
+/*@BASE_CSS@*/
+</style>
+</head>
+<body>
+<main class="app" id="content" aria-live="polite"><div class="status" role="status">Loading the review…</div></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/*@BRIDGE_JS@*/
+/*@VIEWS_JS@*/
+(function () {
+  "use strict";
+  // A 428 review: every setting, warning, acknowledgement and the credits; Confirm resends the same call with
+  // its review_token only when the user clicks it. Any other result of these tools shows as a result card.
+  var content = document.getElementById("content");
+  var ctx = { mode: "review", input: function () { return Cliptude.state.toolInput; } };
+  Cliptude.connect({
+    name: "cliptude-review",
+    onResult: function (data) { Views.mount(content, data || {}, ctx); },
+    onCancelled: function () { UI.status(content, "Cancelled."); }
+  }).catch(function () { UI.status(content, "This view could not connect to the chat.", "error"); });
+})();
+</script>
+</body>
+</html>

@@ -1163,6 +1163,15 @@ class CliptudeClient:
     def get_account(self) -> Any:
         return self.request("GET", "/api/v1/account")
 
+    # Browser pickers (clients without MCP Apps widgets) ---------------------------------------------
+
+    def create_pick(self, kind: str, payload_source: dict[str, Any]) -> Any:
+        """A cliptude.com/pick link showing a widget in the browser; Cliptude builds what it shows."""
+        return self.request("POST", "/api/v1/picks", json_body={"kind": kind, "payload_source": payload_source})
+
+    def get_pick(self, pick_id: str) -> Any:
+        return self.request("GET", f"/api/v1/picks/{_uuid_seg(pick_id, 'pick_id')}")
+
     def estimate_credits(
         self,
         *,

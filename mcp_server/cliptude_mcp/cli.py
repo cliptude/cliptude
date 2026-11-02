@@ -1,4 +1,4 @@
-"""Tiny CLI wrapping /api/v1: auth | templates | template-create | template-options | voices | avatars | estimate | generate | editor | agent | render | script | voiceover | continue | status | jobs | account | cancel."""
+"""Tiny CLI wrapping /api/v1: auth | pick | templates | template-create | template-options | voices | avatars | estimate | generate | editor | agent | render | script | voiceover | continue | status | jobs | account | cancel."""
 
 from __future__ import annotations
 
@@ -175,6 +175,43 @@ def _wait(fetch, status_of, *, interval: float = 10.0, timeout: float = 3600.0):
         time.sleep(interval)
 
 
+def _run_pick(client: CliptudeClient, args) -> dict:
+    """Open a browser picker (made here with --kind, or one an agent got as browser_picker_url) and wait for it.
+
+    The page is the same widget Claude Desktop shows (avatars, voices, music, a review to confirm, ...), on
+    cliptude.com for the signed-in owner, for 15 minutes. Returns the pick once the user is done.
+    """
+    import time
+    import webbrowser
+
+    pick_id, url = (args.pick_id or "").strip(), (args.url or "").strip()
+    if args.kind:
+        try:
+            source = json.loads(args.source or "{}")
+        except ValueError as exc:
+            raise CliptudeApiError("--source must be a JSON object.") from exc
+        if not isinstance(source, dict):
+            raise CliptudeApiError("--source must be a JSON object.")
+        created = client.create_pick(args.kind, source)
+        pick_id, url = str(created.get("pick_id") or ""), str(created.get("url") or "")
+    if not pick_id:
+        raise CliptudeApiError("Give a pick_id (with --url to open it), or --kind to make a new picker.")
+    if url:
+        if not url.startswith(("https://", "http://127.0.0.1", "http://localhost")):
+            raise CliptudeApiError("--url must be the https link Cliptude gave (browser_picker_url).")
+        print(f"Pick in your browser: {url}", file=sys.stderr)
+        if not args.no_open:
+            webbrowser.open(url)
+    deadline = time.monotonic() + max(5.0, float(args.timeout))
+    while True:
+        payload = client.get_pick(pick_id)
+        status = str(payload.get("status") or "")
+        if status != "open" or time.monotonic() > deadline:
+            return payload
+        print("Waiting for your pick in the browser...", file=sys.stderr)
+        time.sleep(max(1.0, float(args.interval)))
+
+
 def _run_auth(auth_cmd: str) -> None:
     from cliptude_mcp.auth_login import AuthLoginError, login
     from cliptude_mcp.credentials import clear_credentials, stored_access_token
@@ -260,6 +297,25 @@ def main(argv: list[str] | None = None) -> None:
     )
     use.add_argument("target", nargs="?", choices=["desktop", "cloud", "auto"],
                      help="auto = the desktop app while it is running, else cliptude.com")
+
+    pk = sub.add_parser(
+        "pick",
+        help="Open a browser picker (avatars, voices, music, a review to confirm, ...) and wait for the pick",
+        description=(
+            "Clients without MCP Apps widgets get browser_picker_url and pick_id from the MCP tools. This opens the "
+            "link in your browser and waits until you pick (or confirm) there, then prints the result. With --kind "
+            "it makes a new picker first."
+        ),
+    )
+    pk.add_argument("pick_id", nargs="?", default="", help="pick_id from the tool result")
+    pk.add_argument("--url", default="", help="browser_picker_url from the tool result")
+    pk.add_argument("--kind", default="", choices=["", "avatars", "voices", "characters", "choices", "templates",
+                                                   "template", "job", "script", "publish_kit", "video"],
+                    help="Make a new picker of this kind instead")
+    pk.add_argument("--source", default="{}", help='Where Cliptude reads it from, JSON, e.g. {"provider": "elevenlabs"}')
+    pk.add_argument("--no-open", action="store_true", help="Print the link instead of opening a browser")
+    pk.add_argument("--timeout", type=float, default=900.0, help="Seconds to wait (the link lasts 15 minutes)")
+    pk.add_argument("--interval", type=float, default=3.0, help="Seconds between checks")
 
     t = sub.add_parser("templates", help="List saved templates")
     t.add_argument("--limit", type=int, default=20)
@@ -662,7 +718,12 @@ def main(argv: list[str] | None = None) -> None:
         return
     client = CliptudeClient(client_kind="cli")
     try:
-        if args.cmd == "templates":
+        if args.cmd == "pick":
+            payload = _run_pick(client, args)
+            _print(payload)
+            if payload.get("status") != "done":
+                raise SystemExit(1)
+        elif args.cmd == "templates":
             _print(client.list_templates(limit=args.limit, offset=args.offset))
         elif args.cmd == "template-create":
             settings = {}
