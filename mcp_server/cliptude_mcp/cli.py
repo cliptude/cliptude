@@ -409,6 +409,12 @@ def main(argv: list[str] | None = None) -> None:
         help="No scene transitions; hard cuts only. Omit to use the template.",
     )
     g.add_argument(
+        "--disable-sound-effects",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="No sound effects; --no-disable-sound-effects turns them on for this video even if the template has them off. Omit to use the template.",
+    )
+    g.add_argument(
         "--exclude-animation-type",
         action="append",
         dest="excluded_animation_types",
@@ -726,6 +732,7 @@ def main(argv: list[str] | None = None) -> None:
                 disable_overlays=args.disable_overlays,
                 disable_effects=args.disable_effects,
                 disable_transitions=args.disable_transitions,
+                disable_sound_effects=args.disable_sound_effects,
                 excluded_animation_types=args.excluded_animation_types,
                 excluded_transition_kinds=args.excluded_transition_kinds,
                 thumbnail=_thumbnail_from_args(args),

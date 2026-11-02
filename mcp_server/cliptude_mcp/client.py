@@ -261,6 +261,7 @@ def _motion_control_job_fields(
     disable_overlays: bool | None = None,
     disable_effects: bool | None = None,
     disable_transitions: bool | None = None,
+    disable_sound_effects: bool | None = None,
     excluded_animation_types: list[str] | None = None,
     excluded_transition_kinds: list[str] | None = None,
     as_strings: bool = False,
@@ -271,6 +272,7 @@ def _motion_control_job_fields(
         "disable_overlays": disable_overlays,
         "disable_effects": disable_effects,
         "disable_transitions": disable_transitions,
+        "disable_sound_effects": disable_sound_effects,
     }
     for key, value in bool_fields.items():
         if value is not None:
@@ -417,6 +419,7 @@ class CliptudeClient:
         disable_overlays: bool | None = None,
         disable_effects: bool | None = None,
         disable_transitions: bool | None = None,
+        disable_sound_effects: bool | None = None,
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         render_only: bool | None = None,
@@ -440,6 +443,7 @@ class CliptudeClient:
             disable_overlays=disable_overlays,
             disable_effects=disable_effects,
             disable_transitions=disable_transitions,
+            disable_sound_effects=disable_sound_effects,
             excluded_animation_types=excluded_animation_types,
             excluded_transition_kinds=excluded_transition_kinds,
         )
@@ -448,6 +452,7 @@ class CliptudeClient:
             disable_overlays=disable_overlays,
             disable_effects=disable_effects,
             disable_transitions=disable_transitions,
+            disable_sound_effects=disable_sound_effects,
             excluded_animation_types=excluded_animation_types,
             excluded_transition_kinds=excluded_transition_kinds,
             as_strings=True,
@@ -484,6 +489,7 @@ class CliptudeClient:
                 disable_overlays=disable_overlays,
                 disable_effects=disable_effects,
                 disable_transitions=disable_transitions,
+                disable_sound_effects=disable_sound_effects,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
                 thumbnail=thumbnail,
@@ -633,6 +639,7 @@ class CliptudeClient:
         disable_overlays: bool | None = None,
         disable_effects: bool | None = None,
         disable_transitions: bool | None = None,
+        disable_sound_effects: bool | None = None,
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         thumbnail: dict[str, str] | None = None,
@@ -646,6 +653,7 @@ class CliptudeClient:
             disable_overlays=disable_overlays,
             disable_effects=disable_effects,
             disable_transitions=disable_transitions,
+            disable_sound_effects=disable_sound_effects,
             excluded_animation_types=excluded_animation_types,
             excluded_transition_kinds=excluded_transition_kinds,
             as_strings=True,
@@ -728,6 +736,7 @@ class CliptudeClient:
                 disable_overlays=disable_overlays,
                 disable_effects=disable_effects,
                 disable_transitions=disable_transitions,
+                disable_sound_effects=disable_sound_effects,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
             )

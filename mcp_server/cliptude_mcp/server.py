@@ -556,6 +556,10 @@ def build_server(*, with_http_auth: bool = False):
             bool | None,
             Field(description="True = no scene transitions; hard cuts only. Omit to use the saved template."),
         ] = None,
+        disable_sound_effects: Annotated[
+            bool | None,
+            Field(description="False = sound effects on for this video (whooshes and hits on boards, reveals and transitions) even if the template has them off; True = off. Omit to use the saved template."),
+        ] = None,
         excluded_animation_types: Annotated[
             list[str] | None,
             Field(description="Animation-type strings to exclude from this video (see list_templates/get_template or the app's motion-graphics catalog for valid values). Omit to use the saved template."),
@@ -597,7 +601,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description="Ids from detail.review.acknowledgements_required (e.g. no_general_web_content) that the user explicitly approved after you explained each one. Never fill these in yourself."),
         ] = None,
     ) -> dict[str, Any]:
-        """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
+        """Start generation and return a job id immediately. Do not wait for the MP4. Poll get_job. Provide prompt, script, voiceover_path, or talking_head_path. Never copy the title into prompt; for a topic-only request write a spoken script after web search and pass script. Uploaded audio or talking-head video is transcribed. Avatar Video: optional avatar_intro_only and avatar_ai_footage override the template. Any format: optional disable_animations/disable_overlays/disable_effects/disable_transitions/disable_sound_effects and excluded_animation_types/excluded_transition_kinds override the template's motion & effects settings."""
         try:
             vo = (voiceover_path or "").strip() or None
             vo_url = (voiceover_url or "").strip() or None
@@ -633,6 +637,7 @@ def build_server(*, with_http_auth: bool = False):
                 disable_overlays=disable_overlays,
                 disable_effects=disable_effects,
                 disable_transitions=disable_transitions,
+                disable_sound_effects=disable_sound_effects,
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
                 thumbnail=_thumbnail_arg(thumbnail_prompt, thumbnail_reference_url),
