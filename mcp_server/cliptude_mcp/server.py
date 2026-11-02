@@ -340,9 +340,11 @@ def build_server(*, with_http_auth: bool = False):
         "with its picker, one at a time, and wait for each pick before the next, in this order as the format uses it "
         "(live formats only: faceless_documentary, faceless_top_10, avatar_video, talking_head, vector_explainer): "
         "voice (list_voices); the presenter (list_avatars, Avatar Video) or character (list_vector_characters, "
-        "Vector Explainer); background music (show_choices field background_music_library_file); background picture "
+        "Vector Explainer; the user can upload their own there); background music (show_choices field background_music_library_file); background picture "
         "(show_choices background_image); style pack, visual theme and captions (show_choices "
-        "faceless_documentary_style, visual_theme, caption_style); then create_template. Never list options as text "
+        "faceless_documentary_style, visual_theme, caption_style; Vector Explainer: vector_illustration_style and "
+        "vector_reveal_mode instead of the style pack, where Video animation costs more than the default stills); "
+        "then create_template. Never list options as text "
         "when a picker exists. create_template and get_template show the template as a card (voice, presenter, "
         "music, background, style, switches) with \"Make a video with this template\" and \"Change something\"; "
         "list_templates shows a gallery with \"Use this template\". "
@@ -584,6 +586,8 @@ def build_server(*, with_http_auth: bool = False):
         name: Annotated[str, Field(min_length=1, max_length=120, description="A short name for the character, e.g. 'Dr. Maya'")],
         image_path: Annotated[str | None, Field(description="Local PNG, JPG or WEBP file. Stdio / local MCP only: a remote server refuses it; use image_url there.")] = None,
         image_url: Annotated[str | None, Field(description="Public https link to the image (use on remote hosts).")] = None,
+        image_base64: Annotated[str | None, Field(description="The image itself, base64 (PNG, JPG or WEBP, max 10 MB). The character picker sends this when the user uploads their own.")] = None,
+        image_file_name: Annotated[str | None, Field(description="File name of image_base64, e.g. maya.png")] = None,
     ) -> dict[str, Any]:
         """Add the user's own Vector Explainer character and return its id (use it as vector_character_id). Use a picture the user supplied, or one you made for them: in that case show it to the user and upload only after they approve it. Best results: one full-body, front-facing character in flat vector style on a plain or transparent background, at least 1024 px, no text. It appears in the Cliptude wizard too."""
         refused = _local_path_refused(remote, ("image_path", image_path))
@@ -592,8 +596,17 @@ def build_server(*, with_http_auth: bool = False):
         try:
             path = (image_path or "").strip() or None
             url = (image_url or "").strip() or None
-            if bool(path) == bool(url):
-                return {"error": "Give image_path or image_url (one of them)."}
+            data = (image_base64 or "").strip() or None
+            if sum(bool(x) for x in (path, url, data)) != 1:
+                return {"error": "Give image_path, image_url or image_base64 (one of them)."}
+            if data:
+                from .creation import _file_arg
+
+                image = _file_arg(data_base64=data, file_name=image_file_name or "character.png", path=None,
+                                  local=not remote, what="character image")
+                if not image[2].startswith("image/"):
+                    return {"error": "The character must be a PNG, JPG or WEBP image."}
+                return _client().upload_vector_character(image_file=image, name=name)
             return _client().upload_vector_character(image_path=path, image_url=url, name=name)
         except Exception as exc:
             return _err(exc)

@@ -1219,12 +1219,16 @@ class CliptudeClient:
         *,
         image_path: str | Path | None = None,
         image_url: str | None = None,
+        image_file: tuple[str, bytes, str] | None = None,
         name: str = "",
         _retried: bool = False,
     ) -> Any:
-        """Add a Vector Explainer character from a local image or a public image URL; returns its id."""
-        if bool(image_path) == bool((image_url or "").strip()):
-            raise CliptudeApiError("Give image_path or image_url (one of them).")
+        """Add a Vector Explainer character from a local image, a public image URL, or (file name, bytes, mime)
+        sent by a widget; returns its id."""
+        if sum(bool(x) for x in (image_path, (image_url or "").strip(), image_file)) != 1:
+            raise CliptudeApiError("Give image_path, image_url or the image itself (one of them).")
+        if image_file:
+            return self._post_vector_character_file(image_file, name, _retried)
         if image_url:
             return self.request(
                 "POST", "/api/v1/vector-characters", json_body={"image_url": image_url.strip(), "name": name}
@@ -1246,6 +1250,28 @@ class CliptudeClient:
             raise CliptudeApiError(str(exc)) from exc
         if resp.status_code == 401 and not _retried and self._maybe_refresh():
             return self.upload_vector_character(image_path=image_path, name=name, _retried=True)
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {"error": resp.text}
+        if resp.status_code >= 400:
+            self._raise_http(resp, payload=payload)
+        return payload
+
+    def _post_vector_character_file(self, image_file: tuple[str, bytes, str], name: str, _retried: bool) -> Any:
+        file_name, raw, mime = image_file
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/api/v1/vector-characters",
+                headers=self._headers(json_content=False),
+                data={"name": name},
+                files={"image": (file_name, raw, mime)},
+                timeout=max(self.timeout, 120.0),
+            )
+        except httpx.HTTPError as exc:
+            raise CliptudeApiError(str(exc)) from exc
+        if resp.status_code == 401 and not _retried and self._maybe_refresh():
+            return self._post_vector_character_file(image_file, name, True)
         try:
             payload = resp.json()
         except ValueError:

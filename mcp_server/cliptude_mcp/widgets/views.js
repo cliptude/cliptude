@@ -292,6 +292,51 @@ var Views = (function () {
     ]));
   }
 
+  /** The words the reviewed call will voice or brief: the agent's script, or the brief Cliptude writes from. */
+  function reviewScriptPanel(input, rev) {
+    input = input || {};
+    var text = String(input.script || rev.script || "").trim();
+    var label = "Script";
+    if (!text && input.prompt) { text = String(input.prompt).trim(); label = "Brief"; }
+    if (!text) return null;
+    var count = words(text);
+    var body = h("div", { class: "script", tabindex: "0" });
+    text.split(/\n\s*\n/).map(function (p) { return p.trim(); }).filter(Boolean).forEach(function (p) {
+      body.appendChild(h("p", {}, [p]));
+    });
+    return { label: label + " (" + num(count) + " words)", body: body };
+  }
+
+  /** Accessible tabs: [{label, panel}]; the first is shown. Arrow keys move between tabs. */
+  function tabs(items) {
+    var uid = "t" + Math.random().toString(36).slice(2, 8);
+    var list = h("div", { class: "tabs", role: "tablist" });
+    var wrap = h("div", { class: "tabset" }, [list]);
+    var buttons = items.map(function (item, i) {
+      var panel = h("div", { role: "tabpanel", id: uid + "-p" + i, "aria-labelledby": uid + "-t" + i, hidden: i !== 0 }, [item.panel]);
+      var btn = h("button", { type: "button", role: "tab", id: uid + "-t" + i, "aria-controls": uid + "-p" + i,
+        "aria-selected": i === 0 ? "true" : "false", tabindex: i === 0 ? "0" : "-1", class: "tab" }, [item.label]);
+      btn.addEventListener("click", function () { select(i); });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          var next = (i + (e.key === "ArrowRight" ? 1 : items.length - 1)) % items.length;
+          select(next); buttons[next].focus(); e.preventDefault();
+        }
+      });
+      list.appendChild(btn);
+      wrap.appendChild(panel);
+      return btn;
+    });
+    function select(n) {
+      buttons.forEach(function (b, i) {
+        b.setAttribute("aria-selected", i === n ? "true" : "false");
+        b.tabIndex = i === n ? 0 : -1;
+        document.getElementById(uid + "-p" + i).hidden = i !== n;
+      });
+    }
+    return wrap;
+  }
+
   function review(container, data, ctx) {
     var detail = data.detail;
     var rev = detail.review || {};
@@ -340,7 +385,15 @@ var Views = (function () {
       var value = str(s.value);
       table.appendChild(h("dd", { class: s.on === false || value === "Off" ? "off" : "" }, [value]));
     });
-    container.appendChild(section("Every setting", [table]));
+    var scriptPanel = reviewScriptPanel(ctx.input(), rev);
+    if (scriptPanel) {
+      container.appendChild(tabs([
+        { label: "Every setting", panel: table },
+        { label: scriptPanel.label, panel: scriptPanel.body }
+      ]));
+    } else {
+      container.appendChild(section("Every setting", [table]));
+    }
 
     var confirm = h("button", { type: "button", class: "primary", id: "confirm" }, ["Confirm"]);
     var change = h("button", { type: "button", onclick: function () {

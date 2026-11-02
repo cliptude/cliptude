@@ -7,6 +7,10 @@
 <style>
 /*@BASE_CSS@*/
 .thumb img { object-fit: contain; background: #fff; }
+.upload { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md); background: var(--color-background-secondary); }
+.upload label { display: flex; flex-direction: column; gap: 4px; font-size: var(--font-text-sm-size); color: var(--color-text-secondary); }
+.upload .photo-preview { max-width: 160px; max-height: 200px; object-fit: contain; background: #fff; border-radius: var(--border-radius-sm); }
 .card .desc { color: var(--color-text-secondary); font-size: var(--font-text-xs-size); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 </style>
 </head>
@@ -19,7 +23,9 @@
   <div class="toolbar">
     <label class="sr-only" for="filter">Filter characters</label>
     <input type="search" id="filter" placeholder="Filter characters" autocomplete="off">
+    <button type="button" id="upload-open">Upload your own</button>
   </div>
+  <div id="upload-panel" class="upload" hidden></div>
   <div id="content"><div class="status" role="status">Loading characters…</div></div>
   <div class="selection" id="selection">
     <span class="what" id="selected-text">Pick a character, or go without one.</span>
@@ -81,6 +87,71 @@
     document.getElementById("use").disabled = false;
     document.getElementById("selected-text").textContent = "“" + c.name + "” · " + c.id;
   }
+
+  /* ---- Upload the user's own character (free; private to their account) ---- */
+  var UPLOAD_PAGE = "https://cliptude.com/create/?format=vector_explainer";
+  function openUpload() {
+    if (!Cliptude.canCallTools()) {
+      Cliptude.openLink(UPLOAD_PAGE).then(function () { UI.toast("Opened Cliptude: upload the character in the Vector Explainer step."); })
+        .catch(function () { UI.toast("Upload it at " + UPLOAD_PAGE + "."); });
+      return;
+    }
+    var panel = document.getElementById("upload-panel");
+    panel.hidden = false;
+    var name = h("input", { type: "text", id: "ch-name", maxlength: "120", placeholder: "e.g. Dr. Maya" });
+    var file = h("input", { type: "file", id: "ch-image", accept: "image/png,image/jpeg,image/webp" });
+    var preview = h("span", {});
+    var go = h("button", { type: "button", class: "primary" }, ["Upload"]);
+    var cancel = h("button", { type: "button", onclick: function () { panel.hidden = true; Cliptude.reportSize(); } }, ["Cancel"]);
+    var out = h("div", {});
+    var image = null;
+    file.addEventListener("change", function () {
+      image = null; UI.clear(preview);
+      var f = file.files[0];
+      if (!f) return;
+      if (f.size > 10 * 1024 * 1024) { UI.toast("The image is over 10 MB."); file.value = ""; return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var url = String(reader.result);
+        var img = h("img", { class: "photo-preview", src: url, alt: "Selected character" });
+        img.onload = function () { Cliptude.reportSize(); };
+        preview.appendChild(img);
+        image = { name: f.name, base64: url.split(",")[1] };
+        if (!name.value.trim()) name.value = f.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+      };
+      reader.readAsDataURL(f);
+    });
+    UI.clear(panel).appendChild(h("h2", { class: "section-title" }, ["Upload your own character"]));
+    panel.appendChild(h("span", { class: "sub" }, ["Private to your account, and free. Best: one full-body, front-facing character in flat vector style on a plain or transparent background, 1024 px or more, no text."]));
+    panel.appendChild(h("label", { for: "ch-name" }, ["Name", name]));
+    panel.appendChild(h("label", { for: "ch-image" }, ["Image (PNG, JPG or WEBP, up to 10 MB)", file]));
+    panel.appendChild(preview);
+    panel.appendChild(h("div", { class: "toolbar" }, [go, cancel]));
+    panel.appendChild(out);
+    go.addEventListener("click", function () {
+      if (!image) { UI.toast("Choose an image."); return; }
+      if (!name.value.trim()) { UI.toast("Give the character a name."); return; }
+      go.disabled = true;
+      UI.status(out, "Uploading…");
+      Cliptude.callTool("upload_vector_character", { name: name.value.trim(), image_base64: image.base64, image_file_name: image.name })
+        .then(function (res) {
+          go.disabled = false;
+          var err = UI.errorText(res);
+          if (err) { UI.status(out, err, "error"); return; }
+          var c = (res && (res.character || res)) || {};
+          var added = { id: String(c.id || ""), name: c.name || name.value.trim(), preview_url: c.preview_url || c.image_url || c.url || "",
+                        descriptor: "Yours", description: c.description || "" };
+          if (!added.id) { UI.status(out, "Cliptude did not return the new character's id.", "error"); return; }
+          data.uploads = [added].concat(data.uploads || []);
+          panel.hidden = true;
+          select(added);
+          UI.toast("Uploaded. It is selected: press Use this character.");
+        })
+        .catch(function () { go.disabled = false; UI.status(out, "Could not reach Cliptude.", "error"); });
+    });
+    Cliptude.reportSize();
+  }
+  document.getElementById("upload-open").addEventListener("click", openUpload);
 
   document.getElementById("filter").addEventListener("input", render);
   document.getElementById("use").addEventListener("click", function () {
