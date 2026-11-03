@@ -1365,7 +1365,7 @@ def build_server(*, with_http_auth: bool = False):
     def open_editor_project(
         job_id: Annotated[str, Field(min_length=8, description="Completed video job id")],
     ) -> dict[str, Any]:
-        """Open (or create) the timeline editor project for a completed video job. Returns project id, revision, a compact timeline (item id, type, start_s, end_s, text) to reference in run_agent, and export_credits_due: what render_project would charge now."""
+        """Open (or create) the timeline editor project for a completed video job. Returns project id, revision, a compact timeline (item id, type, start_s, end_s, text; audio items add kind: sound_effect, music or voice) to reference in run_agent, and export_credits_due: what render_project would charge now."""
         try:
             return _untrusted(_compact_editor_project(_client().open_editor_project(job_id)))
         except Exception as exc:
