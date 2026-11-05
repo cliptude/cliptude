@@ -112,7 +112,11 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
 10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
    `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from the new plan, reuses every
    picture or clip whose request did not change, and charges nothing more. Aim for one revision: see
-   "One pass" below.
+   "One pass" below. A revision draws no new AI
+   picture (AI Image + AI Video, Vector Explainer) and uses no AI fallback still: an unchanged request keeps its
+   picture even if you renumber the beats, and a beat that needs a new one gets your own picture (`upload_plan_media`
+   / `start_media_upload`, then `{"keep": "<id>"}`); `check_plan` refuses a new AI request on a revision
+   (`revision_new_ai_picture`).
 11. **Render once.** `open_editor_project` for the job, then `render_project` for the final MP4.
    `render_project` returns 409 `quality_findings_open` while the build still has `fix_in: "plan"` findings: fix
    them (step 10) and review again. Pass `accept_quality_findings: true` only after trying, or when the user
