@@ -343,7 +343,9 @@ def build_server(*, with_http_auth: bool = False):
         "playing at the top, then its thumbnails, titles, description, chapters and tags to copy. "
         "TEMPLATE BUILDER: when you create a template in a host that shows apps, walk the user through each choice "
         "with its picker, one at a time, and wait for each pick before the next, in this order as the format uses it "
-        "(live formats only: faceless_documentary, faceless_top_10, avatar_video, talking_head, vector_explainer): "
+        "(live formats: faceless_documentary, faceless_top_10, avatar_video, talking_head, vector_explainer, and "
+        "faceless_explainer when get_account lists it in extra_formats; for Faceless Explainer: voice, style pack "
+        "(show_choices faceless_explainer_style), the two brand colours, then music and captions): "
         "voice (list_voices); the presenter (list_avatars, Avatar Video) or character (list_vector_characters, "
         "Vector Explainer; the user can upload their own there); background music (show_choices field background_music_library_file); background picture "
         "(show_choices background_image); style pack, visual theme and captions (show_choices "
@@ -1504,7 +1506,7 @@ def build_server(*, with_http_auth: bool = False):
         annotations=ToolAnnotations(title="Get account", read_only_hint=True, open_world_hint=False),
     )
     def get_account() -> dict[str, Any]:
-        """Plan, credits remaining, and concurrency in use."""
+        """Plan, credits remaining, concurrency in use, and extra_formats: formats opened for this account only (faceless_explainer). Offer a format in extra_formats; others in that family answer 403."""
         try:
             return _client().get_account()
         except Exception as exc:

@@ -30,10 +30,12 @@
   "use strict";
   var h = UI.h;
   // Formats Cliptude makes today; templates of retired formats (whiteboard, sketch, stickman, low_poly_3d,
-  // monkey_explained, vox_animation, infographic, mannequin_3d, faceless_explainer, music, ...) hide behind "Show all".
-  var LIVE = { faceless_documentary: 1, faceless_top_10: 1, avatar_video: 1, talking_head: 1, vector_explainer: 1 };
+  // monkey_explained, vox_animation, infographic, mannequin_3d, music, ...) hide behind "Show all". Faceless Explainer
+  // is live for the accounts it was opened to (only they can make its templates).
+  var LIVE = { faceless_documentary: 1, faceless_top_10: 1, avatar_video: 1, talking_head: 1, vector_explainer: 1, faceless_explainer: 1 };
   var TILE = { faceless_documentary: "#1e3a5f, #0b1220", faceless_top_10: "#5b2130, #1a0b10", avatar_video: "#2d3b2a, #0e140c",
-               talking_head: "#4a3a1e, #171008", vector_explainer: "#3a2a5f, #120b20" };
+               talking_head: "#4a3a1e, #171008", vector_explainer: "#3a2a5f, #120b20",
+               faceless_explainer: "#1f4d4a, #08181a" };
   var content = document.getElementById("content");
   var all = document.getElementById("all");
   var data = { results: [] };

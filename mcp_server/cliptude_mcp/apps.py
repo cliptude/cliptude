@@ -151,6 +151,7 @@ CHOICE_FIELDS: dict[str, tuple[str, str]] = {
     "caption_style": ("caption", "Caption style"),
     "vector_illustration_style": ("text", "Illustration style"),
     "vector_reveal_mode": ("text", "Motion"),
+    "faceless_explainer_style": ("text", "Explainer style"),
 }
 # Fields an agent-planned video also sets in its plan's look.
 _PLAN_LOOK_FIELDS = frozenset({"background_music_library_file", "visual_theme", "faceless_documentary_style"})
@@ -265,7 +266,7 @@ def build_apps(
             Field(description="Setting to choose: " + ", ".join(CHOICE_FIELDS)),
         ],
     ) -> dict[str, Any]:
-        """Let the user preview and pick one template setting: background music (play each track), background picture, style pack (colour swatches), visual theme, caption style, or the Vector Explainer illustration style / motion. In hosts that show apps the user picks in a widget and the choice arrives as their message; otherwise read choices and ask. Returns {field, choices:[{value, label, ...preview links}], default, usage}."""
+        """Let the user preview and pick one template setting: background music (play each track), background picture, style pack (colour swatches), visual theme, caption style, the Vector Explainer illustration style / motion, or the Faceless Explainer style pack. In hosts that show apps the user picks in a widget and the choice arrives as their message; otherwise read choices and ask. Returns {field, choices:[{value, label, ...preview links}], default, usage}."""
         field = (field or "").strip()
         if field not in CHOICE_FIELDS:
             return {"error": f"field must be one of: {', '.join(CHOICE_FIELDS)}"}
