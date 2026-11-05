@@ -704,7 +704,7 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("account", help="Plan and credits")
 
-    c = sub.add_parser("cancel", help="Cancel a job")
+    c = sub.add_parser("cancel", help="Cancel a job that has not started (a queued or running video can't be cancelled)")
     c.add_argument("job_id")
 
     for job_parser in (g, sc, vo, pj):

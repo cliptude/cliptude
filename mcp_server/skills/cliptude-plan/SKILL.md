@@ -35,7 +35,8 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    explicit approval to build without it. Never switch these off yourself.
 2. **Start.** The first `create_plan_job` call returns a **review** (status 428, `detail.review`) and creates
    nothing: show the user every setting in it (voice, model tier, media sources, animations, charts, overlays,
-   transitions, sound effects, music) and every warning and the credits, and ask them to confirm. Then call again
+   transitions, sound effects, music) and every warning and the credits, and ask them to confirm; say that once the
+   video starts generating it can't be cancelled. Then call again
    with `review_token`; for each `acknowledgements_required` item (`no_general_web_content`, `no_video_footage`,
    `no_motion_graphics`, `no_music`, `no_sound_effects`, `no_transitions`) explain what it costs and pass it in `acknowledge` only after the user approves it.
    `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (the default: narration you
@@ -179,6 +180,13 @@ this order, and the video needs two builds: one to review, one to ship.
 ### The checklist
 
 **Before you lock**
+0. **Fix these four before the first lock; each one cost recent videos a rebuild.** `long_still_beat`: a beat on
+   screen 7.5 s or more that Cliptude cannot split (no alts, or your own file) is one still held too long; split
+   it with a phrase into 3-6 s beats, or give it 1-2 alts. `picture_around_board`: a picture that shows before a
+   board and again after it; start a new beat where the board ends (the hint names the word). `bare_board`: a text
+   board that draws on a plain dark plate (equals, scroll list, journey, two-line statement); give it a picture or
+   use a text board that sits over the footage. `generic_search_no_setting`: a generic search with no place or era
+   comes back from the wrong country or decade (twice the dropped picks); name the story's setting in it.
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
    `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
    `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `person_on_pointer_label`,
@@ -247,9 +255,10 @@ and generates nothing: it aligns your voiceover, builds the plan you lock and re
      `voiceover_url` to `create_plan_job(render_only=true, …)` within the hour.
   2. Pictures and clips, on the job: `start_media_upload(job, filename, size)` → PUT the parts the same way →
      `finish_media_upload(job, key, upload_id)` → use its `keep` id.
-     Uploads with nudity or gore are refused; a clip's result may carry `notes` ("a title card appears by 3.9s: set
-     end_s to 3.4 or earlier", a weapon aimed at someone). The build cuts past a title card, logo card or black
-     frame (and any fade to black) itself unless you set that edge; a weapon is yours to trim with `start_s` / `end_s`.
+     On a render-only job Cliptude reviews nothing: no vision check on uploads (no `notes`, no refusals), none in
+     the build, which keeps it at the flat rate. Checking every file is your job: no logos, title cards, other
+     channels' watermarks, graphic violence or nudity (YouTube removes it), and trim each clip with `start_s` /
+     `end_s` to the part you want.
   With the CLI or a local MCP server the same uploads are one call: `voiceover_path` / `cliptude plan-job
   --voiceover`, and `upload_plan_media(job, path)` / `cliptude upload-media`. A public https link still works as
   `voiceover_url`, but not as a media `url`: download each picture or clip and upload it. Trim long clips with `start_s` / `end_s`.
@@ -495,6 +504,9 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
   `"MORRIS CHANG"` with role `"TI EXEC"`, versus `"CHIP DESIGN"` / `"OWN A FAB"`). The narration says the rest.
   Quote boards (`character_quote`, `quote_box_graphic`, `quote_and_transparent_portrait`, articles) are the exception:
   they show the quoted words as spoken, and `narration_as_text` does not flag them.
+  Each field is shown on its own, so each must read as a complete phrase: never split one sentence across a
+  board's fields ("THE LAST ONE" / "isn't a" / "recipe" showed as a fragment). `check_plan` refuses a field that
+  ends on "a", "the", "of", "to", "and", "isn't" or a trailing hyphen or comma (`text_fragment`).
 - **Two facts in one sentence can take two boards back to back** (a person card, then that company's logo board).
 - **Open on footage.** The hook (first ~15-20 s) is fast cuts, 1.5-4 s a picture; the first board lands on the first
   hard fact. The scorecard still wants a first graphic by ~6 s: when the opening states no fact, put a short title
@@ -701,6 +713,15 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   `ranked_pacing` warns when titles are under 3 or over 8 s, or 40-95 s apart; when the narration's own entries are
   shorter than 40 s, leave that warning. An entry that opens on its year or date ("In 1969, ...") puts the year
   board right after the title: coverage counts a board anywhere from 1 s before that sentence to 4 s after it ends.
+- **Avatar Video with AI Image + AI Video** (`get_narration` → `template.avatar.ai_footage`): nothing is searched.
+  Every beat is an AI still (a few become short clips) drawn from its `query`, so write the query as the picture:
+  subject, action and setting in 5-12 words ("grandma tilting a cast iron skillet and spooning fat over an egg").
+  Alts, eras and the search word limits do not apply, and `check_plan` does not ask for them. The presenter is in a
+  shot only when its query names them (the role the narration gives them: "grandma ...", "the host ..."), drawn from
+  their avatar photo; a query without them gets no person. Keep people out of `sense.topic` ("Appalachian home
+  cooking", not "a grandmother's kitchen"): the topic goes into every prompt. Their on-camera time is capped at
+  `template.avatar.max_presenter_seconds`: spend it on the hook and the close. A board with no picture shows the
+  still under it, which here is the point, so `empty_board` is not raised.
 - `presenter_windows` (Avatar Video and Talking Head): `full_screen`, `split_left` or `split_right`; no overlaps;
   Avatar Video: required, since the chosen avatar appears only in them (`no_presenter_windows`); open on the
   presenter; total seconds within the template's cap (intro-only templates: one opening window). Talking Head:
