@@ -107,20 +107,31 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
      under it counts), the same picture twice in a row or coming back across a stretch between boards
      (`same_picture_run`), an opening with fewer than three pictures in 15 s.
    Fix with a new query that names the story's setting plus `negatives` for what came back, a `phrase` split for a
-   held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat. Review the rebuild the same
-   way; give the user the link only when a full pass is clean.
-10. **Revise on the same job** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same narration,
-   `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from the new plan, reuses every
-   picture or clip whose request did not change, and charges nothing more. Aim for one revision: see
-   "One pass" below. A revision draws no new AI
+   held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat.
+   **This is the video's one review.** Write down every problem across every tile before you change anything,
+   then fix them all in the one revision (step 10): there is no second.
+10. **Revise once, on the same job,** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same
+   narration, `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from
+   the new plan, reuses every picture or clip whose request did not change, and charges nothing more. **A job takes
+   one revision:** once it is built, `check_plan` and `lock_plan` answer 409 `review_used`, and `get_job` shows
+   `review.review_left`. So the revision carries every fix, with the replacement itself, not a new search to hope
+   on: download the right footage, picture or photo and upload it (`upload_plan_media`, CLI `upload-media`,
+   `start_media_upload` + `finish_media_upload` on a remote host) and use its `{"keep": "<id>"}`; correct a board's
+   wrong text in its `props`; give a held still a `phrase` split onto another uploaded clip. Check each replacement
+   against the "One pass" checklist before you lock (see "One pass" below). A revision draws no new AI
    picture (AI Image + AI Video, Vector Explainer) and uses no AI fallback still: an unchanged request keeps its
    picture even if you renumber the beats, and a beat that needs a new one gets your own picture (`upload_plan_media`
    / `start_media_upload`, then `{"keep": "<id>"}`); `check_plan` refuses a new AI request on a revision
    (`revision_new_ai_picture`).
-11. **Render once.** `open_editor_project` for the job, then `render_project` for the final MP4.
-   `render_project` returns 409 `quality_findings_open` while the build still has `fix_in: "plan"` findings: fix
-   them (step 10) and review again. Pass `accept_quality_findings: true` only after trying, or when the user
-   says to ship as is, and tell the user which findings remain.
+11. **Hand over the rendered video.** The revised build is final: when it is ready Cliptude exports it itself
+   (the video's first export is free). Poll `get_job` until `render.status` is `completed` (CLI `cliptude status`),
+   then call `show_publish_kit`: the user gets the rendered video, thumbnails, titles, description, chapters and
+   tags in one view. Do not review the rebuild and do not ask the user to review it. If the first build needed
+   no change, skip step 10: `open_editor_project`, then `render_project`, then `show_publish_kit`.
+   `render_project` returns 409 `quality_findings_open` while the first build still has `fix_in: "plan"`
+   findings: fix them in the one revision. Pass `accept_quality_findings: true` only when the user says to ship
+   as is, and tell the user which findings remain. A later change goes through the editor (`run_agent`, then
+   `render_project`, which costs credits after the first export).
 
 CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b`, `plan-check <job> plan.json`,
 `plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,
@@ -179,7 +190,8 @@ this order, and the video needs two builds: one to review, one to ship.
 5. **Lock with no picture warnings.** Every warning in the checklist below is a defect the review will find.
 6. **Build once, review once, revise once.** Read `get_plan_review`'s findings, then one `view_scenes` pass over
    the whole video (boards draw in a few minutes; `boards_pending` means call again, not rebuild). Write down every
-   problem, fix them all in one revision with the same script, and build again. That build ships.
+   problem, fix them all in one revision with the same script (with the uploaded replacements), and build again.
+   That build ships: Cliptude renders it and you hand the user `show_publish_kit`. A second revision is refused.
 
 ### The checklist
 
@@ -193,14 +205,16 @@ this order, and the video needs two builds: one to review, one to ship.
    comes back from the wrong country or decade (twice the dropped picks); name the story's setting in it.
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
    `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
-   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `person_on_pointer_label`,
+   `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `work_not_shown`, `person_on_pointer_label`,
    `person_not_shown`, `filler_props`, `slow_pictures`, `long_third_party_excerpt`. Each one is a defect the review will find later. Cliptude measures every file you
    upload (its length, how bright it is, what each part looks like), so these know the same shot cut into two
    differently named clips, and a clip that is black or a white flash where it plays.
    **Have enough footage before you build:** `footage_too_thin` means the clips cannot fill the video without
    looping. Upload more (other trailers, TV spots, featurettes, interviews) rather than reusing.
 2. **A video about a film, game, show or creator shows the real work:** its trailers, scenes, featurettes and
-   behind-the-scenes footage, credited to its studio. It never shows AI stills or real-world stand-ins. When you
+   behind-the-scenes footage, credited to its studio. It never shows AI stills or real-world stand-ins. Searched
+   beats about the work name it as its clips are titled ("Masters of the Universe 1987 Skeletor throne room")
+   with `prefer: "video"` on Caldera; `work_not_shown` warns when too few do. When you
    upload clips, each clip's `notes` say where a title card or a fade starts: set `start_s` / `end_s` inside them.
    Trailer clips fade and dip to black between shots, so play only the bright part of each one.
 3. **A clip at least as long as its beat.** Measure what is left of the clip (`end_s` - `start_s`) against the

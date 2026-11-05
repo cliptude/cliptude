@@ -8,7 +8,7 @@ description: Generate Cliptude videos from a saved template using the cliptude C
 **Want to direct every visual yourself** (theme, colours, every motion graphic and its text and timing, the search
 query, person or URL behind every shot)? On a Faceless Documentary, Faceless Top 10 or Avatar Video template, follow
 **cliptude-plan**: `create_plan_job` → `get_narration` → `get_kind_catalog` → `check_plan` → `lock_plan` →
-`continue_job` → `get_plan_review` (revise on the same job if needed) → `render_project`. Cliptude then only voices,
+`continue_job` → one review (`get_plan_review` + `view_scenes`), fixing everything in one revision on the same job with your uploaded replacements → Cliptude renders it → `show_publish_kit`. Cliptude then only voices,
 sources and renders your plan.
 
 Style lives in a **saved template** (voice, model, format). Either the user finishes the Cliptude wizard once and clicks **Save as template**, or you create one with `cliptude template-create` / MCP `create_template` (see `template-options` / `get_template_options` for fields and `voices` / `list_voices` for voice_id).

@@ -295,10 +295,10 @@ def build_server(*, with_http_auth: bool = False):
         "topic with web search, write the narration yourself and show it to the user to review first; then "
         "create_plan_job with script (prompt only when the user asks Cliptude to write it), poll get_job until "
         "plan_ready, get_narration (numbered sentences), get_kind_catalog (compact first), write the "
-        "plan, check_plan until valid, lock_plan, continue_job, then get_plan_report. Before giving the user "
-        "the editor link, open_editor_project and look at EVERY frame with view_scenes (0 to the end): replace "
+        "plan, check_plan until valid, lock_plan, continue_job, then get_plan_report. ONE REVIEW: when the first "
+        "build is ready, open_editor_project and look at EVERY frame with view_scenes (0 to the end) once: replace "
         "any dead body or gore, other brands, logos, album art, footage of a game, match or show the video is not about, title cards, pictures whose place or era "
-        "contradicts the story (a search naming a place can return a namesake elsewhere), near-black frames, clips floating in black bars, broken AI pictures and any picture held over ~8 s, in a free revision, then review again. Generic "
+        "contradicts the story (a search naming a place can return a namesake elsewhere), near-black frames, clips floating in black bars, broken AI pictures and any picture held over ~8 s, all in ONE free revision whose fixes carry the replacement itself (footage, pictures or photos you downloaded and uploaded with upload_plan_media, used as keep; corrected board text). A job takes one revision (a second answers 409 review_used): Cliptude renders the revised build itself; poll get_job until render.status is completed and call show_publish_kit. Never review the rebuild or ask the user to. Generic "
         "shots of places name the story's setting (\"empty bed mud house\", not \"empty bed dark room\"). A video "
         "about a video game, sport, creator or TV show searches the real thing (\"GTA 6 gameplay driving\", "
         "\"Bellingham Real Madrid goal\", \"Kai Cenat stream\"): its own footage is the footage, broadcaster and "
@@ -900,7 +900,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description=SPEND_REVIEW_TOKEN_HELP),
         ] = None,
     ) -> dict[str, Any]:
-        """Queue a completed script or voiceover job, or a plan job whose plan is locked, as a full video on the same id. This charges the rest of the video price, so the first call returns a review (status 428, detail.review: what it builds and the credits) and queues nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Poll get_job until completed. Do not create a second job with the script or audio. Refused with code thumbnail_required when the video has no thumbnail reference or brief: pass one here. Refused with status 402 and code insufficient_credits when the account cannot pay for the rest of the video: nothing is queued or lost (a plan job stays plan_ready with its locked plan and narration). Tell the user the shortfall and detail.billing_url, and once they add credits call continue_job again on the same job id."""
+        """Queue a completed script or voiceover job, or a plan job whose plan is locked, as a full video on the same id. This charges the rest of the video price, so the first call returns a review (status 428, detail.review: what it builds and the credits) and queues nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Poll get_job until completed. Do not create a second job with the script or audio. Refused with code thumbnail_required when the video has no thumbnail reference or brief: pass one here. Refused with status 402 and code insufficient_credits when the account cannot pay for the rest of the video: nothing is queued or lost (a plan job stays plan_ready with its locked plan and narration). Tell the user the shortfall and detail.billing_url, and once they add credits call continue_job again on the same job id. On a built plan job with a newly locked revision this rebuilds for free (no review): that is the job's one revision, and Cliptude renders its build itself; poll get_job until render.status is completed, then show_publish_kit."""
         try:
             return _client().continue_job(job_id, thumbnail=_thumbnail_arg(thumbnail_prompt, thumbnail_reference_url),
                                           review_token=review_token)
@@ -1169,7 +1169,7 @@ def build_server(*, with_http_auth: bool = False):
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status plan_ready)")],
         plan: Annotated[dict[str, Any], Field(description="The plan that check_plan reported valid")],
     ) -> dict[str, Any]:
-        """Validate and store the plan, and apply its look (theme, colours, style, music) to the video. You may lock again to replace it until you call continue_job. Then call continue_job."""
+        """Validate and store the plan, and apply its look (theme, colours, style, music) to the video. You may lock again to replace it until you call continue_job. Then call continue_job. After the first build the job takes ONE revised plan (its one review); once that is built, lock_plan answers 409 review_used and Cliptude renders the build itself."""
         try:
             return _client().put_plan(job_id, plan, dry_run=False)
         except Exception as exc:
@@ -1195,7 +1195,7 @@ def build_server(*, with_http_auth: bool = False):
     def get_plan_review(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
     ) -> dict[str, Any]:
-        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. Revise with check_plan/lock_plan + continue_job on the same job, review again, then render_project once (it refuses while plan findings remain unless accept_quality_findings is true)."""
+        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. This is the job's one review: fix everything in one revision (check_plan/lock_plan + continue_job on the same job), with your uploaded replacements as keep; Cliptude renders the revised build itself and a second revision is refused (409 review_used). Poll get_job until render.status is completed, then show_publish_kit. If nothing needs fixing, render_project once (it refuses while plan findings remain unless accept_quality_findings is true), then show_publish_kit."""
         try:
             return _untrusted(_client().get_plan_review(job_id))
         except Exception as exc:
@@ -1481,7 +1481,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description=SPEND_REVIEW_TOKEN_HELP),
         ] = None,
     ) -> dict[str, Any]:
-        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). A paid export first returns a review (status 428, detail.review with the credits) and renders nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Poll get_render for output_url. On an agent-planned job, a build with quality_findings the plan can fix returns 409 quality_findings_open: revise the plan and review again first."""
+        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). A paid export first returns a review (status 428, detail.review with the credits) and renders nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Poll get_render for output_url. On an agent-planned job, a first build with quality_findings the plan can fix returns 409 quality_findings_open: fix them in the job's one revision (Cliptude then renders that build itself, so this call is not needed)."""
         try:
             return _client().render_project(project_id, accept_quality_findings=accept_quality_findings,
                                             review_token=review_token)
