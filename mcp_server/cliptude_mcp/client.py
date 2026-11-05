@@ -351,6 +351,20 @@ def _motion_control_job_fields(
     return fields
 
 
+# Completing an upload checks the file; with split_shots it also cuts it into clips and checks each one, which
+# takes minutes for a trailer. Wait up to the server's own request limit (300 s) rather than the usual 30 s.
+SPLIT_SHOTS_COMPLETE_TIMEOUT_S = 310.0
+UPLOAD_COMPLETE_TIMEOUT_S = 120.0
+
+
+def _complete_timeout(default: float, split_shots: bool) -> float:
+    return max(default, SPLIT_SHOTS_COMPLETE_TIMEOUT_S if split_shots else UPLOAD_COMPLETE_TIMEOUT_S)
+
+
+def _timed_out(exc: BaseException) -> bool:
+    return isinstance(exc, httpx.TimeoutException) or isinstance(getattr(exc, "__cause__", None), httpx.TimeoutException)
+
+
 class CliptudeClient:
     def __init__(
         self,
@@ -427,7 +441,9 @@ class CliptudeClient:
         self.api_key = str(updated.get("access_token") or "")
         return bool(self.api_key)
 
-    def request(self, method: str, path: str, *, params=None, json_body=None, _retried: bool = False) -> Any:
+    def request(
+        self, method: str, path: str, *, params=None, json_body=None, timeout: float | None = None, _retried: bool = False,
+    ) -> Any:
         url = f"{self.base_url}{path}"
         try:
             resp = httpx.request(
@@ -436,12 +452,12 @@ class CliptudeClient:
                 headers=self._headers(),
                 params=params,
                 json=json_body,
-                timeout=self.timeout,
+                timeout=timeout or self.timeout,
             )
         except httpx.HTTPError as exc:
             raise CliptudeApiError(str(exc)) from exc
         if resp.status_code == 401 and not _retried and self._maybe_refresh():
-            return self.request(method, path, params=params, json_body=json_body, _retried=True)
+            return self.request(method, path, params=params, json_body=json_body, timeout=timeout, _retried=True)
         try:
             payload = resp.json()
         except ValueError:
@@ -955,8 +971,18 @@ class CliptudeClient:
         body = {"key": (init or {}).get("key"), "upload_id": (init or {}).get("upload_id")}
         try:
             self._upload_parts(path, init, f"{base}/sign-parts", "media")
-            return self.request("POST", f"{base}/complete", json_body={**body, **({"split_shots": True} if split_shots else {})})
-        except Exception:
+            return self.request(
+                "POST", f"{base}/complete", json_body={**body, **({"split_shots": True} if split_shots else {})},
+                timeout=_complete_timeout(self.timeout, split_shots),
+            )
+        except Exception as exc:
+            if _timed_out(exc):
+                # The bytes are uploaded and Cliptude is still checking (and cutting) them: aborting now would
+                # delete a file the server is about to keep.
+                raise CliptudeApiError(
+                    "Cliptude is still processing this upload; it took longer than the wait. Upload a shorter "
+                    "source (split_shots handles about two minutes at a time) or try again."
+                ) from exc
             try:
                 self.request("POST", f"{base}/abort", json_body=body)
             except Exception:
@@ -991,7 +1017,8 @@ class CliptudeClient:
 
     def finish_media_upload(self, job_id: str, *, key: str, upload_id: str, split_shots: bool = False) -> Any:
         body = {"key": key, "upload_id": upload_id, **({"split_shots": True} if split_shots else {})}
-        return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/media/complete", json_body=body)
+        return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/media/complete", json_body=body,
+                            timeout=_complete_timeout(self.timeout, split_shots))
 
     def abort_media_upload(self, job_id: str, *, key: str, upload_id: str) -> Any:
         return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/media/abort", json_body={"key": key, "upload_id": upload_id})

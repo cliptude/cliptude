@@ -1,4 +1,5 @@
 from unittest import IsolatedAsyncioTestCase, TestCase
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from cliptude_mcp.auth import CliptudeTokenVerifier
@@ -582,3 +583,51 @@ class StoredLoginRefreshTests(TestCase):
                 patch.object(c, "_resolve_token", return_value="tok"):
             self.assertTrue(c.CliptudeClient(base_url="https://cliptude.com")._session_file)
             self.assertFalse(c.CliptudeClient(base_url="https://elsewhere.example")._session_file)
+
+
+class SplitShotsUploadTests(TestCase):
+    """He-Man 3b2a2d2e: every trailer upload with split_shots timed out after 30 s and was then aborted."""
+
+    def _client_with_file(self, tmp):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        path = Path(tmp) / "trailer.mp4"
+        path.write_bytes(b"\0" * 64)
+        return client, path
+
+    def test_complete_waits_for_the_cutting(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            client, path = self._client_with_file(tmp)
+            calls = []
+
+            def fake_request(method, p, **kw):
+                calls.append((p, kw.get("timeout")))
+                return {"key": "k", "upload_id": "u"} if p.endswith("/init") else {"keep": "x", "shots": []}
+
+            with patch.object(client, "request", side_effect=fake_request), patch.object(client, "_upload_parts"):
+                client.upload_plan_media("3b2a2d2e-b295-4f52-9b1b-3e71d1e00444", path, split_shots=True)
+        complete = [t for p, t in calls if p.endswith("/complete")]
+        self.assertGreaterEqual(complete[0], 300)
+
+    def test_a_timeout_does_not_abort_the_upload(self):
+        import tempfile
+
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            client, path = self._client_with_file(tmp)
+            paths = []
+
+            def fake_request(method, p, **kw):
+                paths.append(p)
+                if p.endswith("/init"):
+                    return {"key": "k", "upload_id": "u"}
+                if p.endswith("/complete"):
+                    raise CliptudeApiError("The read operation timed out") from httpx.ReadTimeout("slow")
+                return {}
+
+            with patch.object(client, "request", side_effect=fake_request), patch.object(client, "_upload_parts"):
+                with self.assertRaises(CliptudeApiError):
+                    client.upload_plan_media("3b2a2d2e-b295-4f52-9b1b-3e71d1e00444", path, split_shots=True)
+        self.assertFalse(any(p.endswith("/abort") for p in paths))
