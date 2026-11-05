@@ -722,7 +722,8 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   subject, action and setting in 5-12 words ("grandma tilting a cast iron skillet and spooning fat over an egg").
   Alts, eras and the search word limits do not apply, and `check_plan` does not ask for them. The presenter is in a
   shot only when its query names them (the role the narration gives them: "grandma ...", "the host ..."), drawn from
-  their avatar photo; a query without them gets no person. Keep people out of `sense.topic` ("Appalachian home
+  their avatar photo; a query without them gets no person. At most 18 AI pictures a minute (`too_many_ai_pictures`):
+  a beat of 3-6 s each, or your own pictures (url / keep), which do not count. Keep people out of `sense.topic` ("Appalachian home
   cooking", not "a grandmother's kitchen"): the topic goes into every prompt. Their on-camera time is capped at
   `template.avatar.max_presenter_seconds`: spend it on the hook and the close. A board with no picture shows the
   still under it, which here is the point, so `empty_board` is not raised.
