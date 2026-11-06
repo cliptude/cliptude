@@ -108,6 +108,9 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
      (`same_picture_run`), an opening with fewer than three pictures in 15 s.
    Fix with a new query that names the story's setting plus `negatives` for what came back, a `phrase` split for a
    held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat.
+   **A clean `get_plan_review` is not a review:** no findings only means Cliptude's own checks passed. Look at
+   the video with `view_scenes` from 0 to the end either way; `render_project` refuses an agent-planned job until
+   every page has been seen (409 `frames_not_viewed` names where to continue).
    **This is the video's one review.** Write down every problem across every tile before you change anything,
    then fix them all in the one revision (step 10): there is no second.
    **Pick replacements from what Cliptude found.** Each beat in `get_plan_review` has `picked.why` (why the shipped

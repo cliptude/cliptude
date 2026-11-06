@@ -701,6 +701,8 @@ def main(argv: list[str] | None = None) -> None:
     rn.add_argument("--wait", action="store_true", help="Poll until the render finishes")
     rn.add_argument("--accept-quality-findings", action="store_true",
                     help="Agent-planned jobs: render although plan-review still lists plan quality findings")
+    rn.add_argument("--skip-frame-review", action="store_true",
+                    help="Agent-planned jobs: render without having viewed every scene (only when the user says so)")
     _add_review_args(rn)
 
     rs = sub.add_parser("render-status", help="Get an editor render (output_url when done)")
@@ -977,6 +979,7 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "render":
             payload = _spend_reviewed(args, lambda token: client.render_project(
                 args.project_id, accept_quality_findings=args.accept_quality_findings, review_token=token,
+                skip_frame_review=args.skip_frame_review,
             ), "Render this MP4?")
             if args.wait:
                 render_id = (payload.get("render") or {}).get("id")

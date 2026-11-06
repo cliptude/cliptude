@@ -1207,11 +1207,15 @@ class CliptudeClient:
 
     def render_project(
         self, project_id: int | str, *, accept_quality_findings: bool = False, review_token: str | None = None,
+        skip_frame_review: bool = False,
     ) -> Any:
         """Render the edited timeline to a new MP4: free the first time, then 10% of the original generation.
 
-        A paid export first answers with the review (HTTP 428): resend with review_token."""
+        A paid export first answers with the review (HTTP 428): resend with review_token. An agent-planned job
+        answers 409 frames_not_viewed until view_scenes covered the timeline (skip_frame_review overrides)."""
         body: dict[str, Any] = {"accept_quality_findings": True} if accept_quality_findings else {}
+        if skip_frame_review:
+            body["skip_frame_review"] = True
         body.update(_review_job_fields(review_token, None, None))
         return self.request("POST", f"/api/v1/editor-projects/{_int_seg(project_id)}/render", json_body=body or None)
 

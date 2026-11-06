@@ -296,7 +296,7 @@ def build_server(*, with_http_auth: bool = False):
         "create_plan_job with script (prompt only when the user asks Cliptude to write it), poll get_job until "
         "plan_ready, get_narration (numbered sentences), get_kind_catalog (compact first), write the "
         "plan, check_plan until valid, lock_plan, continue_job, then get_plan_report. ONE REVIEW: when the first "
-        "build is ready, open_editor_project and look at EVERY frame with view_scenes (0 to the end) once: replace "
+        "build is ready, open_editor_project and look at EVERY frame with view_scenes (0 to the end) once, even when get_plan_review lists no findings (render_project refuses until you have): replace "
         "any dead body or gore, other brands, logos, album art, footage of a game, match or show the video is not about, title cards, pictures whose place or era "
         "contradicts the story (a search naming a place can return a namesake elsewhere), near-black frames, clips floating in black bars, broken AI pictures and any picture held over ~8 s, all in ONE free revision whose fixes carry the replacement itself (footage, pictures or photos you downloaded and uploaded with upload_plan_media, used as keep; corrected board text). A job takes one revision (a second answers 409 review_used): Cliptude renders the revised build itself; poll get_job until render.status is completed and call show_publish_kit. Never review the rebuild or ask the user to. Generic "
         "shots of places name the story's setting (\"empty bed mud house\", not \"empty bed dark room\"). A video "
@@ -1195,7 +1195,7 @@ def build_server(*, with_http_auth: bool = False):
     def get_plan_review(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
     ) -> dict[str, Any]:
-        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file, and picked.why: why that file won, with a count of the other candidates get_plan_candidates lists for the beat) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. This is the job's one review: fix everything in one revision (check_plan/lock_plan + continue_job on the same job), choosing each replacement from get_plan_candidates or uploading your own, as keep; Cliptude renders the revised build itself and a second revision is refused (409 review_used). Poll get_job until render.status is completed, then show_publish_kit. If nothing needs fixing, render_project once (it refuses while plan findings remain unless accept_quality_findings is true), then show_publish_kit."""
+        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file, and picked.why: why that file won, with a count of the other candidates get_plan_candidates lists for the beat) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. This is the job's one review: fix everything in one revision (check_plan/lock_plan + continue_job on the same job), choosing each replacement from get_plan_candidates or uploading your own, as keep; Cliptude renders the revised build itself and a second revision is refused (409 review_used). Poll get_job until render.status is completed, then show_publish_kit. An empty quality_findings list is not a review: it only means Cliptude's own checks passed. Look at the video yourself with view_scenes (0 to the end) before deciding nothing needs fixing; render_project refuses an agent-planned job until you have (409 frames_not_viewed). If nothing needs fixing, render_project once (it also refuses while plan findings remain unless accept_quality_findings is true), then show_publish_kit."""
         try:
             return _untrusted(_client().get_plan_review(job_id))
         except Exception as exc:
@@ -1518,11 +1518,15 @@ def build_server(*, with_http_auth: bool = False):
             str | None,
             Field(description=SPEND_REVIEW_TOKEN_HELP),
         ] = None,
+        skip_frame_review: Annotated[
+            bool,
+            Field(description="Agent-planned jobs only: render although view_scenes has not covered the whole video. Set it only when the user says to ship without looking."),
+        ] = False,
     ) -> dict[str, Any]:
-        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). A paid export first returns a review (status 428, detail.review with the credits) and renders nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Poll get_render for output_url. On an agent-planned job, a first build with quality_findings the plan can fix returns 409 quality_findings_open: fix them in the job's one revision (Cliptude then renders that build itself, so this call is not needed)."""
+        """Render the edited timeline to a new MP4. The first export of a project is free; later exports cost 10% of the original generation (export_credits_due on the project says the exact amount). A paid export first returns a review (status 428, detail.review with the credits) and renders nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Poll get_render for output_url. On an agent-planned job, a first build with quality_findings the plan can fix returns 409 quality_findings_open: fix them in the job's one revision (Cliptude then renders that build itself, so this call is not needed). An agent-planned job also answers 409 frames_not_viewed until you have looked at the whole video with view_scenes (0 to the end, following next_start_s): a clean get_plan_review is not a review, only Cliptude's own checks passing."""
         try:
             return _client().render_project(project_id, accept_quality_findings=accept_quality_findings,
-                                            review_token=review_token)
+                                            review_token=review_token, skip_frame_review=skip_frame_review)
         except Exception as exc:
             return _err(exc)
 
