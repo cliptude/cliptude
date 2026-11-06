@@ -1091,6 +1091,19 @@ class CliptudeClient:
             params["end_s"] = end_s
         return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/candidates", params=params)
 
+    def view_candidates(self, job_id: str, *, beats: list[str] | None = None,
+                        start_s: float | None = None, end_s: float | None = None) -> Any:
+        """The candidates of up to 6 beats as labelled contact sheets (sheets[].jpeg_base64)."""
+        params: dict[str, Any] = {}
+        if beats:
+            params["beats"] = ",".join(str(b) for b in beats)
+        if start_s is not None:
+            params["start_s"] = start_s
+        if end_s is not None:
+            params["end_s"] = end_s
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/candidates/sheets", params=params,
+                            timeout=180)
+
     def download_voiceover_file(self, job_id: str, dest: Path) -> Path:
         dest = self._local_file(dest, "dest")
         url = f"{self.base_url}/api/v1/jobs/{_uuid_seg(job_id)}/voiceover"

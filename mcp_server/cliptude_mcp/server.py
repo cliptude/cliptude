@@ -1211,11 +1211,33 @@ def build_server(*, with_http_auth: bool = False):
         start_s: Annotated[float | None, Field(description="Or every beat whose sentence starts in this window: start (seconds)")] = None,
         end_s: Annotated[float | None, Field(description="End of the window (seconds)")] = None,
     ) -> dict[str, Any]:
-        """The one review's replacements: for each chosen beat, every picture or clip Cliptude downloaded and checked for it (your main query, your alternative queries and its wider searches), including the ones the vision check turned down, each with a link to look at it, its size, its query, its verdict and reason, and a keep id; plus which one shipped (picked) and why. get_plan_review gives each beat's picked.why and how many candidates it has. To use one, put {"keep": "<id>"} as that beat's media (or a board's picture slot) in the revised plan. If none is right, find your own file and upload it (upload_plan_media locally, or start_media_upload + finish_media_upload from any host) and use its keep. Files the search ranked but never downloaded are not listed."""
+        """The one review's replacements: for each chosen beat, every picture or clip Cliptude downloaded and checked for it (your main query, your alternative queries and its wider searches), including the ones the vision check turned down, each with a link to look at it, its size, its query, its verdict and reason, and a keep id; plus which one shipped (picked) and why. get_plan_review gives each beat's picked.why and how many candidates it has. To use one, put {"keep": "<id>"} as that beat's media (or a board's picture slot) in the revised plan. If none is right, find your own file and upload it (upload_plan_media locally, or start_media_upload + finish_media_upload from any host) and use its keep. Files the search ranked but never downloaded are not listed. To look at them when you cannot open links, call view_candidates (contact sheets)."""
         try:
             return _untrusted(_client().get_plan_candidates(job_id, beats=beats, start_s=start_s, end_s=end_s))
         except Exception as exc:
             return _err(exc)
+
+    @mcp.tool(
+        title="Look at what sourcing found",
+        annotations=ToolAnnotations(title="Look at what sourcing found", read_only_hint=True, open_world_hint=False),
+    )
+    def view_candidates(
+        job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
+        beats: Annotated[list[str] | None, Field(description="Up to 6 beat ids from get_plan_review, e.g. [\"b12\", \"b40\"]")] = None,
+        start_s: Annotated[float | None, Field(description="Or the beats whose sentence starts in this window: start (seconds)")] = None,
+        end_s: Annotated[float | None, Field(description="End of the window (seconds)")] = None,
+    ) -> list[str | Image]:
+        """See every candidate sourcing checked for up to 6 beats, without opening any link: labelled contact sheets, one tile per candidate (a clip shows three frames: start, middle, end), each naming its beat, keep id, SHIPPED / PASSED / REJECTED with the reason and score, its size and the query that found it, plus the same listing as JSON. Use it in the one review to pick a replacement for a wrong beat: put {"keep": "<id>"} as that beat's media in the revised plan. A rejected candidate is often right for the line (it failed on wording); judge by the picture. If none fits, upload your own file (start_media_upload + finish_media_upload from any host) and use its keep."""
+        try:
+            data = _client().view_candidates(job_id, beats=beats, start_s=start_s, end_s=end_s)
+        except Exception as exc:
+            return [json.dumps(_err(exc))]
+        sheets = data.pop("sheets", None) or []
+        data = _untrusted(data)
+        out: list[str | Image] = [json.dumps(data, ensure_ascii=False)]
+        for sheet in sheets:
+            out.append(Image(data=base64.b64decode(sheet["jpeg_base64"]), format="jpeg"))
+        return out
 
     @mcp.tool(
         title="Upload plan media",

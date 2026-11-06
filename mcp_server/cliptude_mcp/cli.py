@@ -650,6 +650,12 @@ def main(argv: list[str] | None = None) -> None:
     pcd.add_argument("--beats", help="Comma-separated beat ids, e.g. b12,b40")
     pcd.add_argument("--start", type=float, help="Or every beat starting in this window: start (s)")
     pcd.add_argument("--end", type=float, help="End of the window (s)")
+    pcs = sub.add_parser("plan-candidate-sheets", help="Contact sheets of every candidate for up to 6 beats (saves JPEGs)")
+    pcs.add_argument("job_id")
+    pcs.add_argument("--beats", help="Comma-separated beat ids (at most 6)")
+    pcs.add_argument("--start", type=float, help="Or the beats starting in this window: start (s)")
+    pcs.add_argument("--end", type=float, help="End of the window (s)")
+    pcs.add_argument("--out", default=".", help="Folder for the sheets (default: here)")
     pr = sub.add_parser("plan-report", help="What sourcing used for each media request of the locked plan")
     pr.add_argument("job_id")
     um = sub.add_parser("upload-media", help="Send a picture or clip you found to a plan job; prints its keep id for media.keep")
@@ -895,6 +901,20 @@ def main(argv: list[str] | None = None) -> None:
             _print(client.get_plan(args.job_id))
         elif args.cmd == "plan-review":
             _print(client.get_plan_review(args.job_id))
+        elif args.cmd == "plan-candidate-sheets":
+            import base64 as _b64
+
+            beats = [b.strip() for b in (args.beats or "").split(",") if b.strip()] or None
+            data = client.view_candidates(args.job_id, beats=beats, start_s=args.start, end_s=args.end)
+            out_dir = Path(args.out).expanduser()
+            out_dir.mkdir(parents=True, exist_ok=True)
+            saved = []
+            for sheet in data.pop("sheets", None) or []:
+                dest = out_dir / str(sheet.get("name") or f"candidates_{len(saved) + 1:02d}.jpg")
+                dest.write_bytes(_b64.b64decode(sheet["jpeg_base64"]))
+                saved.append(str(dest))
+            data["saved_sheets"] = saved
+            _print(data)
         elif args.cmd == "plan-candidates":
             beats = [b.strip() for b in (args.beats or "").split(",") if b.strip()] or None
             _print(client.get_plan_candidates(args.job_id, beats=beats, start_s=args.start, end_s=args.end))

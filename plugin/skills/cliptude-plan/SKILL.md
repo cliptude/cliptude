@@ -115,9 +115,11 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    `candidates`, a count. `get_plan_candidates` (CLI `plan-candidates`; `beats` or a `start_s`-`end_s` window,
    40 beats a call) lists every picture or clip sourcing downloaded and checked for those beats, from your main
    query, your alternatives and its wider searches, including the ones the vision check turned down, each with a
-   link, size, query, verdict and reason and a `keep` id. A turned-down candidate is often right for the line
-   (it failed on wording, not on what it shows): look at it, and use `{"keep": "<id>"}` in the revision. When
-   none fits, upload your own file (below).
+   link, size, query, verdict and reason and a `keep` id. When you cannot open links (Claude on the web, chat
+   apps), `view_candidates` (CLI `plan-candidate-sheets`, up to 6 beats a call) shows the same candidates as
+   labelled contact sheets, a clip as three frames. A turned-down candidate is often right for the line (it
+   failed on wording, not on what it shows): look at it, and use `{"keep": "<id>"}` in the revision. When none
+   fits, upload your own file (below). Candidates are deleted once the video is exported (or after 14 days).
 10. **Revise once, on the same job,** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same
    narration, `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from
    the new plan, reuses every picture or clip whose request did not change, and charges nothing more. **A job takes
@@ -142,7 +144,7 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    `render_project`, which costs credits after the first export).
 
 CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b`, `plan-check <job> plan.json`,
-`plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-candidates`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,
+`plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-candidates`, `plan-candidate-sheets`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,
 `render <project>`.
 
 ## One pass: get it right before the first build
