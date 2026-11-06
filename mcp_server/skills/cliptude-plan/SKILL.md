@@ -122,7 +122,7 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    apps), `view_candidates` (CLI `plan-candidate-sheets`, up to 6 beats a call) shows the same candidates as
    labelled contact sheets, a clip as three frames. A turned-down candidate is often right for the line (it
    failed on wording, not on what it shows): look at it, and use `{"keep": "<id>"}` in the revision. When none
-   fits, upload your own file (below). Candidates are deleted once the video is exported (or after 14 days).
+   fits, upload your own file (below). Candidates are deleted once the revision is built or the video exported (or after 3 days).
 10. **Revise once, on the same job,** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same
    narration, `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from
    the new plan, reuses every picture or clip whose request did not change, and charges nothing more. **A job takes
