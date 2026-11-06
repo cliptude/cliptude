@@ -408,6 +408,7 @@ the presenter seconds you plan.
 - Every item names a `sentence_id`. Add `phrase` (words from that sentence, punctuation and case ignored; Chinese,
   Japanese and Thai match on characters) to start exactly on that word; without it the item starts with the sentence.
 - `dur` is seconds (default: the catalog's typical hold). Minimum 1 s. Cliptude only snaps to spoken words.
+  Write `dur`: `duration_s` / `duration` are read as `dur` with a `renamed_field` warning.
 - **Beats** tile the narration: each beat lasts until the next one starts; the first starts at 0. Every beat ≥ 1 s,
   in narration order.
 
@@ -704,6 +705,8 @@ where the narration is about that weather, fire or night sky. A treatment listed
 - Transitions come in families (zoom punches, spins, shakes, flashes, glitches, blurs, slides, wipes, light leaks,
   slices and shapes, pixel, `shattered`), each with its own sound: pick by mood (a shake or `shattered` for a shock, a
   light leak or flash for a memory, a glitch for tech, a zoom punch for energy) and vary them.
+- A cut that a full-frame board covers plays unseen (`join_under_board` warns): put a chapter's `transition_in`
+  on the first beat that starts after the board ends, and let the board's own entrance open the entry.
 - `transition_in` on a beat is the join on the cut into it: a `slug` from the catalog's `transitions` (e.g. `fade`,
   `film-burn`, `glitch`, `zoom`, `whip-pan`, `wipe-left`, `iris`, `paper-tear`), `"none"` for a hard cut, or `"auto"`
   (the default: Cliptude decides, at about one join per 10–15 s). Not on the first beat. `transition_sound` (a sound
