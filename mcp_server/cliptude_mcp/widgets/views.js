@@ -521,11 +521,19 @@ var Views = (function () {
     var id = String(job.id || job.job_id || "");
     var stage = job.stage || job.status || "";
     var label = STATUS_LABELS[stage] || String(stage).replace(/_/g, " ");
-    var pct = Math.max(0, Math.min(100, Number(job.progress || 0)));
+    // get_job sends progress as a fraction (0.5 while sourcing); it was drawn as 0.5% and read "1%".
+    var raw = Number(job.progress || 0);
+    var pct = Math.max(0, Math.min(100, raw <= 1 ? raw * 100 : raw));
+    // The job's own progress moves by stage (sourcing sits at one value for most of the build), so a step that
+    // counts its work ("Sourcing B-roll assets... (88/105, reused 0)") drives the bar while it runs.
+    var stepMatch = /\((\d+)\s*\/\s*(\d+)/.exec(String(job.current_step || ""));
+    var stepPct = null;
+    if (stepMatch && Number(stepMatch[2]) > 0) stepPct = Math.max(0, Math.min(100, 100 * Number(stepMatch[1]) / Number(stepMatch[2])));
     var failed = stage === "failed" || job.status === "failed";
     var ready = isReady(job);
     var done = ready || failed || job.status === "completed" || stage === "plan_ready" || stage === "script_ready";
     if (ready) pct = 100;
+    var barPct = (!ready && stepPct !== null) ? stepPct : pct;
 
     UI.clear(container);
     container.appendChild(h("div", { class: "head" }, [
@@ -534,11 +542,12 @@ var Views = (function () {
     ]));
     if (!failed) {
       container.appendChild(h("div", { class: "bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100",
-        "aria-valuenow": String(Math.round(pct)), "aria-label": "Progress" }, [h("span", { style: { width: pct + "%" } })]));
+        "aria-valuenow": String(Math.round(barPct)), "aria-label": stepPct !== null && !ready ? "Progress of this step" : "Progress" },
+        [h("span", { style: { width: barPct + "%" } })]));
     }
     var facts = [];
     if (!done && job.current_step) facts.push(h("span", {}, [String(job.current_step)]));
-    if (!done) facts.push(h("span", { class: "muted" }, [Math.round(pct) + "%"]));
+    if (!done) facts.push(h("span", { class: "muted" }, [stepPct !== null ? Math.round(stepPct) + "% of this step" : Math.round(pct) + "%"]));
     if (job.estimated_minutes && !done) facts.push(h("span", { class: "muted" }, ["≈ " + job.estimated_minutes + " min"]));
     if (job.duration) facts.push(h("span", { class: "muted" }, [job.duration + " min video"]));
     if (id) facts.push(h("span", { class: "muted" }, ["Job " + id.slice(0, 8)]));
