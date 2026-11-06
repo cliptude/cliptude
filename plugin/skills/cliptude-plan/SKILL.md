@@ -110,6 +110,14 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    held still, or `{"keep": "<id>"}` of a picture you saw come back right on another beat.
    **This is the video's one review.** Write down every problem across every tile before you change anything,
    then fix them all in the one revision (step 10): there is no second.
+   **Pick replacements from what Cliptude found.** Each beat in `get_plan_review` has `picked.why` (why the shipped
+   file won: your main query, an alternative query, a wider search, an AI still because nothing passed) and
+   `candidates`, a count. `get_plan_candidates` (CLI `plan-candidates`; `beats` or a `start_s`-`end_s` window,
+   40 beats a call) lists every picture or clip sourcing downloaded and checked for those beats, from your main
+   query, your alternatives and its wider searches, including the ones the vision check turned down, each with a
+   link, size, query, verdict and reason and a `keep` id. A turned-down candidate is often right for the line
+   (it failed on wording, not on what it shows): look at it, and use `{"keep": "<id>"}` in the revision. When
+   none fits, upload your own file (below).
 10. **Revise once, on the same job,** if anything is wrong: `check_plan` and `lock_plan` a revised plan (same
    narration, `get_narration` still works), then `continue_job` again (free, so no review). Cliptude rebuilds from
    the new plan, reuses every picture or clip whose request did not change, and charges nothing more. **A job takes
@@ -134,7 +142,7 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    `render_project`, which costs credits after the first export).
 
 CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b`, `plan-check <job> plan.json`,
-`plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,
+`plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-candidates`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,
 `render <project>`.
 
 ## One pass: get it right before the first build

@@ -1195,9 +1195,25 @@ def build_server(*, with_http_auth: bool = False):
     def get_plan_review(
         job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
     ) -> dict[str, Any]:
-        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. This is the job's one review: fix everything in one revision (check_plan/lock_plan + continue_job on the same job), with your uploaded replacements as keep; Cliptude renders the revised build itself and a second revision is refused (409 review_used). Poll get_job until render.status is completed, then show_publish_kit. If nothing needs fixing, render_project once (it refuses while plan findings remain unless accept_quality_findings is true), then show_publish_kit."""
+        """What the built design shows, before any render: every picture/clip in order (beat, time, the sentence under it, what you asked for, what was used, a link to the file, and picked.why: why that file won, with a count of the other candidates get_plan_candidates lists for the beat) and every graphic (time on screen and the props it will be drawn with, or why it is missing), plus quality_findings: Cliptude's quality checks on the build. Fix every finding with fix_in "plan" (follow its how); fix_in "cliptude" ones are not yours. This is the job's one review: fix everything in one revision (check_plan/lock_plan + continue_job on the same job), choosing each replacement from get_plan_candidates or uploading your own, as keep; Cliptude renders the revised build itself and a second revision is refused (409 review_used). Poll get_job until render.status is completed, then show_publish_kit. If nothing needs fixing, render_project once (it refuses while plan findings remain unless accept_quality_findings is true), then show_publish_kit."""
         try:
             return _untrusted(_client().get_plan_review(job_id))
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="See what sourcing found for a beat",
+        annotations=ToolAnnotations(title="See what sourcing found for a beat", read_only_hint=True, open_world_hint=False),
+    )
+    def get_plan_candidates(
+        job_id: Annotated[str, Field(min_length=8, description="Plan job UUID (status ready_for_edit)")],
+        beats: Annotated[list[str] | None, Field(description="Beat ids from get_plan_review, e.g. [\"b12\", \"b40\"] (at most 40)")] = None,
+        start_s: Annotated[float | None, Field(description="Or every beat whose sentence starts in this window: start (seconds)")] = None,
+        end_s: Annotated[float | None, Field(description="End of the window (seconds)")] = None,
+    ) -> dict[str, Any]:
+        """The one review's replacements: for each chosen beat, every picture or clip Cliptude downloaded and checked for it (your main query, your alternative queries and its wider searches), including the ones the vision check turned down, each with a link to look at it, its size, its query, its verdict and reason, and a keep id; plus which one shipped (picked) and why. get_plan_review gives each beat's picked.why and how many candidates it has. To use one, put {"keep": "<id>"} as that beat's media (or a board's picture slot) in the revised plan. If none is right, find your own file and upload it (upload_plan_media locally, or start_media_upload + finish_media_upload from any host) and use its keep. Files the search ranked but never downloaded are not listed."""
+        try:
+            return _untrusted(_client().get_plan_candidates(job_id, beats=beats, start_s=start_s, end_s=end_s))
         except Exception as exc:
             return _err(exc)
 

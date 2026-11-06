@@ -645,6 +645,11 @@ def main(argv: list[str] | None = None) -> None:
     pg.add_argument("job_id")
     pv = sub.add_parser("plan-review", help="The built design beat by beat and graphic by graphic (review before rendering)")
     pv.add_argument("job_id")
+    pcd = sub.add_parser("plan-candidates", help="Every picture or clip sourcing checked for some beats, with keep ids")
+    pcd.add_argument("job_id")
+    pcd.add_argument("--beats", help="Comma-separated beat ids, e.g. b12,b40")
+    pcd.add_argument("--start", type=float, help="Or every beat starting in this window: start (s)")
+    pcd.add_argument("--end", type=float, help="End of the window (s)")
     pr = sub.add_parser("plan-report", help="What sourcing used for each media request of the locked plan")
     pr.add_argument("job_id")
     um = sub.add_parser("upload-media", help="Send a picture or clip you found to a plan job; prints its keep id for media.keep")
@@ -890,6 +895,9 @@ def main(argv: list[str] | None = None) -> None:
             _print(client.get_plan(args.job_id))
         elif args.cmd == "plan-review":
             _print(client.get_plan_review(args.job_id))
+        elif args.cmd == "plan-candidates":
+            beats = [b.strip() for b in (args.beats or "").split(",") if b.strip()] or None
+            _print(client.get_plan_candidates(args.job_id, beats=beats, start_s=args.start, end_s=args.end))
         elif args.cmd == "plan-report":
             _print(client.get_plan_report(args.job_id))
         elif args.cmd == "upload-media":

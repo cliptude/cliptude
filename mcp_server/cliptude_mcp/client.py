@@ -1079,6 +1079,18 @@ class CliptudeClient:
         """The built design, beat by beat and graphic by graphic, with links to the media (review before render)."""
         return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/review")
 
+    def get_plan_candidates(self, job_id: str, *, beats: list[str] | None = None,
+                            start_s: float | None = None, end_s: float | None = None) -> Any:
+        """Every picture or clip sourcing checked for the chosen beats (passed or turned down), each with a keep id."""
+        params: dict[str, Any] = {}
+        if beats:
+            params["beats"] = ",".join(str(b) for b in beats)
+        if start_s is not None:
+            params["start_s"] = start_s
+        if end_s is not None:
+            params["end_s"] = end_s
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/candidates", params=params)
+
     def download_voiceover_file(self, job_id: str, dest: Path) -> Path:
         dest = self._local_file(dest, "dest")
         url = f"{self.base_url}/api/v1/jobs/{_uuid_seg(job_id)}/voiceover"
