@@ -239,7 +239,8 @@ def build_server(*, with_http_auth: bool = False):
         "Call list_templates, then create_job with template_id + title plus "
         "(no suitable template? get_template_options + list_voices, then create_template) "
         "To revise a finished video: open_editor_project, then edit_timeline for exact changes on its item ids "
-        "(delete, retime, trim, swap a graphic's design or picture, fix its words, add a graphic or clip; free, "
+        "(delete, retime, trim, swap a graphic's design or picture, fix its words, add a graphic, clip or catalog sound, "
+        "transitions, caption style, library music, background; free, "
         "undo with restore_editor_version) or run_agent for changes that need sourcing or generation (poll "
         "get_agent_run), view_scenes the changed seconds, then render_project and get_render. "
         "prompt, script, voiceover_path (uploaded audio of at least 6 minutes, transcribed; skips TTS), "
@@ -1466,7 +1467,13 @@ def build_server(*, with_http_auth: bool = False):
                 "catalog prop_schema); {op:'set_type', item_id, animation_type, props?} (another design, same timing); "
                 "{op:'set_picture', item_id, keep|url} (a graphic's picture slot, or a clip's or image's file); "
                 "{op:'mute_cues', item_id} (silence a graphic's own sound cues); {op:'add_graphic', animation_type, "
-                "start_s, end_s, props, keep?|url?}; {op:'add_clip', keep|url, start_s, end_s, from_s?} (footage layer). "
+                "start_s, end_s, props, keep?|url?}; {op:'add_clip', keep|url, start_s, end_s, from_s?} (footage layer); "
+                "{op:'set_transition', from_id, to_id, kind, direction?, duration_s?} (the join between two clips; "
+                "kind 'none' removes it); {op:'set_caption_style', style:{color, activeColor, appearedColor, fontSize, "
+                "...}, item_ids?} (every caption when item_ids is omitted; wording follows the narration); "
+                "{op:'set_music', library_file?|keep?|url?, volume?, remove?} (library_file from get_template_options); "
+                "{op:'set_background', keep|url}; {op:'add_sfx', sound, start_s, volume?} (sound id from "
+                "get_kind_catalog sounds). set_props on a text item sets text, color, fontSize, fontWeight, textAlign. "
                 "keep is a keep id from upload_plan_media / start_media_upload or from get_plan_review; url a public "
                 "https link."
             )),
@@ -1475,7 +1482,7 @@ def build_server(*, with_http_auth: bool = False):
             int | None, Field(description="The revision you read the item ids from; a newer timeline answers 409")
         ] = None,
     ) -> dict[str, Any]:
-        """Change the timeline exactly as asked, on the item ids from open_editor_project or view_scenes: no model call and no credits. Use it whenever you know what to change (delete a board, move or shorten an item, swap a board for another design, fix a board's words or numbers, give a board or clip one of your uploaded files, add a board or a clip, mute a board's sound). Use run_agent only for open-ended requests that need sourcing or generation (find a better shot, regenerate a voiceover range, new music). Delete a full-frame board instead of setting its opacity to 0: a hidden board still covers the picture with black (refused). The narration cannot be deleted. Every call saves a version first: list_editor_versions and restore_editor_version undo it. The answer lists changed_ranges_s: view_scenes only those seconds (the rest keeps its frame review, and boards whose frame did not change keep their drawing), then render_project."""
+        """Change the timeline exactly as asked, on the item ids from open_editor_project or view_scenes: no model call and no credits. Use it whenever you know what to change (delete a board, move or shorten an item, swap a board for another design, fix a board's words or numbers, give a board or clip one of your uploaded files, add a board or a clip, mute a board's sound, change a transition, restyle captions, pick or remove library music or set its volume, set the background, place a sound effect from the catalog). Use run_agent only for open-ended requests that need sourcing or generation (find or generate a picture or clip, regenerate a voiceover range, generate or search new music or sound effects). Delete a full-frame board instead of setting its opacity to 0: a hidden board still covers the picture with black (refused). The narration cannot be deleted. Every call saves a version first: list_editor_versions and restore_editor_version undo it. The answer lists changed_ranges_s: view_scenes only those seconds (the rest keeps its frame review, and boards whose frame did not change keep their drawing), then render_project."""
         try:
             return _client().edit_timeline(project_id, operations, expected_revision=expected_revision)
         except Exception as exc:

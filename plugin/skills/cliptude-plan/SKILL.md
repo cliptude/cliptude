@@ -145,8 +145,9 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    findings: fix them in the one revision. Pass `accept_quality_findings: true` only when the user says to ship
    as is, and tell the user which findings remain. A later change goes through the editor: `edit_timeline` for
    exact changes on item ids (delete a board with its sound, retime, swap a board's design or picture to one of your
-   uploads by `keep`, fix its words, add a board or clip; free, one revision, undo with `restore_editor_version`),
-   `run_agent` only when it needs sourcing or generation. Never hide a full-frame board with opacity 0 (it covers
+   uploads by `keep`, fix its words, add a board, clip or catalog sound, change a transition, restyle captions, set
+   library music or its volume; free, one revision, undo with `restore_editor_version`), `run_agent` only when it
+   needs sourcing or generation. Never hide a full-frame board with opacity 0 (it covers
    the footage with black): delete it. Then `view_scenes` the returned `changed_ranges_s` and `render_project`
    (credits after the first export).
 
