@@ -696,6 +696,20 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("agent-tiers", help="List Cliptude Agent tiers")
 
+    ed = sub.add_parser("edit", help="Apply exact timeline edits (no model call, no credits)")
+    ed.add_argument("project_id")
+    ed.add_argument("--ops", required=True,
+                    help="JSON file (or '-' for stdin) with a list of operations, e.g. [{\"op\": \"delete\", \"item_id\": \"...\"}]")
+    ed.add_argument("--expected-revision", type=int, default=None,
+                    help="The revision the item ids were read from; a newer timeline is refused")
+
+    vs = sub.add_parser("versions", help="List saved versions of an editor project (undo points)")
+    vs.add_argument("project_id")
+
+    rv = sub.add_parser("restore", help="Restore an editor project to a saved version")
+    rv.add_argument("project_id")
+    rv.add_argument("version_id")
+
     rn = sub.add_parser("render", help="Render an edited project to a new MP4")
     rn.add_argument("project_id")
     rn.add_argument("--wait", action="store_true", help="Poll until the render finishes")
@@ -976,6 +990,19 @@ def main(argv: list[str] | None = None) -> None:
             _print(client.cancel_agent_run(args.project_id, args.run_id))
         elif args.cmd == "agent-tiers":
             _print(client.agent_tiers())
+        elif args.cmd == "edit":
+            raw = sys.stdin.read() if args.ops == "-" else Path(args.ops).read_text(encoding="utf-8")
+            try:
+                ops = json.loads(raw)
+            except ValueError as exc:
+                raise CliptudeApiError(f"--ops is not JSON: {exc}")
+            if isinstance(ops, dict):
+                ops = ops.get("operations") or []
+            _print(client.edit_timeline(args.project_id, ops, expected_revision=args.expected_revision))
+        elif args.cmd == "versions":
+            _print(client.list_editor_versions(args.project_id))
+        elif args.cmd == "restore":
+            _print(client.restore_editor_version(args.project_id, args.version_id))
         elif args.cmd == "render":
             payload = _spend_reviewed(args, lambda token: client.render_project(
                 args.project_id, accept_quality_findings=args.accept_quality_findings, review_token=token,

@@ -41,6 +41,7 @@ cliptude script --template "Finance vector weekly" --title "Why index funds win"
 cliptude voiceover --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt
 cliptude download-voiceover <job-id> --out narration.mp3
 cliptude editor <job-id>                                   # editor project id, revision, timeline item ids
+cliptude edit <project-id> --ops '-' <<< '[{"op": "delete", "item_id": "anim-agent_g10"}, {"op": "retime", "item_id": "anim-agent_g11", "start_s": 109.3}]'
 cliptude agent <project-id> --prompt "Replace this shot with real footage of a TSMC fab" --items clip-1 --tier smart --wait
 cliptude render <project-id> --wait                        # new MP4 of the edited timeline
 cliptude continue <job-id>
@@ -51,7 +52,7 @@ No template yet? `template-create` makes one without the create wizard: pick a `
 
 To check the price first, `estimate` (MCP `estimate_credits`, REST `POST /api/v1/jobs/estimate`) takes the same template and prompt/script as `generate` (an upload as `--voiceover-seconds` / `--talking-head-seconds`) and returns the credits the job would need and whether the account has them. It creates and charges nothing.
 
-To revise a finished video, `editor` opens its timeline (item ids, times, text), `agent` asks Cliptude Agent for an edit (it charges agent credits; reference item ids with `--items`), and `render` exports a new MP4. MCP tools: `open_editor_project`, `get_editor_project`, `run_agent`, `get_agent_run`, `cancel_agent_run`, `render_project`, `get_render`.
+To revise a finished video, `editor` opens its timeline (item ids, times, text). `edit <project-id> --ops ops.json` applies exact edits on those ids, free and in one revision: delete, retime, trim, set opacity/volume, set a graphic's props, design or picture (an uploaded `keep` id or https link), mute a graphic's sound, add a graphic or clip. `versions` and `restore` undo. `agent` asks Cliptude Agent for open-ended edits that need sourcing or generation (it charges agent credits; reference item ids with `--items`), and `render` exports a new MP4. MCP tools: `open_editor_project`, `get_editor_project`, `edit_timeline`, `list_editor_versions`, `restore_editor_version`, `run_agent`, `get_agent_run`, `cancel_agent_run`, `render_project`, `get_render`.
 
 ### Agent-planned videos
 

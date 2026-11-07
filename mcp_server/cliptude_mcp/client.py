@@ -1205,6 +1205,24 @@ class CliptudeClient:
     def cancel_agent_run(self, project_id: int | str, run_id: str) -> Any:
         return self.request("POST", f"/api/v1/editor-projects/{_int_seg(project_id)}/agent/runs/{_uuid_seg(run_id, 'run_id')}/cancel")
 
+    def edit_timeline(
+        self, project_id: int | str, operations: list[dict[str, Any]], *, expected_revision: int | None = None,
+    ) -> Any:
+        """Apply exact timeline operations in one revision: no model call, no credits."""
+        body: dict[str, Any] = {"operations": operations}
+        if expected_revision is not None:
+            body["expected_revision"] = int(expected_revision)
+        return self.request("POST", f"/api/v1/editor-projects/{_int_seg(project_id)}/edits", json_body=body)
+
+    def list_editor_versions(self, project_id: int | str) -> Any:
+        return self.request("GET", f"/api/v1/editor-projects/{_int_seg(project_id)}/versions")
+
+    def restore_editor_version(self, project_id: int | str, version_id: int | str) -> Any:
+        return self.request(
+            "POST",
+            f"/api/v1/editor-projects/{_int_seg(project_id)}/versions/{_int_seg(version_id, 'version_id')}/restore",
+        )
+
     def render_project(
         self, project_id: int | str, *, accept_quality_findings: bool = False, review_token: str | None = None,
         skip_frame_review: bool = False,

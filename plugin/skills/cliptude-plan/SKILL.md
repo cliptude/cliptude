@@ -143,8 +143,12 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    no change, skip step 10: `open_editor_project`, then `render_project`, then `show_publish_kit`.
    `render_project` returns 409 `quality_findings_open` while the first build still has `fix_in: "plan"`
    findings: fix them in the one revision. Pass `accept_quality_findings: true` only when the user says to ship
-   as is, and tell the user which findings remain. A later change goes through the editor (`run_agent`, then
-   `render_project`, which costs credits after the first export).
+   as is, and tell the user which findings remain. A later change goes through the editor: `edit_timeline` for
+   exact changes on item ids (delete a board with its sound, retime, swap a board's design or picture to one of your
+   uploads by `keep`, fix its words, add a board or clip; free, one revision, undo with `restore_editor_version`),
+   `run_agent` only when it needs sourcing or generation. Never hide a full-frame board with opacity 0 (it covers
+   the footage with black): delete it. Then `view_scenes` the returned `changed_ranges_s` and `render_project`
+   (credits after the first export).
 
 CLI: `cliptude plan-job`, `narration`, `catalog --compact`, `catalog --types a,b`, `plan-check <job> plan.json`,
 `plan-lock <job> plan.json`, `continue <job>`, `plan-get`, `plan-review`, `plan-candidates`, `plan-candidate-sheets`, `plan-report`, `upload-media <job> <path>`, `editor <job>`,

@@ -262,9 +262,11 @@ class AnnotationsAndUntrustedTextTests(TestCase):
             "show_publish_kit", "create_avatar", "design_voice_previews", "save_designed_voice", "clone_voice",
             # A widget keeps the user's pick on Cliptude.
             "save_choice",
+            # Exact timeline edits and undo.
+            "edit_timeline", "restore_editor_version",
         }
         destructive = {"delete_vector_character", "abort_media_upload", "cancel_job", "cancel_agent_run",
-                       "lock_plan", "run_agent"}
+                       "lock_plan", "run_agent", "edit_timeline", "restore_editor_version"}
         for name, tool in self.tools.items():
             ann = tool.annotations
             self.assertIsNotNone(ann, name)

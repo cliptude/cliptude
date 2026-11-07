@@ -238,8 +238,10 @@ def build_server(*, with_http_auth: bool = False):
         "Generate Cliptude videos from a saved template. "
         "Call list_templates, then create_job with template_id + title plus "
         "(no suitable template? get_template_options + list_voices, then create_template) "
-        "To revise a finished video: open_editor_project, run_agent with timeline item ids, "
-        "poll get_agent_run, then render_project and get_render. "
+        "To revise a finished video: open_editor_project, then edit_timeline for exact changes on its item ids "
+        "(delete, retime, trim, swap a graphic's design or picture, fix its words, add a graphic or clip; free, "
+        "undo with restore_editor_version) or run_agent for changes that need sourcing or generation (poll "
+        "get_agent_run), view_scenes the changed seconds, then render_project and get_render. "
         "prompt, script, voiceover_path (uploaded audio of at least 6 minutes, transcribed; skips TTS), "
         "or talking_head_path (presenter video of at least 6 minutes on a Talking Head template). "
         "create_job returns immediately; poll get_job until completed or failed. "
@@ -1448,6 +1450,66 @@ def build_server(*, with_http_auth: bool = False):
         return out
 
     @mcp.tool(
+        title="Edit timeline",
+        annotations=ToolAnnotations(title="Edit timeline", read_only_hint=False, destructive_hint=True,
+                                    idempotent_hint=False, open_world_hint=False),
+    )
+    def edit_timeline(
+        project_id: Annotated[int, Field(description="Editor project id")],
+        operations: Annotated[
+            list[dict[str, Any]],
+            Field(description=(
+                "Operations applied in order, in one revision (up to 60). Each is an object with op and its fields: "
+                "{op:'delete', item_id}; {op:'retime', item_id, start_s?, end_s?}; {op:'trim', item_id, from_s, to_s?} "
+                "(clips and audio: which part of the source plays); {op:'set', item_id, opacity?, volume?, playbackRate?} "
+                "(opacity and volume 0-100); {op:'set_props', item_id, props:{...}} (a graphic's fields, as in its "
+                "catalog prop_schema); {op:'set_type', item_id, animation_type, props?} (another design, same timing); "
+                "{op:'set_picture', item_id, keep|url} (a graphic's picture slot, or a clip's or image's file); "
+                "{op:'mute_cues', item_id} (silence a graphic's own sound cues); {op:'add_graphic', animation_type, "
+                "start_s, end_s, props, keep?|url?}; {op:'add_clip', keep|url, start_s, end_s, from_s?} (footage layer). "
+                "keep is a keep id from upload_plan_media / start_media_upload or from get_plan_review; url a public "
+                "https link."
+            )),
+        ],
+        expected_revision: Annotated[
+            int | None, Field(description="The revision you read the item ids from; a newer timeline answers 409")
+        ] = None,
+    ) -> dict[str, Any]:
+        """Change the timeline exactly as asked, on the item ids from open_editor_project or view_scenes: no model call and no credits. Use it whenever you know what to change (delete a board, move or shorten an item, swap a board for another design, fix a board's words or numbers, give a board or clip one of your uploaded files, add a board or a clip, mute a board's sound). Use run_agent only for open-ended requests that need sourcing or generation (find a better shot, regenerate a voiceover range, new music). Delete a full-frame board instead of setting its opacity to 0: a hidden board still covers the picture with black (refused). The narration cannot be deleted. Every call saves a version first: list_editor_versions and restore_editor_version undo it. The answer lists changed_ranges_s: view_scenes only those seconds (the rest keeps its frame review, and boards whose frame did not change keep their drawing), then render_project."""
+        try:
+            return _client().edit_timeline(project_id, operations, expected_revision=expected_revision)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="List editor versions",
+        annotations=ToolAnnotations(title="List editor versions", read_only_hint=True, open_world_hint=False),
+    )
+    def list_editor_versions(
+        project_id: Annotated[int, Field(description="Editor project id")],
+    ) -> dict[str, Any]:
+        """Saved versions of an editor project, newest first (id, revision, label, time): every editor save, edit_timeline call and agent edit makes one. Pass a version's id to restore_editor_version to undo back to it."""
+        try:
+            return _client().list_editor_versions(project_id)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Restore editor version",
+        annotations=ToolAnnotations(title="Restore editor version", read_only_hint=False, destructive_hint=True,
+                                    idempotent_hint=False, open_world_hint=False),
+    )
+    def restore_editor_version(
+        project_id: Annotated[int, Field(description="Editor project id")],
+        version_id: Annotated[int, Field(description="Version id from list_editor_versions")],
+    ) -> dict[str, Any]:
+        """Put the timeline back to a saved version (an undo). The restore is itself saved as a version, so it can be undone too. Free; view_scenes the video again before render_project."""
+        try:
+            return _client().restore_editor_version(project_id, version_id)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
         title="Run Cliptude Agent",
         annotations=ToolAnnotations(title="Run Cliptude Agent", read_only_hint=False, destructive_hint=True,
                                     idempotent_hint=False, open_world_hint=True),
@@ -1465,7 +1527,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description=SPEND_REVIEW_TOKEN_HELP),
         ] = None,
     ) -> dict[str, Any]:
-        """Ask Cliptude Agent to edit the timeline (swap footage, regenerate images or voiceover ranges, music, transitions, text). One kind of change per run: picture swaps and text edits go in separate runs. Several clips can get new pictures in one run: reference them all and describe each one's picture by its item id; a clip with nothing suitable is left unchanged and named in the reply. Swapping a graphic's picture keeps the graphic and its words. To use one exact picture (a product cover, a screenshot), paste its https link in the prompt: it is downloaded and applied as is, not searched for. Charges agent credits, so the first call returns a review (status 428, detail.review: the request and what runs usually cost) and starts nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Returns a run; poll get_agent_run. Then render_project for a new MP4, after view_scenes on the changed range."""
+        """Ask Cliptude Agent to edit the timeline from a plain-English request (prefer edit_timeline when you know the exact change: it is exact and free). It can swap footage, regenerate images or voiceover ranges, music, transitions, text, delete clips or graphics. One kind of change per run: picture swaps, text edits and deletions go in separate runs. To delete a graphic, overlay, clip or sound effect, reference its item id and say "delete": the item is removed, with its own sound cues and any transition into it, and the footage under it shows. Never ask for opacity 0 to remove a full-frame board: a hidden board still covers the picture with black. The narration track cannot be deleted. Several clips can get new pictures in one run: reference them all and describe each one's picture by its item id; a clip with nothing suitable is left unchanged and named in the reply. Swapping a graphic's picture keeps the graphic and its words. To use one exact picture (a product cover, a screenshot), paste its https link in the prompt: it is downloaded and applied as is, not searched for. Charges agent credits, so the first call returns a review (status 428, detail.review: the request and what runs usually cost) and starts nothing: show it to the user, wait for their explicit OK, then call again with the same arguments and review_token. Returns a run; poll get_agent_run. Then render_project for a new MP4, after view_scenes on the changed range."""
         try:
             return _compact_agent_run(_client().run_agent(
                 project_id, prompt=prompt, tier=tier, referenced_item_ids=referenced_item_ids, chat_id=chat_id,
