@@ -476,9 +476,12 @@ class CliptudeClient:
         return self.request("GET", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}")
 
     def create_template(self, *, name: str, format: str, settings: dict[str, Any],
-                        brand_kit_id: int | None = None, show_logo: bool | None = None) -> Any:
-        """Create a ready-to-use template from settings (no create wizard); optional brand kit and logo."""
+                        brand_kit_id: int | None = None, show_logo: bool | None = None,
+                        look: str | None = None) -> Any:
+        """Create a ready-to-use template from settings (no create wizard); optional brand kit, logo and Look."""
         body: dict[str, Any] = {"name": name, "format": format, "settings": settings}
+        if look:
+            body["look"] = look
         if brand_kit_id is not None:
             body["brand_kit_id"] = brand_kit_id or None
         if show_logo is not None:
@@ -486,9 +489,12 @@ class CliptudeClient:
         return self.request("POST", "/api/v1/templates", json_body=body)
 
     def update_template(self, template_id: str, *, name: str | None = None, brand_kit_id: int | None = None,
-                        show_logo: bool | None = None) -> Any:
-        """Rename a template, set its brand kit (0 = the user's default kit) or turn its logo on or off."""
+                        show_logo: bool | None = None, look: str | None = None) -> Any:
+        """Rename a template, set its brand kit (0 = the user's default kit), its logo switch or its Look
+        ('' removes the Look)."""
         body: dict[str, Any] = {}
+        if look is not None:
+            body["look"] = look
         if name is not None:
             body["name"] = name
         if brand_kit_id is not None:
@@ -496,6 +502,17 @@ class CliptudeClient:
         if show_logo is not None:
             body["show_logo"] = bool(show_logo)
         return self.request("PATCH", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}", json_body=body)
+
+    def list_looks(self) -> Any:
+        """The prebuilt Looks (colours, captions, footage grade, the boards that carry each), with sample reels."""
+        return self.request("GET", "/api/v1/looks")
+
+    def save_look_as_template(self, slug: str, *, name: str | None = None) -> Any:
+        """Copy a Look into one of the user's templates; returns the template."""
+        body = {"name": name} if name else {}
+        from urllib.parse import quote
+
+        return self.request("POST", f"/api/v1/looks/{quote(slug.strip(), safe='')}/template", json_body=body)
 
     def list_brand_kits(self) -> Any:
         """The user's brand kits (one per channel): logo, colours, fonts; one is the default."""

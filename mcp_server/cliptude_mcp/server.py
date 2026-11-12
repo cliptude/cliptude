@@ -489,11 +489,15 @@ def build_server(*, with_http_auth: bool = False):
             bool | None,
             Field(description="Put the brand kit's logo on the video. Off unless the user asks for it."),
         ] = None,
+        look: Annotated[
+            str | None,
+            Field(description="A prebuilt Look slug from list_looks (e.g. empire-story, cold-case-board) for the same format: its colours, captions, footage grade and favoured graphics. Settings you also pass win over the Look's. Omit for no Look."),
+        ] = None,
     ) -> dict[str, Any]:
         """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job) and `warnings`: choices that will change what the video can show (no footage, AI stills, no graphics). Tell the user every warning in plain words and fix the ones they did not ask for before making a video. People with several channels keep one brand kit per channel: ask which channel the template is for and pass its brand_kit_id."""
         try:
             return _client().create_template(name=name, format=format, settings=settings,
-                                             brand_kit_id=brand_kit_id, show_logo=show_logo)
+                                             brand_kit_id=brand_kit_id, show_logo=show_logo, look=look)
         except Exception as exc:
             return _err(exc)
 
@@ -510,10 +514,36 @@ def build_server(*, with_http_auth: bool = False):
             Field(description="Brand kit id from list_brand_kits; 0 = the user's default kit. Videos made from the template use it."),
         ] = None,
         show_logo: Annotated[bool | None, Field(description="Put the brand kit's logo on videos made from this template.")] = None,
+        look: Annotated[str | None, Field(description="A Look slug from list_looks for the template's format; \"\" removes the Look.")] = None,
     ) -> dict[str, Any]:
-        """Rename a saved template, give it a channel's brand kit, or turn its logo on or off. Returns the template (brand_kit_id, brand_kit_name, show_logo)."""
+        """Rename a saved template, give it a channel's brand kit, turn its logo on or off, or set its Look. Returns the template (brand_kit_id, brand_kit_name, show_logo, look_slug, look_name)."""
         try:
-            return _client().update_template(template_id, name=name, brand_kit_id=brand_kit_id, show_logo=show_logo)
+            return _client().update_template(template_id, name=name, brand_kit_id=brand_kit_id, show_logo=show_logo, look=look)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="List looks",
+        annotations=ToolAnnotations(title="List looks", read_only_hint=True, open_world_hint=False),
+    )
+    def list_looks() -> dict[str, Any]:
+        """Prebuilt Looks: ready-made styles (Cold Case Board, Money Breakdown, Archive Press, Tactical Brief ...), each with its format, five colours, caption style, footage grade, the premium boards it favours and a sample reel URL. A Look is used through a template: create_template(look=...) or update_template(look=...) for a template with the user's own voice and settings, or save_look_as_template for a template from the Look alone; then create_job with that template_id. Offer them when the user wants a style but has no template."""
+        try:
+            return _client().list_looks()
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Save look as template",
+        annotations=ToolAnnotations(title="Save look as template", read_only_hint=False, destructive_hint=False, open_world_hint=False),
+    )
+    def save_look_as_template(
+        slug: Annotated[str, Field(min_length=2, description="Look slug from list_looks")],
+        name: Annotated[str | None, Field(max_length=120, description="Template name; defaults to the Look's name")] = None,
+    ) -> dict[str, Any]:
+        """Copy a Look into one of the user's templates and return it; create_job with its id makes videos in that Look, and update_template changes it."""
+        try:
+            return _client().save_look_as_template(slug, name=name)
         except Exception as exc:
             return _err(exc)
 
@@ -806,7 +836,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         visual_direction: Annotated[
             str | None,
-            Field(max_length=4000, description='What the scenes should show, apart from what is said: "Open with a map animation of Russia", "when I talk about the 1998 default, show archival news footage", "no AI images". One instruction per line. Mention the user\'s own media-library files as @file_name (list_media; the file name in lower case with spaces as _, no extension) with what they show: "every time James appears, show @james_photo". Keep the prompt for what the video is about and these for the visuals.'),
+            Field(max_length=4000, description='What the scenes should show, apart from what is said: "Start on a slow aerial shot of the city at night", "when the 2008 crash comes up, use trading-floor footage", "no AI images". One instruction per line. Mention the user\'s own media-library files as @file_name (list_media; the file name in lower case with spaces as _, no extension) with what they show: "whenever the founder is named, show @founder_photo", and their avatars as @avatar_name (on an Avatar Video one tagged avatar is the presenter: "@maya presents the intro"). Keep the prompt for what the video is about and these for the visuals.'),
         ] = None,
         review_token: Annotated[
             str | None,
