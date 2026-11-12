@@ -202,6 +202,28 @@ var Views = (function () {
       return section("Tags (" + tags.length + ")", [box], h("button", { type: "button", onclick: function () { copy(tags.join(", "), box); } }, ["Copy all tags"]));
     }
 
+    // Where each visual came from (videos/media_credits.py), for copyright claims; credits are already in the description.
+    function sourcesSection(sources) {
+      var items = (sources && sources.items) || [];
+      if (!items.length) return null;
+      function clock(t) {
+        t = Math.max(0, Math.floor(Number(t) || 0));
+        var m = Math.floor(t / 60), sec = t % 60;
+        return m + ":" + (sec < 10 ? "0" : "") + sec;
+      }
+      var lines = items.map(function (e) {
+        var when = (e.times || []).map(function (r) { return clock(r[0]); }).join(", ");
+        var who = [e.provider || e.kind, e.author, e.license_label].filter(Boolean).join(" · ");
+        return when + "  " + who + (e.page_url ? "  " + e.page_url : "");
+      });
+      var text = lines.join("\n");
+      var pre = h("pre", { class: "copy", tabindex: "0" }, [text]);
+      var note = sources.complete === false
+        ? [h("p", { class: "sub" }, ["Some visuals were made before sources were recorded, so they are not listed."])] : [];
+      return section("Sources (" + items.length + ")", note.concat([pre]),
+        h("button", { type: "button", onclick: function () { copy(text, pre); } }, ["Copy sources"]));
+    }
+
     function render() {
       var meta = kit.publish_metadata || {};
       var thumbs = (kit.thumbnails && kit.thumbnails.items) || [];
@@ -222,6 +244,7 @@ var Views = (function () {
        textSection("Description", description.trim()),
        textSection("Chapters", meta.chapters || ""),
        tagsSection(tags),
+       sourcesSection(kit.sources),
        downloads.voiceover_url || downloads.project_zip_url ? section("Downloads", [h("div", { class: "toolbar" }, [
          downloads.voiceover_url ? h("button", { type: "button", onclick: function () { open(downloads.voiceover_url); } }, ["Voiceover"]) : null,
          downloads.project_zip_url ? h("button", { type: "button", onclick: function () { open(downloads.project_zip_url); } }, ["Project files"]) : null

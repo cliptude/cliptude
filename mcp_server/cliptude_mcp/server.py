@@ -1346,6 +1346,32 @@ def build_server(*, with_http_auth: bool = False):
             return _err(exc)
 
     @mcp.tool(
+        title="Get video sources",
+        annotations=ToolAnnotations(title="Get video sources", read_only_hint=True, open_world_hint=False),
+    )
+    def get_video_sources(
+        job_id: Annotated[str, Field(min_length=8, description="Job UUID of a finished video")],
+    ) -> dict[str, Any]:
+        """Where every visual in a finished video came from: the times it is on screen, provider, author, license and original link, plus description_credits (the credits block for the YouTube description, already added to its description) and a CSV. Use it to answer a copyright claim or to credit Creative Commons footage. complete=false means some visuals predate source tracking."""
+        try:
+            return _untrusted(_client().get_job_sources(job_id))
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Find media source",
+        annotations=ToolAnnotations(title="Find media source", read_only_hint=True, open_world_hint=False),
+    )
+    def find_media_source(
+        query: Annotated[str, Field(min_length=3, description="A link, YouTube channel name or author to look for")],
+    ) -> dict[str, Any]:
+        """Which of your videos used footage or images from a source, and at what times. Use after a copyright claim or takedown request to find every other video that used the same creator's footage."""
+        try:
+            return _untrusted(_client().search_media_sources(query))
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
         title="Get plan sourcing report",
         annotations=ToolAnnotations(title="Get plan sourcing report", read_only_hint=True, open_world_hint=False),
     )
@@ -1617,7 +1643,7 @@ def build_server(*, with_http_auth: bool = False):
         annotations=ToolAnnotations(title="Get account", read_only_hint=True, open_world_hint=False),
     )
     def get_account() -> dict[str, Any]:
-        """Plan, credits remaining, concurrency in use, and extra_formats: formats opened for this account only (faceless_explainer). Offer a format in extra_formats; others in that family answer 403."""
+        """Plan, credits remaining, concurrency in use, and extra_formats: formats opened for this account only (faceless_explainer). Offer a format in extra_formats; others in that family answer 403. can_create_jobs is true with a plan or with pay-as-you-go credits (plan is then null)."""
         try:
             return _client().get_account()
         except Exception as exc:

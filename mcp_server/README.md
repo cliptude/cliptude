@@ -71,6 +71,8 @@ To check the price first, `estimate` (MCP `estimate_credits`, REST `POST /api/v1
 
 To revise a finished video, `editor` opens its timeline (item ids, times, text). `edit <project-id> --ops ops.json` applies exact edits on those ids, free and in one revision: delete, retime, trim, set opacity/volume, set a graphic's props, design or picture (an uploaded `keep` id or https link), mute a graphic's sound, add a graphic, clip or catalog sound effect, set a transition, restyle captions, set library music, its volume or remove it, set the background. `versions` and `restore` undo. `agent` asks Cliptude Agent for open-ended edits that need sourcing or generation (it charges agent credits; reference item ids with `--items`), and `render` exports a new MP4. MCP tools: `open_editor_project`, `get_editor_project`, `edit_timeline`, `list_editor_versions`, `restore_editor_version`, `run_agent`, `get_agent_run`, `cancel_agent_run`, `render_project`, `get_render`.
 
+To answer a copyright claim or credit Creative Commons footage, MCP `get_video_sources` lists where every visual in a finished video came from (times on screen, provider, author, license, link) plus the description credits, and `find_media_source` finds every video that used a link, YouTube channel or author.
+
 ### Agent-planned videos
 
 On Faceless Documentary, Faceless Top 10, Avatar Video and Vector Explainer templates an agent can plan every visual and leave Cliptude

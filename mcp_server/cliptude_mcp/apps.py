@@ -444,4 +444,9 @@ def publish_kit_payload(data: Any, job_id: str) -> dict[str, Any]:
             "tags": meta.get("tags") or [],
             "downloads": meta.get("downloads") or {},
         },
+        "sources": {
+            "items": meta.get("sources") or [],
+            "complete": meta.get("sources_complete", True),
+            "credits_text": meta.get("credits_text") or "",
+        },
     }

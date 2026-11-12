@@ -220,7 +220,7 @@ this order, and the video needs two builds: one to review, one to ship.
    board and again after it; start a new beat where the board ends (the hint names the word). `bare_board`: a text
    board that draws on a plain dark plate (equals, scroll list, journey, two-line statement); give it a picture or
    use a text board that sits over the footage. `generic_search_no_setting`: a generic search with no place or era
-   comes back from the wrong country or decade (twice the dropped picks); name the story's setting in it.
+   comes back from the wrong country or decade (twice the dropped picks); name the story's setting in it. Name it only on searches for places, rooms and people: on an object or close-up the country name brings back flags, maps and logos (`setting_on_object_search`).
 1. **Clear every `check_plan` warning about pictures**, not only errors: `clip_shorter_than_beat`,
    `repeated_picture`, `board_repeats_beat`, `board_repeats_board`, `name_card_not_portrait`, `dark_clip`,
    `blown_out_clip`, `shot_overused`, `footage_too_thin`, `off_topic_footage`, `work_not_shown`, `person_on_pointer_label`,
@@ -586,7 +586,7 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
 
 ### Beat media
 Give every searched beat 1-2 `alts` (`no_alts` warns otherwise).
-One of: `query` (+ `alts`, `negatives`, `query_kind` such as object, place or person, `prefer`: video|image), `person`,
+One of: `query` (+ `alts`, `local_query` (a 2-6 word search in the narration's language for paperwork, signs and screens in a story set where that language is spoken; searched first on that country's Google Images; `local_search_missing` asks for it), `negatives`, `query_kind` such as object, place or person, `prefer`: video|image), `person`,
 `url` (+ `fallback_query`; public http(s) images ≤15 MB or videos ≤300 MB), `auto: true` (Cliptude writes the
 query), or `keep` (+ `fallback_query`): the `keep` id `get_plan_review` or `get_plan_report` shows for a file an
 earlier build of this job used. A kept file is never searched again, so change a beat's request to try for something

@@ -1075,6 +1075,14 @@ class CliptudeClient:
         """What sourcing used for each media request of the locked plan, and every fallback."""
         return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/report")
 
+    def get_job_sources(self, job_id: str) -> Any:
+        """Where every visual in the video came from (time, source, author, license, link) and the description credits."""
+        return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/sources")
+
+    def search_media_sources(self, query: str) -> Any:
+        """Which of the user's videos used a source: a link, YouTube channel or author."""
+        return self.request("GET", "/api/v1/sources/search", params={"q": query})
+
     def get_plan_review(self, job_id: str) -> Any:
         """The built design, beat by beat and graphic by graphic, with links to the media (review before render)."""
         return self.request("GET", f"/api/v1/jobs/{_uuid_seg(job_id)}/plan/review")
