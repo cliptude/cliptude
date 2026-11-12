@@ -804,6 +804,10 @@ def build_server(*, with_http_auth: bool = False):
             list[dict[str, str]] | None,
             Field(description='How the voice says hard words (ElevenLabs voices): [{"word": "Gmay", "alias": "guh-MAY"}] or [{"word": "Ordnung", "phoneme": "ˈɔɹt.nʊŋ", "alphabet": "ipa"}]. Script, captions and searches keep the real spelling. Replaces the template\'s list for this video; omit to keep it.'),
         ] = None,
+        visual_direction: Annotated[
+            str | None,
+            Field(max_length=4000, description='What the scenes should show, apart from what is said: "Open with a map animation of Russia", "when I talk about the 1998 default, show archival news footage", "no AI images". One instruction per line. Mention the user\'s own media-library files as @file_name (list_media; the file name in lower case with spaces as _, no extension) with what they show: "every time James appears, show @james_photo". Keep the prompt for what the video is about and these for the visuals.'),
+        ] = None,
         review_token: Annotated[
             str | None,
             Field(description="From the review this tool returned when called without it (status 428, detail.review_token). Only send it after showing the user every setting and warning in detail.review and getting their confirmation."),
@@ -859,6 +863,7 @@ def build_server(*, with_http_auth: bool = False):
                 vector_character_id=vector_character_id,
                 vector_reveal_mode=vector_reveal_mode,
                 pronunciations=pronunciations,
+                visual_direction=visual_direction,
             )
         except Exception as exc:
             return _err(exc)
@@ -1199,7 +1204,7 @@ def build_server(*, with_http_auth: bool = False):
         types: Annotated[list[str] | None, Field(description="Full entries (description, prop_schema, media_slots, durations, preview) for just these animation types / overlay styles")] = None,
         premium: Annotated[bool, Field(description="Only the premium boards (marked premium: true)")] = False,
     ) -> dict[str, Any]:
-        """Every motion graphic Cliptude can render: planner kinds, ~360 animation types and 20 overlay text styles. Read compact first, then fetch full entries for the types you intend to use: their props, media slots, hold times, caps and preview video. Entries marked `premium: true` are the premium boards (newest designs, each with its own timed sound cues); premium=true lists only those. Also lists `transitions` (slugs for beats[].transition_in), `reveal_styles` (beats[].reveal_next, with preview videos), `clip_effects` (beats[].clip_effect: a CapCut-style look or camera move on a beat's picture) and `sounds` (ids for graphic sound, transition_sound, reveal_sound and sfx, with a preview link to each file)."""
+        """Every motion graphic Cliptude can render: planner kinds, ~460 animation types and 20 overlay text styles. Read compact first, then fetch full entries for the types you intend to use: their props, media slots, hold times, caps and preview video. Entries marked `premium: true` are the premium boards (newest designs, each with its own timed sound cues); premium=true lists only those. Also lists `transitions` (slugs for beats[].transition_in), `reveal_styles` (beats[].reveal_next, with preview videos), `clip_effects` (beats[].clip_effect: a CapCut-style look or camera move on a beat's picture) and `sounds` (ids for graphic sound, transition_sound, reveal_sound and sfx, with a preview link to each file)."""
         try:
             return _client().get_kind_catalog(format=format, theme=theme, compact=compact and not types, types=types, premium=premium)
         except Exception as exc:

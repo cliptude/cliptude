@@ -484,6 +484,10 @@ the presenter seconds you plan.
   image effects: `phone_3d_mockup`, `polaroid_drop`, `filmstrip_roll`, `before_after_slider`, `pop_art_grid`,
   `grid_puzzle`, `four_cards_grid`, `three_card_spread`, `card_flip_reveal`, `clarity_scan`, `brush_reveal_paper`,
   `ink_fade_reveal`, `circle_reveal_image`, `glow_reflection` (their `use_when` says when each fits).
+  Boards over the beat's own footage or data: `telemetry_hud_strip` (2-4 live readouts), `value_shift_overlay`
+  ("6.08% → 7.04%"), `concept_link_overlay` (ideas joined by lines), `tactical_hud_overlay` (drone targeting display),
+  `bodycam_frame` (body-camera chrome), `waffle_unit_chart` (a share as 100 squares), `film_frame_breakdown`
+  (a film still with ratio, guides and shot type) and `checklist_reveal` (items ticked off; `style` check, myth or paper).
 - Each premium board carries its own timed sound cues (several hits matched to its motion). Leave its `sound` unset
   (or `"auto"`) to keep them, even when the plan lists `sfx`. Setting `sound` replaces them with your one sound and
   `"none"` silences it. Listing any `sfx` mutes the sounds Cliptude would add on its own, not your graphics' cues.
@@ -703,7 +707,8 @@ where the narration is about that weather, fire or night sky. A treatment listed
   included, gets a plain slow move (zoom or pan, never an overlay or frame). `"camera": "none"` holds any beat still.
 - `clip_effect`: one CapCut-style look or camera move on the beat's picture, a `kind` from the catalog's
   `clip_effects` (or `"none"`). Looks recolour or texture it (`vhs_tape`, `film_reel`, `old_hollywood`, `comic`,
-  `pencil`, `teal_orange`, `bw_cinema`, `neon_edges`…); moves shake or travel across it for the whole beat
+  `pencil`, `teal_orange`, `bw_cinema`, `neon_edges`, and grades to hold over a run of beats: `noir_mono`, `crime_red`,
+  `bleach_bypass`, `light_leak_film`…); moves shake or travel across it for the whole beat
   (`camera_shake`, `retro_zoom`, `push_3d`, `aggressive_pan`, `vertigo_twist`…) or play as it appears
   (`enter_bounce`, `enter_swing`, `enter_unpixelate`, `enter_drop`…). Use them on a few beats where the line calls
   for it (home video, an era, a shock, a fun introduction), never on every beat; an unknown name is refused

@@ -548,6 +548,7 @@ class CliptudeClient:
         vector_character_id: str | None = None,
         vector_reveal_mode: str | None = None,
         pronunciations: list[dict[str, str]] | None = None,
+        visual_direction: str | None = None,
         review_token: str | None = None,
         acknowledge: list[str] | None = None,
         review_only: bool | None = None,
@@ -632,6 +633,7 @@ class CliptudeClient:
                 **({"vector_character_id": str(vector_character_id)} if vector_character_id else {}),
                 **({"vector_reveal_mode": str(vector_reveal_mode)} if vector_reveal_mode else {}),
                 **({"pronunciations": json.dumps(pronunciations)} if pronunciations is not None else {}),
+                **({"visual_direction": visual_direction} if visual_direction else {}),
                 **_review_job_fields(review_token, acknowledge, review_only, as_strings=True),
             }
             return self._create_job_multipart(
@@ -669,6 +671,8 @@ class CliptudeClient:
             body["vector_reveal_mode"] = str(vector_reveal_mode)
         if pronunciations is not None:
             body["pronunciations"] = pronunciations
+        if visual_direction:
+            body["visual_direction"] = visual_direction
         body.update(_review_job_fields(review_token, acknowledge, review_only))
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
