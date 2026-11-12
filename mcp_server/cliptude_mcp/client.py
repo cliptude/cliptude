@@ -507,9 +507,13 @@ class CliptudeClient:
         """The prebuilt Looks (colours, captions, footage grade, the boards that carry each), with sample reels."""
         return self.request("GET", "/api/v1/looks")
 
-    def save_look_as_template(self, slug: str, *, name: str | None = None) -> Any:
-        """Copy a Look into one of the user's templates; returns the template."""
-        body = {"name": name} if name else {}
+    def save_look_as_template(self, slug: str, *, name: str | None = None, format: str | None = None) -> Any:
+        """Copy a Look into one of the user's templates (format: any of the Look's formats); returns the template."""
+        body: dict[str, Any] = {}
+        if name:
+            body["name"] = name
+        if format:
+            body["format"] = format
         from urllib.parse import quote
 
         return self.request("POST", f"/api/v1/looks/{quote(slug.strip(), safe='')}/template", json_body=body)

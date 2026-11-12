@@ -491,7 +491,7 @@ def build_server(*, with_http_auth: bool = False):
         ] = None,
         look: Annotated[
             str | None,
-            Field(description="A prebuilt Look slug from list_looks (e.g. empire-story, cold-case-board) for the same format: its colours, captions, footage grade and favoured graphics. Settings you also pass win over the Look's. Omit for no Look."),
+            Field(description="A prebuilt Look slug from list_looks (e.g. empire-story, cold-case-board) whose formats include this one: its colours, captions, footage grade and favoured graphics. Settings you also pass win over the Look's. Omit for no Look."),
         ] = None,
     ) -> dict[str, Any]:
         """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job) and `warnings`: choices that will change what the video can show (no footage, AI stills, no graphics). Tell the user every warning in plain words and fix the ones they did not ask for before making a video. People with several channels keep one brand kit per channel: ask which channel the template is for and pass its brand_kit_id."""
@@ -514,7 +514,7 @@ def build_server(*, with_http_auth: bool = False):
             Field(description="Brand kit id from list_brand_kits; 0 = the user's default kit. Videos made from the template use it."),
         ] = None,
         show_logo: Annotated[bool | None, Field(description="Put the brand kit's logo on videos made from this template.")] = None,
-        look: Annotated[str | None, Field(description="A Look slug from list_looks for the template's format; \"\" removes the Look.")] = None,
+        look: Annotated[str | None, Field(description="A Look slug from list_looks whose formats include the template's; \"\" removes the Look.")] = None,
     ) -> dict[str, Any]:
         """Rename a saved template, give it a channel's brand kit, turn its logo on or off, or set its Look. Returns the template (brand_kit_id, brand_kit_name, show_logo, look_slug, look_name)."""
         try:
@@ -527,7 +527,7 @@ def build_server(*, with_http_auth: bool = False):
         annotations=ToolAnnotations(title="List looks", read_only_hint=True, open_world_hint=False),
     )
     def list_looks() -> dict[str, Any]:
-        """Prebuilt Looks: ready-made styles (Cold Case Board, Money Breakdown, Archive Press, Tactical Brief ...), each with its format, five colours, caption style, footage grade, the premium boards it favours and a sample reel URL. A Look is used through a template: create_template(look=...) or update_template(look=...) for a template with the user's own voice and settings, or save_look_as_template for a template from the Look alone; then create_job with that template_id. Offer them when the user wants a style but has no template."""
+        """Prebuilt Looks: ready-made styles (Cold Case Board, Money Breakdown, Archive Press, Tactical Brief ...), each with the formats it works with (Faceless Documentary, Faceless Top 10, Avatar Video, Talking Head, Vector Explainer, Faceless Explainer), five colours, caption style, footage grade, the premium boards it favours and a sample reel URL. A Look is used through a template: create_template(look=...) or update_template(look=...) for a template with the user's own voice and settings, or save_look_as_template for a template from the Look alone; then create_job with that template_id. Offer them when the user wants a style but has no template."""
         try:
             return _client().list_looks()
         except Exception as exc:
@@ -540,10 +540,11 @@ def build_server(*, with_http_auth: bool = False):
     def save_look_as_template(
         slug: Annotated[str, Field(min_length=2, description="Look slug from list_looks")],
         name: Annotated[str | None, Field(max_length=120, description="Template name; defaults to the Look's name")] = None,
+        format: Annotated[str | None, Field(description="Video format for the template, one of the Look's formats (list_looks); defaults to the Look's own format")] = None,
     ) -> dict[str, Any]:
         """Copy a Look into one of the user's templates and return it; create_job with its id makes videos in that Look, and update_template changes it."""
         try:
-            return _client().save_look_as_template(slug, name=name)
+            return _client().save_look_as_template(slug, name=name, format=format)
         except Exception as exc:
             return _err(exc)
 
