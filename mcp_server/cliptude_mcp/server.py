@@ -481,10 +481,66 @@ def build_server(*, with_http_auth: bool = False):
                 )
             ),
         ],
+        brand_kit_id: Annotated[
+            int | None,
+            Field(description="Brand kit id from list_brand_kits (the channel's logo, colours, fonts). Omit for the user's default kit."),
+        ] = None,
+        show_logo: Annotated[
+            bool | None,
+            Field(description="Put the brand kit's logo on the video. Off unless the user asks for it."),
+        ] = None,
     ) -> dict[str, Any]:
-        """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job) and `warnings`: choices that will change what the video can show (no footage, AI stills, no graphics). Tell the user every warning in plain words and fix the ones they did not ask for before making a video."""
+        """Create a ready-to-use template without the create wizard. Values are validated like the wizard; returns the template (use its id in create_job) and `warnings`: choices that will change what the video can show (no footage, AI stills, no graphics). Tell the user every warning in plain words and fix the ones they did not ask for before making a video. People with several channels keep one brand kit per channel: ask which channel the template is for and pass its brand_kit_id."""
         try:
-            return _client().create_template(name=name, format=format, settings=settings)
+            return _client().create_template(name=name, format=format, settings=settings,
+                                             brand_kit_id=brand_kit_id, show_logo=show_logo)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="Update template",
+        annotations=ToolAnnotations(title="Update template", read_only_hint=False, destructive_hint=False,
+                                    idempotent_hint=True, open_world_hint=False),
+    )
+    def update_template(
+        template_id: Annotated[str, Field(min_length=8, description="Template UUID")],
+        name: Annotated[str | None, Field(max_length=120, description="New template name")] = None,
+        brand_kit_id: Annotated[
+            int | None,
+            Field(description="Brand kit id from list_brand_kits; 0 = the user's default kit. Videos made from the template use it."),
+        ] = None,
+        show_logo: Annotated[bool | None, Field(description="Put the brand kit's logo on videos made from this template.")] = None,
+    ) -> dict[str, Any]:
+        """Rename a saved template, give it a channel's brand kit, or turn its logo on or off. Returns the template (brand_kit_id, brand_kit_name, show_logo)."""
+        try:
+            return _client().update_template(template_id, name=name, brand_kit_id=brand_kit_id, show_logo=show_logo)
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="List brand kits",
+        annotations=ToolAnnotations(title="List brand kits", read_only_hint=True, open_world_hint=False),
+    )
+    def list_brand_kits() -> dict[str, Any]:
+        """The user's brand kits, usually one per YouTube channel: id, name, is_default, logo_url, logo_position, five colours and four fonts. Kits are made and edited at cliptude.com/videos/brand-kit/. A template uses its own kit, else the default."""
+        try:
+            return _untrusted(_client().list_brand_kits())
+        except Exception as exc:
+            return _err(exc)
+
+    @mcp.tool(
+        title="List media library",
+        annotations=ToolAnnotations(title="List media library", read_only_hint=True, open_world_hint=False),
+    )
+    def list_media(
+        folder: Annotated[str | None, Field(description="Only this folder ('' = files in no folder)")] = None,
+        kind: Annotated[str | None, Field(description="image, video or audio")] = None,
+        limit: Annotated[int, Field(ge=1, le=200, description="Page size")] = 50,
+        offset: Annotated[int, Field(ge=0, description="Offset")] = 0,
+    ) -> dict[str, Any]:
+        """The user's own images, clips and audio (their media library, shared with the editor's uploads): name, folder, kind, url. Use a file's url as a beat's or graphic's `url` in a plan, or in edit_timeline, when the user wants their own footage, photos or logo."""
+        try:
+            return _untrusted(_client().list_media(folder=folder, kind=kind, limit=limit, offset=offset))
         except Exception as exc:
             return _err(exc)
 

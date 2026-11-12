@@ -56,6 +56,8 @@ To revise a finished video, `editor` opens its timeline (item ids, times, text).
 
 To answer a copyright claim or credit Creative Commons footage, MCP `get_video_sources` lists where every visual in a finished video came from (times on screen, provider, author, license, link) plus the description credits, and `find_media_source` finds every video that used a link, YouTube channel or author.
 
+Brand kits and media: `list_brand_kits` lists the user's brand kits (one per channel: logo, colours, fonts; one is the default); `create_template` and `update_template` take `brand_kit_id` and `show_logo` (the logo is off by default). `list_media` lists the user's own images, clips and audio (their media library, shared with the editor's uploads), with a `url` to use in a plan or `edit_timeline`.
+
 ### Agent-planned videos
 
 On Faceless Documentary, Faceless Top 10, Avatar Video and Vector Explainer templates an agent can plan every visual and leave Cliptude

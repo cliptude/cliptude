@@ -631,3 +631,35 @@ class SplitShotsUploadTests(TestCase):
                 with self.assertRaises(CliptudeApiError):
                     client.upload_plan_media("3b2a2d2e-b295-4f52-9b1b-3e71d1e00444", path, split_shots=True)
         self.assertFalse(any(p.endswith("/abort") for p in paths))
+
+
+class BrandKitAndMediaClientTests(TestCase):
+    """Brand kits, the media library, and a template's kit and logo switch."""
+
+    def _client(self):
+        from cliptude_mcp.client import CliptudeClient
+
+        client = CliptudeClient.__new__(CliptudeClient)
+        client.calls = []
+        client.request = lambda method, path, **kw: client.calls.append((method, path, kw)) or {"ok": True}
+        return client
+
+    def test_update_template_sends_only_what_changed(self):
+        c = self._client()
+        c.update_template("8a57e0c2-b284-4cf8-a7ba-efdf6aa4ce34", brand_kit_id=3, show_logo=True)
+        method, path, kw = c.calls[0]
+        self.assertEqual((method, path), ("PATCH", "/api/v1/templates/8a57e0c2-b284-4cf8-a7ba-efdf6aa4ce34"))
+        self.assertEqual(kw["json_body"], {"brand_kit_id": 3, "show_logo": True})
+
+    def test_zero_means_the_default_kit(self):
+        c = self._client()
+        c.update_template("8a57e0c2-b284-4cf8-a7ba-efdf6aa4ce34", brand_kit_id=0)
+        self.assertEqual(c.calls[0][2]["json_body"], {"brand_kit_id": None})
+
+    def test_lists(self):
+        c = self._client()
+        c.list_brand_kits()
+        c.list_media(folder="Brand", kind="image")
+        self.assertEqual(c.calls[0][:2], ("GET", "/api/v1/brand-kits"))
+        self.assertEqual(c.calls[1][1], "/api/v1/media")
+        self.assertEqual(c.calls[1][2]["params"], {"limit": 50, "offset": 0, "folder": "Brand", "kind": "image"})

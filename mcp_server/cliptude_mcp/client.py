@@ -475,11 +475,41 @@ class CliptudeClient:
     def get_template(self, template_id: str) -> Any:
         return self.request("GET", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}")
 
-    def create_template(self, *, name: str, format: str, settings: dict[str, Any]) -> Any:
-        """Create a ready-to-use template from settings (no create wizard)."""
-        return self.request(
-            "POST", "/api/v1/templates", json_body={"name": name, "format": format, "settings": settings}
-        )
+    def create_template(self, *, name: str, format: str, settings: dict[str, Any],
+                        brand_kit_id: int | None = None, show_logo: bool | None = None) -> Any:
+        """Create a ready-to-use template from settings (no create wizard); optional brand kit and logo."""
+        body: dict[str, Any] = {"name": name, "format": format, "settings": settings}
+        if brand_kit_id is not None:
+            body["brand_kit_id"] = brand_kit_id or None
+        if show_logo is not None:
+            body["show_logo"] = bool(show_logo)
+        return self.request("POST", "/api/v1/templates", json_body=body)
+
+    def update_template(self, template_id: str, *, name: str | None = None, brand_kit_id: int | None = None,
+                        show_logo: bool | None = None) -> Any:
+        """Rename a template, set its brand kit (0 = the user's default kit) or turn its logo on or off."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if brand_kit_id is not None:
+            body["brand_kit_id"] = brand_kit_id or None
+        if show_logo is not None:
+            body["show_logo"] = bool(show_logo)
+        return self.request("PATCH", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}", json_body=body)
+
+    def list_brand_kits(self) -> Any:
+        """The user's brand kits (one per channel): logo, colours, fonts; one is the default."""
+        return self.request("GET", "/api/v1/brand-kits")
+
+    def list_media(self, *, folder: str | None = None, kind: str | None = None, limit: int = 50,
+                   offset: int = 0) -> Any:
+        """The user's media library (images, clips, audio; shared with the editor's uploads)."""
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if folder is not None:
+            params["folder"] = folder
+        if kind:
+            params["kind"] = kind
+        return self.request("GET", "/api/v1/media", params=params)
 
     def template_options(self, format: str) -> Any:
         return self.request("GET", "/api/v1/templates/options", params={"format": format})

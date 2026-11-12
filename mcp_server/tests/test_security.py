@@ -264,6 +264,8 @@ class AnnotationsAndUntrustedTextTests(TestCase):
             "save_choice",
             # Exact timeline edits and undo.
             "edit_timeline", "restore_editor_version",
+            # A template's name, brand kit and logo switch.
+            "update_template",
         }
         destructive = {"delete_vector_character", "abort_media_upload", "cancel_job", "cancel_agent_run",
                        "lock_plan", "run_agent", "edit_timeline", "restore_editor_version"}

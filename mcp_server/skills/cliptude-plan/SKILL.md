@@ -587,7 +587,7 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
 ### Beat media
 Give every searched beat 1-2 `alts` (`no_alts` warns otherwise).
 One of: `query` (+ `alts`, `local_query` (a 2-6 word search in the narration's language for paperwork, signs and screens in a story set where that language is spoken; searched first on that country's Google Images; `local_search_missing` asks for it), `negatives`, `query_kind` such as object, place or person, `prefer`: video|image), `person`,
-`url` (+ `fallback_query`; public http(s) images ≤15 MB or videos ≤300 MB), `auto: true` (Cliptude writes the
+`url` (+ `fallback_query`; public http(s) images ≤15 MB or videos ≤300 MB; the user's own files: `list_media` gives each one's url), `auto: true` (Cliptude writes the
 query), or `keep` (+ `fallback_query`): the `keep` id `get_plan_review` or `get_plan_report` shows for a file an
 earlier build of this job used. A kept file is never searched again, so change a beat's request to try for something
 better and, if the new pick is worse, put the old one back with `{"keep": "<id>"}`. Revising keeps an unchanged
