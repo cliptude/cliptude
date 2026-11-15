@@ -8,7 +8,7 @@
     "source": "github"
   },
   "websiteUrl": "https://cliptude.com",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "remotes": [
     {
       "type": "streamable-http",

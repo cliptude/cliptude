@@ -10,7 +10,14 @@ every sentence with word timings, renders **exactly the plan you lock**, sources
 you afterwards what it used and where it had to fall back. Its own planner does not run: it adds, moves and drops
 nothing.
 
-Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_explainer`. Not available in the desktop app yet.
+Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_explainer` (of the five live formats, all
+but `talking_head`; every other format is retired). Not available in the desktop app yet. **Not for a template whose
+Look is a motion-graphics Look** (`neon-noir`, `paper-atlas`, `editorial-explainer`, `business-ledger`, `route-atlas`):
+Cliptude draws those from its component library, so `create_plan_job` refuses them (code `motion_graphics_look_plan`);
+make those videos with `create_job` (see the **cliptude** skill), or give the template a footage Look first. Videos are
+16:9, avatars Avatar IV only, and captions are off by default (only when the user asks: `captions: true` on
+`create_plan_job` / the template, CLI `--captions`, or after the build `edit_timeline`
+`{"op": "set_captions", "enabled": true}`).
 
 **This is the default for those four formats:** plan the video yourself unless the user asks Cliptude to plan
 the visuals ("just make it"). Product videos too: `draft_product_script(..., plan=true)` stops at `plan_ready`,
@@ -41,7 +48,10 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    `no_motion_graphics`, `no_music`, `no_sound_effects`, `no_transitions`) explain what it costs and pass it in `acknowledge` only after the user approves it.
    `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (the default: narration you
    researched and wrote, voiced as is), `prompt` (a brief, only when the user asks Cliptude to write the narration;
-   never the bare title), or `voiceover_path` (audio you already have). **Write the script yourself first**:
+   never the bare title), or `voiceover_path` (audio you already have). Omit `prompt` when you send a script or a
+   voiceover: on `create_job` a prompt with the user's narration becomes direction for the visuals, but in a plan
+   job you place every visual yourself, so the plan is the direction (`visual_direction` is deprecated everywhere;
+   the description carries visual direction now). **Write the script yourself first**:
    unless the user gave a script or a voiceover, follow **cliptude-script** (web search, then spoken narration),
    show the user the script, and start the job only after they approve it; the narration cannot change once it
    is voiced. Needs the full website price in credits; charges only the narration now. Names, places and borrowed
@@ -145,7 +155,7 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    findings: fix them in the one revision. Pass `accept_quality_findings: true` only when the user says to ship
    as is, and tell the user which findings remain. A later change goes through the editor: `edit_timeline` for
    exact changes on item ids (delete a board with its sound, retime, swap a board's design or picture to one of your
-   uploads by `keep`, fix its words, add a board, clip or catalog sound, change a transition, restyle captions, set
+   uploads by `keep`, fix its words, add a board, clip or catalog sound, change a transition, turn captions on (`set_captions`, off by default) or restyle them, set
    library music or its volume; free, one revision, undo with `restore_editor_version`), `run_agent` only when it
    needs sourcing or generation. Never hide a full-frame board with opacity 0 (it covers
    the footage with black): delete it. Then `view_scenes` the returned `changed_ranges_s` and `render_project`
@@ -488,6 +498,9 @@ the presenter seconds you plan.
   ("6.08% → 7.04%"), `concept_link_overlay` (ideas joined by lines), `tactical_hud_overlay` (drone targeting display),
   `bodycam_frame` (body-camera chrome), `waffle_unit_chart` (a share as 100 squares), `film_frame_breakdown`
   (a film still with ratio, guides and shot type) and `checklist_reveal` (items ticked off; `style` check, myth or paper).
+  Business-documentary boards: `sunburst_stat_cutout` (a person cut out in front of sunburst rays with their one
+  figure slammed behind them, "20%"), `newspaper_keyword_macro` (three close-ups of old newsprint, the one word the
+  press used boxed each time) and `ink_splash_reveal` (the picture shown only inside black ink splashed on paper).
 - Each premium board carries its own timed sound cues (several hits matched to its motion). Leave its `sound` unset
   (or `"auto"`) to keep them, even when the plan lists `sfx`. Setting `sound` replaces them with your one sound and
   `"none"` silences it. Listing any `sfx` mutes the sounds Cliptude would add on its own, not your graphics' cues.
@@ -510,6 +523,22 @@ the presenter seconds you plan.
   the `keep` id on a premium image board: `transparent_image_title`, `title_subtitle_lower_third`,
   `bullet_point_overlay`, `text_list` or `large_number_text_overlay` (the price) all take a picture, and write
   the link or domain in a lower third. Quote only facts from the product page; never invent reviews or prices.
+- **Newest boards (Nov 2026)** — read each one's catalog entry before placing it: `fact_card_slide` (sourced facts on
+  cards), `picture_label_plate` (a picture with a headline or tag plate), `story_clock_chips` (a picture with
+  time/place chips and a clock or timer: "1775", "Berlin · October 1940"), `battle_formation_map` (troop formations and a battle plan),
+  `vitals_monitor` (a heart-rate monitor counting from one bpm to another), `hazard_rank_card` (a ranked danger card for Top 10
+  entries), `marker_word_canvas` (marker-drawn key words), `night_globe_focus` (a night globe turning to a place),
+  `range_rings_map` (missile or radar range rings from a place), `wireframe_terrain_cutaway` (a site drawn as a
+  wireframe cutaway with depth labels), `county_spotlight_map` (a US county lit inside its state),
+  `territory_fill_map` (countries filling in order, with routes and markers) and `map_story` (below).
+- **`map_story`** is a whole map sequence on one board: `steps` in narration order, each brought in on its `cue`
+  words (camera, fills, routes, fronts, pins, units, movers, ...; the catalog's `prop_schema` lists every layer).
+  **Places auto-highlight:** the build scans the words spoken under the board and adds a step for every country,
+  region, group or city the narrator names that no step of yours shows within a second (a fill with its label, a
+  pulse, or a pin), timed on the word; those steps carry `auto: true` and are re-made on every rebuild, so do not
+  copy them into your plan. Colours come from the video's palette (its colours, brand kit, Look, tone pack); set
+  `accentColor`, `secondaryColor`, `textColor` or `bgColor` (hex) on the board to override them, and `surface`
+  for the base map.
 - **The narration cannot change in a plan.** `lock_plan` fixes only the visuals; a wrong line, a missing pitch or
   a presenter line to drop needs a new plan job with a new `script` (the old job and its editor edits stay as they are).
 
@@ -708,7 +737,8 @@ where the narration is about that weather, fire or night sky. A treatment listed
 - `clip_effect`: one CapCut-style look or camera move on the beat's picture, a `kind` from the catalog's
   `clip_effects` (or `"none"`). Looks recolour or texture it (`vhs_tape`, `film_reel`, `old_hollywood`, `comic`,
   `pencil`, `teal_orange`, `bw_cinema`, `neon_edges`, and grades to hold over a run of beats: `noir_mono`, `crime_red`,
-  `bleach_bypass`, `light_leak_film`…); moves shake or travel across it for the whole beat
+  `bleach_bypass`, `light_leak_film`, and one-colour chapter washes `duotone_ember`, `duotone_amber`,
+  `duotone_acid`…); moves shake or travel across it for the whole beat
   (`camera_shake`, `retro_zoom`, `push_3d`, `aggressive_pan`, `vertigo_twist`…) or play as it appears
   (`enter_bounce`, `enter_swing`, `enter_unpixelate`, `enter_drop`…). Use them on a few beats where the line calls
   for it (home video, an era, a shock, a fun introduction), never on every beat; an unknown name is refused

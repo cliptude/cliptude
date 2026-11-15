@@ -1,4 +1,8 @@
-"""Tiny CLI wrapping /api/v1: auth | pick | templates | template-create | template-options | voices | avatars | estimate | generate | editor | agent | render | script | voiceover | continue | status | jobs | account | cancel."""
+"""Tiny CLI wrapping /api/v1: auth | pick | templates | template-create | template-update | template-options | looks |
+look-template | brand-kits | voices | voice-design | avatars | estimate | generate | editor | agent | render | script |
+voiceover | continue | status | jobs | account | cancel.
+
+Live formats: faceless_documentary, faceless_top_10, avatar_video, talking_head, vector_explainer (16:9 only)."""
 
 from __future__ import annotations
 
@@ -48,6 +52,8 @@ def _reviewed(args, call, *, heading: str = "Review this video before it is crea
     credits = review.get("credits") or {}
     if credits.get("credits_required") is not None:
         out.write(f"  Credits: about {credits['credits_required']} (you have {credits.get('credits_available')})\n")
+        for line in _rate_lines(review):
+            out.write(f"  {line}\n")
     else:
         for key, value in credits.items():
             out.write(f"  Credits, {key.replace('_', ' ')}: {value}\n")
@@ -62,6 +68,19 @@ def _reviewed(args, call, *, heading: str = "Review this video before it is crea
     if input(f"\n{question} [y/N] ").strip().lower() != "y":
         raise CliptudeApiError("Not done: nothing was spent.")
     return call(detail["review_token"], approved or None)
+
+
+def _rate_lines(review: dict) -> list[str]:
+    """The per-minute rate and the painted-Look add-on when there is one, for a job review."""
+    credits = review.get("credits") or {}
+    lines = []
+    if credits.get("credits_per_minute"):
+        lines.append(f"Credits per minute: {credits['credits_per_minute']}")
+    painted = credits.get("painted_look_credits_per_minute")
+    if painted:
+        lines.append(f"Painted Look add-on: +{painted} credits/min (AI-painted scenes; included above)")
+    # The Look itself is a review setting ("Look: Empire Story (empire-story), painted +20/min ..."), printed above.
+    return lines
 
 
 def _create_reviewed(client: CliptudeClient, args, **kwargs):
@@ -145,6 +164,54 @@ def _thumbnail_from_args(args) -> dict | None:
     return thumbnail or None
 
 
+def _add_branding_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--look", default=None,
+                        help='A Look slug from `cliptude looks` whose formats include this one ("" removes it)')
+    parser.add_argument("--brand-kit", type=int, default=None,
+                        help="Brand kit id from `cliptude brand-kits` (0 = your default kit)")
+    parser.add_argument("--show-logo", action=argparse.BooleanOptionalAction, default=None,
+                        help="Put the brand kit's logo on the videos (--no-show-logo: off)")
+
+
+def _add_captions_arg(parser: argparse.ArgumentParser, *, scope: str) -> None:
+    parser.add_argument("--captions", action=argparse.BooleanOptionalAction, default=None,
+                        help=f"Whole-video captions on {scope}, in the caption style. Off by default; "
+                             "--no-captions turns them off. Omit to keep the template's.")
+
+
+def _add_voice_setting_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--stability", type=float, default=None, help="0 to 1")
+    parser.add_argument("--similarity-boost", type=float, default=None, help="0 to 1")
+    parser.add_argument("--style", type=float, default=None, help="0 to 1")
+    parser.add_argument("--speed", type=float, default=None, help="0.7 to 1.2")
+    parser.add_argument("--speaker-boost", action=argparse.BooleanOptionalAction, default=None,
+                        dest="use_speaker_boost")
+
+
+def _voice_settings_from_args(args) -> dict:
+    keys = ("stability", "similarity_boost", "style", "speed", "use_speaker_boost")
+    return {k: getattr(args, k) for k in keys if getattr(args, k, None) is not None}
+
+
+def _save_previews(payload, out_dir: str) -> dict:
+    """Write each preview's data: URL audio to a file and replace it with the path."""
+    import base64 as _b64
+
+    if not isinstance(payload, dict):
+        return payload
+    folder = Path(out_dir).expanduser()
+    folder.mkdir(parents=True, exist_ok=True)
+    for preview in payload.get("previews") or []:
+        url = str(preview.pop("audio_url", "") or "")
+        if url.startswith("data:") and ";base64," in url:
+            mime, data = url[5:].split(";base64,", 1)
+            ext = {"audio/wav": "wav", "audio/ogg": "ogg"}.get(mime, "mp3")
+            dest = folder / f"preview_{preview.get('preview_id')}.{ext}"
+            dest.write_bytes(_b64.b64decode(data))
+            preview["file"] = str(dest)
+    return payload
+
+
 def _parse_set_args(pairs: list[str]) -> dict:
     out = {}
     for pair in pairs:
@@ -173,6 +240,49 @@ def _wait(fetch, status_of, *, interval: float = 10.0, timeout: float = 3600.0):
             return payload
         print(f"{status or 'pending'}...", file=sys.stderr)
         time.sleep(interval)
+
+
+def _run_voice_design(client: CliptudeClient, args) -> None:
+    import base64 as _b64
+
+    cmd = args.vd_cmd
+    if cmd == "options":
+        _print(client.voice_design_options())
+    elif cmd == "previews":
+        options = {"model_id": args.model_id or None, "should_enhance": args.should_enhance, "text": args.text or None,
+                   "auto_generate_text": True if args.auto_text else None, "loudness": args.loudness,
+                   "guidance_scale": args.guidance_scale, "quality": args.quality,
+                   "prompt_strength": args.prompt_strength, "seed": args.seed}
+        payload = client.design_voice_previews(args.provider, args.description, language=args.language or None,
+                                               options=options)
+        _print(_save_previews(payload, args.out))
+    elif cmd == "save":
+        _print(client.save_designed_voice(args.provider, args.preview_id, args.name,
+                                          voice_settings=_voice_settings_from_args(args)))
+    elif cmd == "settings":
+        settings = _voice_settings_from_args(args)
+        if not settings:
+            raise CliptudeApiError("Give at least one of --stability, --similarity-boost, --style, --speed, --speaker-boost.")
+        _print(client.update_designed_voice_settings(args.design_id, settings))
+    elif cmd == "try":
+        payload = client.try_designed_voice(args.design_id, text=args.text or None,
+                                            voice_settings=_voice_settings_from_args(args),
+                                            model_id=args.model_id or None, language_code=args.language_code or None)
+        url = str((payload or {}).pop("audio_url", "") or "")
+        if ";base64," in url:
+            dest = Path(args.out).expanduser()
+            dest.write_bytes(_b64.b64decode(url.split(";base64,", 1)[1]))
+            payload["file"] = str(dest.resolve())
+        _print(payload)
+    elif cmd == "remix":
+        payload = client.remix_designed_voice(args.design_id, args.description, options={
+            "guidance_scale": args.guidance_scale, "loudness": args.loudness, "text": args.text or None,
+            "seed": args.seed})
+        _print(_save_previews(payload, args.out))
+    elif cmd == "remix-save":
+        _print(client.save_remixed_voice(args.design_id, args.preview_id, voice_name=args.name or None))
+    elif cmd == "delete":
+        _print(client.delete_designed_voice(args.provider, args.design_id))
 
 
 def _run_pick(client: CliptudeClient, args) -> dict:
@@ -280,7 +390,7 @@ def main(argv: list[str] | None = None) -> None:
             "example:\n"
             '  cliptude generate --template "Finance vector weekly" --title "Why index funds win" '
             '--prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" '
-            '--duration 3-4'
+            '--duration 6-8'
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -345,6 +455,95 @@ def main(argv: list[str] | None = None) -> None:
         help="One setting; VALUE is parsed as JSON when possible (true, 0.4, [\"a\"]), else a string. Repeatable.",
     )
     _add_thumbnail_args(tc, scope="every video from this template")
+    _add_branding_args(tc)
+    _add_captions_arg(tc, scope="every video from this template")
+
+    tu = sub.add_parser(
+        "template-update",
+        help="Rename a template, set its Look, brand kit or logo",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "example:\n"
+            '  cliptude template-update "TSMC doc" --look cold-case-board --brand-kit 3 --show-logo\n'
+            '  cliptude template-update "TSMC doc" --look ""   (removes the Look)'
+        ),
+    )
+    tu.add_argument("template", help="Template name or UUID")
+    tu.add_argument("--name", default=None, help="New name")
+    _add_branding_args(tu)
+    _add_captions_arg(tu, scope="every video from this template")
+
+    lk = sub.add_parser("looks", help="List the prebuilt Looks (formats, colours, painted +20 credits/min, motion graphics)")
+    lk.add_argument("--topic", default="", help="The video's title or description: the Looks that fit it come first with suggested=true and a reason")
+    lk.add_argument("--format", default="", help="Only suggest Looks that work with this format")
+    lt = sub.add_parser("look-template", help="Save a Look as one of your templates; prints the template")
+    lt.add_argument("slug", help="Look slug from `cliptude looks`")
+    lt.add_argument("--name", default="", help="Template name (default: the Look's name)")
+    lt.add_argument("--format", default="", help="One of the Look's formats (default: its own)")
+    sub.add_parser("brand-kits", help="List your brand kits (id for --brand-kit)")
+
+    vd = sub.add_parser(
+        "voice-design",
+        help="Design your own voice: options, previews, save, settings, try, remix, delete",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  cliptude voice-design options\n"
+            '  cliptude voice-design previews --description "Calm male narrator, late thirties, low and warm" '
+            "--model-id eleven_ttv_v3 --guidance-scale 6\n"
+            "  cliptude voice-design save <preview-id> --name \"Night Narrator\" --stability 0.4\n"
+            "  cliptude voice-design settings <design-id> --speed 1.05 --no-speaker-boost\n"
+            '  cliptude voice-design try <design-id> --text "One line to hear it." --out try.mp3\n'
+            '  cliptude voice-design remix <design-id> --description "a little warmer"\n'
+            "  cliptude voice-design remix-save <design-id> <preview-id>\n"
+            "  cliptude voice-design delete <design-id>\n"
+            "Design ids are design_id in `cliptude voices` (my_voices). Numbers outside a range are clamped."
+        ),
+    )
+    vd_sub = vd.add_subparsers(dest="vd_cmd", required=True)
+    vd_sub.add_parser("options", help="Design models, option ranges and defaults, voice setting ranges")
+    vdp = vd_sub.add_parser("previews", help="Design previews from a description (preview audio saved as files)")
+    vdp.add_argument("--provider", default="elevenlabs", choices=["elevenlabs", "minimax", "inworld"])
+    vdp.add_argument("--description", required=True)
+    vdp.add_argument("--language", default="")
+    vdp.add_argument("--model-id", default="")
+    vdp.add_argument("--enhance", action=argparse.BooleanOptionalAction, default=None, dest="should_enhance")
+    vdp.add_argument("--text", default="", help="Preview line, 100-1000 characters")
+    vdp.add_argument("--auto-text", action="store_true", help="ElevenLabs writes the preview line")
+    for flag in ("loudness", "guidance-scale", "quality", "prompt-strength"):
+        vdp.add_argument(f"--{flag}", type=float, default=None)
+    vdp.add_argument("--seed", type=int, default=None)
+    vdp.add_argument("--out", default=".", help="Folder for the preview audio files")
+    vds = vd_sub.add_parser("save", help="Keep one preview as your voice")
+    vds.add_argument("preview_id")
+    vds.add_argument("--name", required=True)
+    vds.add_argument("--provider", default="elevenlabs", choices=["elevenlabs", "minimax", "inworld"])
+    _add_voice_setting_args(vds)
+    vdt = vd_sub.add_parser("settings", help="Change a designed ElevenLabs voice's settings (others keep theirs)")
+    vdt.add_argument("design_id")
+    _add_voice_setting_args(vdt)
+    vdy = vd_sub.add_parser("try", help="Speak a test line with these settings (saves an MP3)")
+    vdy.add_argument("design_id")
+    vdy.add_argument("--text", default="")
+    vdy.add_argument("--model-id", default="")
+    vdy.add_argument("--language-code", default="")
+    vdy.add_argument("--out", default="voice_try.mp3")
+    _add_voice_setting_args(vdy)
+    vdr = vd_sub.add_parser("remix", help="Previews of a designed ElevenLabs voice with a change")
+    vdr.add_argument("design_id")
+    vdr.add_argument("--description", required=True)
+    vdr.add_argument("--guidance-scale", type=float, default=None)
+    vdr.add_argument("--loudness", type=float, default=None)
+    vdr.add_argument("--text", default="")
+    vdr.add_argument("--seed", type=int, default=None)
+    vdr.add_argument("--out", default=".", help="Folder for the preview audio files")
+    vdrs = vd_sub.add_parser("remix-save", help="Replace the voice with a remix preview")
+    vdrs.add_argument("design_id")
+    vdrs.add_argument("preview_id")
+    vdrs.add_argument("--name", default="")
+    vdd = vd_sub.add_parser("delete", help="Delete a designed voice here and at the provider")
+    vdd.add_argument("design_id")
+    vdd.add_argument("--provider", default="elevenlabs", choices=["elevenlabs", "minimax", "inworld"])
 
     to = sub.add_parser("template-options", help="Fields, choices and defaults for template-create")
     to.add_argument("--format", required=True)
@@ -391,8 +590,9 @@ def main(argv: list[str] | None = None) -> None:
     est.add_argument("--avatar-intro-only", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar-ai-footage", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    est.add_argument("--avatar-engine", default="", choices=["", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    est.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
     est.add_argument("--vector-motion", default="", choices=["", "none", "video"], help="Vector Explainer: price stills (none) or AI clips (video)")
+    _add_captions_arg(est, scope="this video")
     est.add_argument("--render-only", action="store_true", help="Plan job where you bring the voiceover, pictures, clips and graphics (with --output plan --voiceover-seconds)")
 
     g = sub.add_parser(
@@ -403,7 +603,7 @@ def main(argv: list[str] | None = None) -> None:
             "example:\n"
             '  cliptude generate --template "Finance vector weekly" --title "Why index funds win" '
             '--prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" '
-            '--duration 3-4\n'
+            '--duration 6-8\n'
             '  cliptude generate --template "Finance vector weekly" --title "Why index funds win" '
             '--script-file script.txt\n'
             '  cliptude generate --template "Finance vector weekly" --title "Why index funds win" '
@@ -417,25 +617,27 @@ def main(argv: list[str] | None = None) -> None:
     g.add_argument(
         "--prompt",
         default="",
-        help='Topic or brief, e.g. "why most retail traders underperform the S&P over 10 years, keep it for beginners"',
+        help='The description: a topic or brief (only when Cliptude should write the narration), and any direction '
+        'for the visuals ("Open with a map of Europe. Use @founder_photo"). With --script, --voiceover or --talking-head '
+        "it is direction only. Captions are off by default (turn them on later with `edit` and set_captions).",
     )
     g.add_argument("--script", default="")
     g.add_argument("--script-file", default="")
     g.add_argument(
         "--voiceover",
         default="",
-        help="Path to a narration audio file (MP3, M4A, WAV, …), at least 6 minutes long. Transcribed; skips TTS. Do not combine with --prompt or --script.",
+        help="Path to a narration audio file (MP3, M4A, WAV, …), at least 6 minutes long. Transcribed; skips TTS. Not with --script; a --prompt with it is direction for the visuals.",
     )
-    g.add_argument("--voiceover-url", default="", help="Public https link to the narration audio (at least 6 minutes long); Cliptude downloads it.")
+    g.add_argument("--voiceover-url", default="", help="Public https link to the narration audio (at least 6 minutes long); Cliptude downloads it. Not with --script; --prompt is direction.")
     g.add_argument(
         "--talking-head",
         default="",
-        help="Path to a talking-head presenter video (MP4, MOV, WEBM, AVI), at least 6 minutes long. Requires a Talking Head template. Transcribed; skips TTS. Do not combine with --prompt, --script, or --voiceover.",
+        help="Path to a talking-head presenter video (MP4, MOV, WEBM, AVI), at least 6 minutes long. Requires a Talking Head template. Transcribed; skips TTS. Not with --script or --voiceover; a --prompt with it is direction for the visuals.",
     )
     g.add_argument(
         "--duration",
         default="",
-        help="Wizard duration bucket, e.g. 3-4 or 6-8. Default: template duration (or estimated from --script)",
+        help="Duration bucket: 6-8, 8-10, 10-12, 18-20, 30-40 or 50-60 (videos start at 6 minutes). Default: template duration (or estimated from --script)",
     )
     g.add_argument(
         "--avatar-intro-only",
@@ -456,7 +658,7 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     g.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    g.add_argument("--avatar-engine", default="", choices=["", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    g.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
     g.add_argument(
         "--disable-animations",
         action=argparse.BooleanOptionalAction,
@@ -506,6 +708,7 @@ def main(argv: list[str] | None = None) -> None:
     _add_thumbnail_args(g, scope="this video")
     _add_pronunciations_arg(g)
     g.add_argument("--vector-motion", default="", choices=["", "none", "video"], help='Vector Explainer: "none" = stills with camera moves, "video" = AI clips. Default: the template\'s')
+    _add_captions_arg(g, scope="this video")
     g.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     sc = sub.add_parser(
@@ -515,13 +718,13 @@ def main(argv: list[str] | None = None) -> None:
         epilog=(
             "example:\n"
             '  cliptude script --template "Finance vector weekly" --title "Why index funds win" '
-            '--prompt "why most retail traders underperform the S&P" --duration 3-4'
+            '--prompt "why most retail traders underperform the S&P" --duration 6-8'
         ),
     )
     sc.add_argument("--template", required=True, help="Template name or UUID")
     sc.add_argument("--title", required=True)
     sc.add_argument("--prompt", required=True, help="Topic or brief. Cliptude writes the narration.")
-    sc.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 3-4 or 6-8")
+    sc.add_argument("--duration", default="", help="Duration bucket, e.g. 6-8 or 10-12 (videos start at 6 minutes)")
 
     vo = sub.add_parser(
         "voiceover",
@@ -538,7 +741,7 @@ def main(argv: list[str] | None = None) -> None:
     vo.add_argument("--prompt", default="", help="Topic or brief. Cliptude writes the narration then voices it.")
     vo.add_argument("--script", default="")
     vo.add_argument("--script-file", default="")
-    vo.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 3-4 or 6-8")
+    vo.add_argument("--duration", default="", help="Duration bucket, e.g. 6-8 or 10-12 (videos start at 6 minutes)")
 
     dv = sub.add_parser("download-voiceover", help="Download the voiceover MP3 of a voiceover job, or the narration of a plan_ready plan job")
     dv.add_argument("job_id")
@@ -590,7 +793,7 @@ def main(argv: list[str] | None = None) -> None:
     _add_review_args(ps)
     pr = prod_sub.add_parser("render", help="Produce the video from a ready product script")
     pr.add_argument("job_id")
-    pr.add_argument("--aspect-ratio", default="16:9")
+    pr.add_argument("--aspect-ratio", default="16:9", choices=["16:9"], help="Cliptude makes 16:9 videos only")
     _add_thumbnail_args(pr, scope="this video")
     _add_review_args(pr)
     pst = prod_sub.add_parser("status", help="Stage, script, preview link and MP4 of a product video")
@@ -610,20 +813,21 @@ def main(argv: list[str] | None = None) -> None:
             "  cliptude plan-report <job-id>"
         ),
     )
-    pj.add_argument("--template", required=True, help="Template name or UUID (Faceless Documentary, Top 10, Avatar Video)")
+    pj.add_argument("--template", required=True, help="Template name or UUID (Faceless Documentary, Top 10, Avatar Video, Vector Explainer; not a motion-graphics Look: use generate)")
     pj.add_argument("--title", required=True)
-    pj.add_argument("--prompt", default="", help="Topic or brief. Cliptude writes the narration.")
+    pj.add_argument("--prompt", default="", help="Topic or brief, only when Cliptude writes the narration. Omit it with --script or --voiceover: your plan is the visual direction.")
     pj.add_argument("--script", default="")
     pj.add_argument("--script-file", default="")
     pj.add_argument("--voiceover", default="", help="Local audio to use as the narration (aligned, not re-voiced)")
     pj.add_argument("--voiceover-url", default="", help="Public https link to the narration audio; Cliptude downloads it")
     pj.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 6-8")
     pj.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    pj.add_argument("--avatar-engine", default="", choices=["", "iv", "v"], help="Avatar Video: HeyGen engine. Default: the template's")
+    pj.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
     pj.add_argument("--render-only", action="store_true", help="You bring everything (needs --voiceover); Cliptude only builds and renders, at the render-only rate")
     _add_thumbnail_args(pj, scope="this video")
     _add_pronunciations_arg(pj)
     pj.add_argument("--vector-motion", default="", choices=["", "none", "video"], help='Vector Explainer: "none" = stills with camera moves, "video" = AI clips. Default: the template\'s')
+    _add_captions_arg(pj, scope="this video")
     pj.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     nr = sub.add_parser("narration", help="Numbered sentences and word timings of a plan_ready job")
@@ -762,7 +966,24 @@ def main(argv: list[str] | None = None) -> None:
             thumbnail = _thumbnail_from_args(args)
             if thumbnail:
                 settings["thumbnail"] = thumbnail
-            _print(client.create_template(name=args.name, format=args.format, settings=settings))
+            _print(client.create_template(name=args.name, format=args.format, settings=settings,
+                                          brand_kit_id=args.brand_kit, show_logo=args.show_logo, look=args.look or None,
+                                          captions=args.captions))
+        elif args.cmd == "template-update":
+            if (args.name is None and args.look is None and args.brand_kit is None and args.show_logo is None
+                    and args.captions is None):
+                raise CliptudeApiError("Give --name, --look, --brand-kit, --show-logo / --no-show-logo or --captions / --no-captions.")
+            _print(client.update_template(_resolve_template_id(client, args.template), name=args.name,
+                                          brand_kit_id=args.brand_kit, show_logo=args.show_logo, look=args.look,
+                                          captions=args.captions))
+        elif args.cmd == "looks":
+            _print(client.list_looks(topic=args.topic or None, format=args.format or None))
+        elif args.cmd == "look-template":
+            _print(client.save_look_as_template(args.slug, name=args.name or None, format=args.format or None))
+        elif args.cmd == "brand-kits":
+            _print(client.list_brand_kits())
+        elif args.cmd == "voice-design":
+            _run_voice_design(client, args)
         elif args.cmd == "template-options":
             _print(client.template_options(args.format))
         elif args.cmd == "voices":
@@ -800,6 +1021,7 @@ def main(argv: list[str] | None = None) -> None:
                 avatar_engine=args.avatar_engine or None,
                 render_only=args.render_only or None,
                 vector_reveal_mode=args.vector_motion or None,
+                captions=args.captions,
             ))
         elif args.cmd == "generate":
             script = args.script
@@ -810,19 +1032,20 @@ def main(argv: list[str] | None = None) -> None:
             talking_head = (args.talking_head or "").strip()
             if talking_head and (voiceover or voiceover_url):
                 raise CliptudeApiError("Use --talking-head or --voiceover, not both.")
-            if talking_head and (args.prompt or script):
+            # --prompt may come with any narration as direction for the visuals; two narrations may not.
+            if talking_head and script:
                 raise CliptudeApiError(
-                    "Use --talking-head or --prompt/--script, not both. "
-                    "An uploaded talking head is transcribed and used as the narration."
+                    "Use --talking-head or --script, not both. "
+                    "An uploaded talking head is transcribed and used as the narration; --prompt is fine as direction."
                 )
-            if voiceover and (args.prompt or script):
+            if (voiceover or voiceover_url) and script:
                 raise CliptudeApiError(
-                    "Use --voiceover or --prompt/--script, not both. "
-                    "An uploaded file is transcribed and used as the narration."
+                    "Use --voiceover or --script, not both. "
+                    "An uploaded file is transcribed and used as the narration; --prompt is fine as direction."
                 )
-            if not talking_head and not voiceover and not (args.prompt or script):
+            if not talking_head and not voiceover and not voiceover_url and not (args.prompt or script):
                 raise CliptudeApiError(
-                    "Provide --prompt, --script / --script-file, --voiceover, or --talking-head."
+                    "Provide --prompt, --script / --script-file, --voiceover, --voiceover-url, or --talking-head."
                 )
             template_id = _resolve_template_id(client, args.template)
             _print(_create_reviewed(client, args,
@@ -849,6 +1072,7 @@ def main(argv: list[str] | None = None) -> None:
                 vector_character_id=args.vector_character or None,
                 vector_reveal_mode=args.vector_motion or None,
                 pronunciations=_pronunciations_from_args(args),
+                captions=args.captions,
             ))
         elif args.cmd == "script":
             if not (args.prompt or "").strip():
@@ -901,6 +1125,7 @@ def main(argv: list[str] | None = None) -> None:
                 vector_character_id=args.vector_character or None,
                 vector_reveal_mode=args.vector_motion or None,
                 pronunciations=_pronunciations_from_args(args),
+                captions=args.captions,
             ))
         elif args.cmd == "narration":
             _print(client.get_narration(args.job_id))

@@ -268,9 +268,12 @@ class AnnotationsAndUntrustedTextTests(TestCase):
             "update_template",
             # A Look copied into a new template.
             "save_look_as_template",
+            # Designed voices: settings, remix (previews and replacing the voice) and delete.
+            "update_designed_voice_settings", "remix_designed_voice", "save_remixed_voice", "delete_designed_voice",
         }
         destructive = {"delete_vector_character", "abort_media_upload", "cancel_job", "cancel_agent_run",
-                       "lock_plan", "run_agent", "edit_timeline", "restore_editor_version"}
+                       "lock_plan", "run_agent", "edit_timeline", "restore_editor_version", "save_remixed_voice",
+                       "delete_designed_voice"}
         for name, tool in self.tools.items():
             ann = tool.annotations
             self.assertIsNotNone(ann, name)

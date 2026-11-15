@@ -297,8 +297,9 @@ var Views = (function () {
     return (TOOL_LABELS[tool] || "Go ahead") + (output ? ": " + output : "") + (title ? " — “" + title + "”" : "") + ".";
   }
 
-  function creditsBox(credits) {
+  function creditsBox(credits, review) {
     if (!credits || typeof credits !== "object") return null;
+    var lookRow = ((review && review.settings) || []).filter(function (s) { return s.label === "Look"; })[0];
     var rows = [];
     function add(label, value, cls) {
       if (value === undefined || value === null || value === "") return;
@@ -308,6 +309,12 @@ var Views = (function () {
     add("Held while building", credits.credits_held_while_building);
     add("Already paid", credits.credits_already_paid);
     add("Full video price", credits.full_video_price);
+    if (credits.credits_per_minute) add("Credits per minute", credits.credits_per_minute);
+    // A painted Look (AI-painted scenes on Faceless Documentary) is already inside the rate; shown on its own.
+    if (credits.painted_look_credits_per_minute) {
+      add("Painted Look add-on", "+" + num(credits.painted_look_credits_per_minute) + " credits/min (included above)", "warn");
+    }
+    if (lookRow && lookRow.value && lookRow.value !== "None") add("Look", String(lookRow.value));
     add("Available", credits.credits_available);
     var enough = credits.enough_credits;
     return h("div", { class: "credits" }, rows.concat(enough === undefined ? [] : [
@@ -377,7 +384,7 @@ var Views = (function () {
     container.appendChild(h("p", { class: "summary" }, [summary]));
     var out = h("div", { id: "outcome" });  // the result of the confirmed call shows here, at the top
     container.appendChild(out);
-    var credits = creditsBox(rev.credits);
+    var credits = creditsBox(rev.credits, rev);
     if (credits) container.appendChild(credits);
 
     (rev.warnings || []).forEach(function (w) {

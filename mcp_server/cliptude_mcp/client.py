@@ -173,6 +173,13 @@ def _uuid_seg(value: Any, label: str = "job_id") -> str:
     return quote(canonical, safe="")
 
 
+def _voice_provider(provider: str) -> str:
+    value = str(provider or "").strip().lower()
+    if value not in ("elevenlabs", "minimax", "inworld"):
+        raise CliptudeApiError("provider must be elevenlabs, minimax or inworld.")
+    return value
+
+
 def _int_seg(value: Any, label: str = "project_id") -> str:
     """A positive integer path segment; anything else is refused."""
     text = str(value).strip() if not isinstance(value, bool) else ""
@@ -296,6 +303,15 @@ def _avatar_job_fields(
             ("true" if avatar_ai_footage else "false") if as_strings else bool(avatar_ai_footage)
         )
     return fields
+
+
+def merge_visual_direction(prompt: str | None, visual_direction: str | None) -> str | None:
+    """The prompt with the deprecated visual_direction appended (the server does the same for direct API calls)."""
+    notes = (visual_direction or "").strip()
+    text = (prompt or "").strip()
+    if notes and notes not in text:
+        text = f"{text}\n\n{notes}".strip() if text else notes
+    return text or None
 
 
 def _review_job_fields(review_token: str | None, acknowledge: list[str] | None, review_only: bool | None,
@@ -477,8 +493,12 @@ class CliptudeClient:
 
     def create_template(self, *, name: str, format: str, settings: dict[str, Any],
                         brand_kit_id: int | None = None, show_logo: bool | None = None,
-                        look: str | None = None) -> Any:
-        """Create a ready-to-use template from settings (no create wizard); optional brand kit, logo and Look."""
+                        look: str | None = None, captions: bool | None = None) -> Any:
+        """Create a ready-to-use template from settings (no create wizard); optional brand kit, logo, Look and
+        whole-video captions (off by default)."""
+        settings = dict(settings or {})
+        if captions is not None:
+            settings["captions_enabled"] = bool(captions)
         body: dict[str, Any] = {"name": name, "format": format, "settings": settings}
         if look:
             body["look"] = look
@@ -489,10 +509,13 @@ class CliptudeClient:
         return self.request("POST", "/api/v1/templates", json_body=body)
 
     def update_template(self, template_id: str, *, name: str | None = None, brand_kit_id: int | None = None,
-                        show_logo: bool | None = None, look: str | None = None) -> Any:
-        """Rename a template, set its brand kit (0 = the user's default kit), its logo switch or its Look
-        ('' removes the Look)."""
+                        show_logo: bool | None = None, look: str | None = None,
+                        captions: bool | None = None) -> Any:
+        """Rename a template, set its brand kit (0 = the user's default kit), its logo switch, its Look
+        ('' removes the Look) or its whole-video captions."""
         body: dict[str, Any] = {}
+        if captions is not None:
+            body["captions"] = bool(captions)
         if look is not None:
             body["look"] = look
         if name is not None:
@@ -503,9 +526,15 @@ class CliptudeClient:
             body["show_logo"] = bool(show_logo)
         return self.request("PATCH", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}", json_body=body)
 
-    def list_looks(self) -> Any:
-        """The prebuilt Looks (colours, captions, footage grade, the boards that carry each), with sample reels."""
-        return self.request("GET", "/api/v1/looks")
+    def list_looks(self, topic: str | None = None, format: str | None = None) -> Any:
+        """The prebuilt Looks (colours, captions, footage grade, the boards that carry each), with sample reels.
+        With ``topic`` the best fits come first with ``suggested: true`` and a ``reason``; ``format`` limits them."""
+        params: dict[str, Any] = {}
+        if topic and topic.strip():
+            params["topic"] = topic.strip()[:2000]
+        if format:
+            params["format"] = format
+        return self.request("GET", "/api/v1/looks", params=params or None)
 
     def save_look_as_template(self, slug: str, *, name: str | None = None, format: str | None = None) -> Any:
         """Copy a Look into one of the user's templates (format: any of the Look's formats); returns the template."""
@@ -531,6 +560,53 @@ class CliptudeClient:
         if kind:
             params["kind"] = kind
         return self.request("GET", "/api/v1/media", params=params)
+
+    # --- designed voices (ElevenLabs, MiniMax, Inworld; settings, try and remix are ElevenLabs only) -----------
+
+    def voice_design_options(self) -> Any:
+        """Design models, option ranges and defaults, and the voice settings ranges (the web page's)."""
+        return self.request("GET", "/api/v1/voice-designs/options")
+
+    def design_voice_previews(self, provider: str, description: str, *, language: str | None = None,
+                              options: dict[str, Any] | None = None) -> Any:
+        body = {"description": description, **({"language": language} if language else {}),
+                **{k: v for k, v in (options or {}).items() if v is not None}}
+        return self.request("POST", f"/api/v1/voice-designs/{_voice_provider(provider)}/previews", json_body=body,
+                            timeout=max(self.timeout, 180.0))
+
+    def save_designed_voice(self, provider: str, preview_id: str, voice_name: str, *,
+                            voice_settings: dict[str, Any] | None = None) -> Any:
+        body = {"preview_id": preview_id, "voice_name": voice_name,
+                **{k: v for k, v in (voice_settings or {}).items() if v is not None}}
+        return self.request("POST", f"/api/v1/voice-designs/{_voice_provider(provider)}", json_body=body,
+                            timeout=max(self.timeout, 120.0))
+
+    def update_designed_voice_settings(self, design_id: int | str, voice_settings: dict[str, Any]) -> Any:
+        body = {k: v for k, v in (voice_settings or {}).items() if v is not None}
+        return self.request("POST", f"/api/v1/voice-designs/elevenlabs/{_int_seg(design_id, 'design_id')}/settings",
+                            json_body=body)
+
+    def try_designed_voice(self, design_id: int | str, *, text: str | None = None,
+                           voice_settings: dict[str, Any] | None = None, **extra: Any) -> Any:
+        body = {**({"text": text} if text else {}), **{k: v for k, v in (voice_settings or {}).items() if v is not None},
+                **{k: v for k, v in extra.items() if v not in (None, "")}}
+        return self.request("POST", f"/api/v1/voice-designs/elevenlabs/{_int_seg(design_id, 'design_id')}/try",
+                            json_body=body)
+
+    def remix_designed_voice(self, design_id: int | str, description: str, *,
+                             options: dict[str, Any] | None = None) -> Any:
+        body = {"description": description, **{k: v for k, v in (options or {}).items() if v is not None}}
+        return self.request("POST", f"/api/v1/voice-designs/elevenlabs/{_int_seg(design_id, 'design_id')}/remix",
+                            json_body=body, timeout=max(self.timeout, 180.0))
+
+    def save_remixed_voice(self, design_id: int | str, preview_id: str, *, voice_name: str | None = None) -> Any:
+        body = {"preview_id": preview_id, **({"voice_name": voice_name} if voice_name else {})}
+        return self.request("POST", f"/api/v1/voice-designs/elevenlabs/{_int_seg(design_id, 'design_id')}/remix/save",
+                            json_body=body, timeout=max(self.timeout, 120.0))
+
+    def delete_designed_voice(self, provider: str, design_id: int | str) -> Any:
+        return self.request("DELETE", f"/api/v1/voice-designs/{_voice_provider(provider)}/"
+                                      f"{_int_seg(design_id, 'design_id')}")
 
     def template_options(self, format: str) -> Any:
         return self.request("GET", "/api/v1/templates/options", params={"format": format})
@@ -570,12 +646,18 @@ class CliptudeClient:
         vector_reveal_mode: str | None = None,
         pronunciations: list[dict[str, str]] | None = None,
         visual_direction: str | None = None,
+        captions: bool | None = None,
+        look: str | None = None,
         review_token: str | None = None,
         acknowledge: list[str] | None = None,
         review_only: bool | None = None,
     ) -> Any:
         if voiceover_path and voiceover_url:
             raise CliptudeApiError("Give voiceover_path or voiceover_url, not both.")
+        # visual_direction is deprecated: the description (prompt) carries the visual direction. Older callers still
+        # send it, so it is appended to the prompt here, the same on every path (JSON, voiceover upload, talking head).
+        prompt = merge_visual_direction(prompt, visual_direction)
+        visual_direction = None
         if render_only and ((output or "").strip().lower() != "plan" or not (voiceover_path or voiceover_url)):
             raise CliptudeApiError(
                 "render_only is a plan job with your own narration: pass output=\"plan\" and a voiceover "
@@ -614,21 +696,23 @@ class CliptudeClient:
             )
         if th_path and vo_path:
             raise CliptudeApiError("Upload either a talking head video or a voiceover — not both.")
-        if th_path and (prompt or script):
+        # A prompt may come with any narration as direction for the visuals; two narrations may not.
+        if th_path and script:
             raise CliptudeApiError(
-                "Upload a talking head video, or send a prompt / custom script — not both. "
-                "An uploaded talking head is transcribed and used as the narration."
+                "Upload a talking head video, or send a custom script — not both. "
+                "An uploaded talking head is transcribed and used as the narration; a prompt is fine as direction."
             )
-        if vo_path and (prompt or script):
+        if (vo_path or voiceover_url) and script:
             raise CliptudeApiError(
-                "Upload a voiceover, or send a prompt / custom script — not both. "
-                "An uploaded file is transcribed and used as the narration."
+                "Upload a voiceover, or send a custom script — not both. "
+                "An uploaded file is transcribed and used as the narration; a prompt is fine as direction."
             )
         if th_path:
             return self._create_job_talking_head(
                 template_id=template_id,
                 title=title,
                 talking_head_path=th_path,
+                prompt=prompt,
                 avatar_intro_only=avatar_intro_only,
                 avatar_ai_footage=avatar_ai_footage,
                 disable_animations=disable_animations,
@@ -639,6 +723,8 @@ class CliptudeClient:
                 excluded_animation_types=excluded_animation_types,
                 excluded_transition_kinds=excluded_transition_kinds,
                 thumbnail=thumbnail,
+                captions=captions,
+                look=look,
                 review=_review_job_fields(review_token, acknowledge, review_only),
             )
         if vo_path:
@@ -655,6 +741,9 @@ class CliptudeClient:
                 **({"vector_reveal_mode": str(vector_reveal_mode)} if vector_reveal_mode else {}),
                 **({"pronunciations": json.dumps(pronunciations)} if pronunciations is not None else {}),
                 **({"visual_direction": visual_direction} if visual_direction else {}),
+                **({"captions": "true" if captions else "false"} if captions is not None else {}),
+                **({"look": str(look).strip() or "none"} if look is not None else {}),
+                **({"prompt": prompt} if prompt else {}),
                 **_review_job_fields(review_token, acknowledge, review_only, as_strings=True),
             }
             return self._create_job_multipart(
@@ -694,6 +783,10 @@ class CliptudeClient:
             body["pronunciations"] = pronunciations
         if visual_direction:
             body["visual_direction"] = visual_direction
+        if captions is not None:
+            body["captions"] = bool(captions)
+        if look is not None:
+            body["look"] = str(look).strip()
         body.update(_review_job_fields(review_token, acknowledge, review_only))
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
@@ -782,6 +875,7 @@ class CliptudeClient:
         template_id: str,
         title: str,
         talking_head_path: str | Path,
+        prompt: str | None = None,
         avatar_intro_only: bool | None = None,
         avatar_ai_footage: bool | None = None,
         disable_animations: bool | None = None,
@@ -792,9 +886,17 @@ class CliptudeClient:
         excluded_animation_types: list[str] | None = None,
         excluded_transition_kinds: list[str] | None = None,
         thumbnail: dict[str, str] | None = None,
+        captions: bool | None = None,
+        look: str | None = None,
         review: dict[str, Any] | None = None,
     ) -> Any:
         review = review or {}
+        captions_field = {"captions": bool(captions)} if captions is not None else {}
+        captions_str = {"captions": "true" if captions else "false"} if captions is not None else {}
+        # The job's Look rides with captions on every talking-head path ("none" = no Look; multipart drops "").
+        if look is not None:
+            captions_field["look"] = str(look).strip()
+            captions_str["look"] = str(look).strip() or "none"
         review_strings = {k: (",".join(v) if isinstance(v, list) else ("true" if v is True else v))
                           for k, v in review.items()}
         motion_extra = _motion_control_job_fields(
@@ -831,6 +933,8 @@ class CliptudeClient:
                 **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
                 **motion_extra,
                 **_thumbnail_job_field(thumbnail, as_string=True),
+                **({"prompt": prompt} if prompt else {}),
+                **captions_str,
                 **review_strings,
             }
             return self._create_job_multipart(
@@ -850,6 +954,8 @@ class CliptudeClient:
                 **_avatar_job_fields(avatar_intro_only, avatar_ai_footage, as_strings=True),
                 **motion_extra,
                 **_thumbnail_job_field(thumbnail, as_string=True),
+                **({"prompt": prompt} if prompt else {}),
+                **captions_str,
                 **review_strings,
             }
             return self._create_job_multipart(
@@ -876,9 +982,11 @@ class CliptudeClient:
             "title": title,
             "talking_head_r2_key": key,
             "talking_head_duration": str(duration),
+            **({"prompt": prompt} if prompt else {}),
         }
         body.update(_avatar_job_fields(avatar_intro_only, avatar_ai_footage))
         body.update(_thumbnail_job_field(thumbnail))
+        body.update(captions_field)
         body.update(
             _motion_control_job_fields(
                 disable_animations=disable_animations,
@@ -1339,9 +1447,15 @@ class CliptudeClient:
         avatar_engine: str | None = None,
         render_only: bool | None = None,
         vector_reveal_mode: str | None = None,
+        captions: bool | None = None,
+        look: str | None = None,
     ) -> Any:
         """Credits a job would need; creates nothing."""
         body: dict[str, Any] = {"template_id": template_id}
+        if captions is not None:
+            body["captions"] = bool(captions)
+        if look is not None:
+            body["look"] = str(look).strip()
         if render_only:
             body["render_only"] = True
         for key, value in (

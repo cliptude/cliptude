@@ -33,6 +33,17 @@ class ClientTests(TestCase):
         self.assertNotIn("prompt", kwargs["json_body"])
         self.assertNotIn("faceless_coding", kwargs["json_body"])
 
+    def test_create_job_and_estimate_send_the_jobs_look(self):
+        client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
+        with patch.object(client, "request", return_value={"id": "abc"}) as req:
+            client.create_job(template_id="tmpl", title="T", script="Words.", look="archive-press")
+            client.create_job(template_id="tmpl", title="T", script="Words.")
+            client.estimate_credits(template_id="tmpl", script="Words.", look="none")
+        bodies = [c.kwargs["json_body"] for c in req.call_args_list]
+        self.assertEqual(bodies[0]["look"], "archive-press")
+        self.assertNotIn("look", bodies[1])  # omitted = keep the template's Look
+        self.assertEqual(bodies[2]["look"], "none")
+
     def test_vector_characters_list_upload_and_job_field(self):
         client = CliptudeClient(base_url="https://cliptude.com", api_key="clp_test")
         with patch.object(client, "request", return_value={"builtin": []}) as req:
