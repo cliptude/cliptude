@@ -190,8 +190,11 @@ this order, and the video needs two builds: one to review, one to ship.
    - Cliptude measures each upload. Lock a first draft with `check_plan` and read `footage_too_thin` and
      `shot_overused` **now**: if they fire, gather more before writing anything else.
 3. **Get every named person's photo before planning.** List the people a card will name (`sense.people`). For
-   each, find a free photo (Wikimedia Commons: check the licence and keep the credit) and upload it. No free photo:
-   that card becomes a lower third with no `media`, over footage of their work with no faces in it.
+   each, find a free photo (Wikimedia Commons: check the licence and keep the credit), look at it (Commons has
+   namesakes: a search for one CEO returned a climate scientist of the same name), upload it and give the card
+   `{"keep": "<id>"}`. A name card is a full-frame board: with no `media`, or a search that fails, it shows
+   whatever nearby beat Cliptude can lend it, so never leave one empty or on a plain query. No free photo: name
+   them with an overlay over footage of their work, or use their own post you uploaded.
 4. **Assign by script, not by hand.** Write the beats and boards from your clip table with a small script that
    enforces the rules below for every beat at once; hand edits are where repeats and stand-ins come back.
    - Each line's footage comes from the work the line is about; set `from` on clips of other works.
@@ -264,8 +267,12 @@ this order, and the video needs two builds: one to review, one to ship.
      on whoever that footage shows.
 6. **No injuries anywhere, boards included.** War, action and horror footage is full of bloodied faces. Give quote
    and reaction boards a wide shot, a set, a vehicle or a location, not an actor's face in close-up.
-7. **Boards that take no picture:** a type with no `media_slots` in its catalog entry (`timeline_of_events`) gets
-   no `media`. A board with picture slots always gets a picture of its own.
+7. **Boards that take no picture:** a type with no `media_slots` in its catalog entry (`timeline_of_events`,
+   `percentage_bar_chart`, `three_text_card`) gets no `media` (check_plan refuses it as `unknown_slot`). It is drawn
+   over the beat under it, so choose that beat's picture for the board: a chart on a Steve Jobs line over another
+   publisher's revenue chart showed that chart. A board with picture slots always gets a picture of its own.
+   Never search for a chart, a stock chart or a "news graphic": searches return other publishers' infographics.
+   Draw the number as a board over a photo instead.
 8. **Third-party footage stays short:** no credited excerpt over about 6 s per beat.
 
 **After the build: one review, one revision**
