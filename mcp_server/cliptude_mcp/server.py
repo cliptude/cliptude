@@ -827,13 +827,33 @@ def build_server(*, with_http_auth: bool = False):
                                     open_world_hint=False),
     )
     def start_library_upload(
-        filename: Annotated[str, Field(min_length=1, description="The file's name with its extension: a picture (JPG, PNG, WebP, GIF; up to 15 MB), a clip (MP4, MOV, WebM; up to 300 MB) or audio (MP3, WAV, M4A, AAC, OGG, FLAC; up to 95 MB). The name becomes its @tag (kress_interview.mp4 -> @kress_interview).")],
-        size: Annotated[int, Field(gt=0, description="The file's size in bytes (e.g. `wc -c < file`).")],
+        filename: Annotated[str | None, Field(description="One file's name with its extension: a picture (JPG, PNG, WebP, GIF; up to 15 MB), a clip (MP4, MOV, WebM; up to 300 MB) or audio (MP3, WAV, M4A, AAC, OGG, FLAC; up to 95 MB). The name becomes its @tag (kress_interview.mp4 -> @kress_interview). For several files use files instead.")] = None,
+        size: Annotated[int | None, Field(gt=0, description="That file's size in bytes (e.g. `wc -c < file`).")] = None,
         content_type: Annotated[str | None, Field(description="MIME type; omit to infer it from the file name.")] = None,
+        files: Annotated[list[dict[str, Any]] | None, Field(max_length=50, description="Many files at once (up to 50): [{\"filename\": \"shot_01.png\", \"size\": 48213}, ...] (content_type optional). Returns one upload per file, in the same order.")] = None,
     ) -> dict[str, Any]:
-        """Upload a file to the user's media library from ANY host, remote included: an A-roll clip, a sponsor spot, screenshots, b-roll, music. PUT each part's bytes to its url exactly as for start_media_upload (one part: `curl -sf -X PUT --upload-file FILE "URL"`), then finish_library_upload. URLs expire in 1 hour. One file per call; for many files repeat it (or use upload_to_library on a local MCP). A public https link is simpler: import_media."""
+        """Upload files to the user's media library from ANY host, remote included: an A-roll clip, a sponsor spot, screenshots, b-roll, music. One file (filename + size) or up to 50 (files). PUT each part's bytes to its url exactly as for start_media_upload (one part: `curl -sf -X PUT --upload-file FILE "URL"`), then finish_library_upload with every key and upload_id in one call. URLs expire in 1 hour. A public https link is simpler: import_media."""
         try:
-            out = _client().start_library_upload(filename=filename, size=size, content_type=content_type)
+            client = _client()
+            if files:
+                if filename or size:
+                    return {"error": "Give filename + size for one file, or files for several, not both."}
+                uploads, failed = [], []
+                for i, item in enumerate(files):
+                    item = item if isinstance(item, dict) else {}
+                    try:
+                        out = client.start_library_upload(filename=str(item.get("filename") or ""),
+                                                          size=int(item.get("size") or 0),
+                                                          content_type=item.get("content_type"))
+                        uploads.append({"filename": item.get("filename"), **out})
+                    except Exception as exc:  # one bad file must not stop the rest
+                        failed.append({"index": i, "filename": item.get("filename"), "error": str(exc)})
+                return {"uploads": uploads, "failed": failed,
+                        "next": "PUT every part of every upload to its url, then finish_library_upload("
+                                "uploads=[{key, upload_id}, ...], folder?) in one call."}
+            if not filename or not size:
+                return {"error": "Give filename and size (one file), or files (several)."}
+            out = client.start_library_upload(filename=filename, size=size, content_type=content_type)
             out["next"] = "PUT every part to its url, then finish_library_upload(key, upload_id, folder?)."
             return out
         except Exception as exc:
@@ -845,14 +865,31 @@ def build_server(*, with_http_auth: bool = False):
                                     open_world_hint=False),
     )
     def finish_library_upload(
-        key: Annotated[str, Field(min_length=1, description="key from start_library_upload")],
-        upload_id: Annotated[str, Field(min_length=1, description="upload_id from start_library_upload")],
-        folder: Annotated[str | None, Field(max_length=80, description="Library folder to keep it in (e.g. jensen_followup); a description tags the whole folder as @folder_name.")] = None,
-        name: Annotated[str | None, Field(max_length=200, description="A name for it (its @tag); omit to keep the file's name.")] = None,
+        key: Annotated[str | None, Field(description="key from start_library_upload (one file)")] = None,
+        upload_id: Annotated[str | None, Field(description="upload_id from start_library_upload (one file)")] = None,
+        folder: Annotated[str | None, Field(max_length=80, description="Library folder to keep them in (e.g. jensen_followup); a description tags the whole folder as @folder_name.")] = None,
+        name: Annotated[str | None, Field(max_length=200, description="A name for one file (its @tag); omit to keep the file's name.")] = None,
+        uploads: Annotated[list[dict[str, Any]] | None, Field(max_length=50, description="Several uploads at once (up to 50): [{\"key\": ..., \"upload_id\": ..., \"name\"?: ...}, ...] from start_library_upload's uploads.")] = None,
     ) -> dict[str, Any]:
-        """Close a library upload. Cliptude checks the file really is a picture, clip or audio file and keeps it in the media library, exactly like an upload on cliptude.com/videos/media/. Returns {media_id, tag, name, folder, kind, url}: use tag in a create_job description, as aroll (A-roll with its own sound) or sponsor, or media_id in edit_timeline add_aroll / add_sponsor."""
+        """Close library uploads (one, or up to 50 with uploads). Cliptude checks each file really is a picture, clip or audio file and keeps it in the media library, exactly like an upload on cliptude.com/videos/media/. Returns {media_id, tag, name, folder, kind, url} for one file, or {uploaded: [...], failed: [...]} for several: use tag in a create_job description, as aroll (A-roll with its own sound) or sponsor, or media_id in edit_timeline add_aroll / add_sponsor."""
         try:
-            return _client().finish_library_upload(key=key, upload_id=upload_id, folder=folder, name=name)
+            client = _client()
+            if uploads:
+                if key or upload_id:
+                    return {"error": "Give key + upload_id for one file, or uploads for several, not both."}
+                done, failed = [], []
+                for i, item in enumerate(uploads):
+                    item = item if isinstance(item, dict) else {}
+                    try:
+                        done.append(client.finish_library_upload(key=str(item.get("key") or ""),
+                                                                 upload_id=str(item.get("upload_id") or ""),
+                                                                 folder=folder, name=item.get("name")))
+                    except Exception as exc:  # one bad file must not lose the others
+                        failed.append({"index": i, "key": item.get("key"), "error": str(exc)})
+                return {"uploaded": done, "failed": failed}
+            if not key or not upload_id:
+                return {"error": "Give key and upload_id (one file), or uploads (several)."}
+            return client.finish_library_upload(key=key, upload_id=upload_id, folder=folder, name=name)
         except Exception as exc:
             return _err(exc)
 
@@ -862,7 +899,7 @@ def build_server(*, with_http_auth: bool = False):
                                     idempotent_hint=False, open_world_hint=False),
     )
     def upload_to_library(
-        paths: Annotated[list[str], Field(min_length=1, max_length=50, description="Local files to upload, up to 50 a call: pictures (up to 15 MB), clips (up to 300 MB), audio (up to 95 MB). Stdio / local MCP only: on a remote host use start_library_upload + finish_library_upload per file, or import_media for a public link.")],
+        paths: Annotated[list[str], Field(min_length=1, max_length=50, description="Local files to upload, up to 50 a call: pictures (up to 15 MB), clips (up to 300 MB), audio (up to 95 MB). Stdio / local MCP only: on a remote host use start_library_upload + finish_library_upload (both take a list of files), or import_media for a public link.")],
         folder: Annotated[str | None, Field(max_length=80, description="Library folder for all of them (e.g. jensen_followup).")] = None,
     ) -> dict[str, Any]:
         """Upload one or many local files to the user's media library (each checked like a media-page upload; one failure does not stop the rest). Returns {uploaded: [{media_id, tag, name, kind, url}], failed: [{path, error}]}."""

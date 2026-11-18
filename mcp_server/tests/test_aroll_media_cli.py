@@ -79,3 +79,50 @@ class MergeARollTests(TestCase):
         with self.assertRaises(CliptudeApiError):
             merge_aroll("", [f"@a{i}" for i in range(5)])
         self.assertEqual(merge_aroll(None, None), None)
+
+
+class LibraryUploadToolTests(TestCase):
+    """start_library_upload / finish_library_upload take one file or a list (remote hosts: 2 calls for many files)."""
+
+    def setUp(self):
+        from tests.test_security import _build
+
+        self.mcp = _build(remote=True)
+
+    def _call(self, name, args):
+        from tests.test_security import _payload, _run
+
+        return _payload(_run(self.mcp.call_tool(name, args)))
+
+    def test_many_files_in_one_call_each_way(self):
+        from cliptude_mcp.client import CliptudeClient
+
+        def start(self_, *, filename, size, content_type=None):
+            if filename == "bad.txt":
+                raise CliptudeApiError("Unsupported file type")
+            return {"key": f"k/{filename}", "upload_id": "u", "parts": []}
+
+        with patch.object(CliptudeClient, "start_library_upload", autospec=True, side_effect=start):
+            out = self._call("start_library_upload", {"files": [
+                {"filename": "a.png", "size": 10}, {"filename": "bad.txt", "size": 5}, {"filename": "b.mp4", "size": 20}]})
+        self.assertEqual([u["key"] for u in out["uploads"]], ["k/a.png", "k/b.mp4"])
+        self.assertEqual(out["failed"][0]["filename"], "bad.txt")
+        with patch.object(CliptudeClient, "finish_library_upload", return_value={"tag": "@a"}) as finish:
+            out = self._call("finish_library_upload", {"uploads": [{"key": "k/a.png", "upload_id": "u"},
+                                                                    {"key": "k/b.mp4", "upload_id": "u"}],
+                                                        "folder": "jensen_followup"})
+        self.assertEqual(len(out["uploaded"]), 2)
+        self.assertEqual(finish.call_args.kwargs["folder"], "jensen_followup")
+
+    def test_one_file_still_works_and_mixing_is_refused(self):
+        from cliptude_mcp.client import CliptudeClient
+
+        with patch.object(CliptudeClient, "start_library_upload", return_value={"key": "k", "upload_id": "u"}):
+            self.assertEqual(self._call("start_library_upload", {"filename": "a.png", "size": 3})["key"], "k")
+        self.assertIn("error", self._call("start_library_upload", {"filename": "a.png", "size": 3,
+                                                                   "files": [{"filename": "b.png", "size": 1}]}))
+        self.assertIn("error", self._call("finish_library_upload", {}))
+
+    def test_local_path_error_points_to_library_upload(self):
+        out = self._call("upload_to_library", {"paths": ["/tmp/x.mp4"]})
+        self.assertIn("start_library_upload", out["error"])

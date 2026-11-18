@@ -158,8 +158,10 @@ class CliptudeApiError(Exception):
 LOCAL_FILES_REFUSED = (
     "{param} reads a file on the machine running this MCP server, which a remote (hosted) server does not "
     "allow. Upload the file instead: narration with start_voiceover_upload + finish_voiceover_upload and pass "
-    "the voiceover_url it returns; pictures and clips for a plan job with start_media_upload + "
-    "finish_media_upload; a character image as image_url (a public https link). Or run the local "
+    "the voiceover_url it returns; files for the media library (clips, A-roll, screenshots, audio) with "
+    "start_library_upload + finish_library_upload (both take a list of files) or import_media for a public link; "
+    "pictures and clips for a plan job with start_media_upload + finish_media_upload; a logo with "
+    "start_brand_upload + finish_brand_upload; a character image as image_url (a public https link). Or run the local "
     "`cliptude-mcp` / `cliptude` CLI, which can read your files."
 )
 
