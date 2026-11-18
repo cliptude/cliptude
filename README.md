@@ -31,6 +31,9 @@ cliptude template-create --name "TSMC doc" --format faceless_documentary --set v
 cliptude template-create --name "TSMC doc" --format faceless_documentary --settings-file settings.json
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --prompt "why most retail traders underperform the S&P over 10 years, keep it for beginners" --duration 3-4
 cliptude estimate --template "Finance vector weekly" --script-file script.txt
+cliptude brand-kit create --name "Northwind Notes" --channel-handle @northwindnotes --color '#1F6FEB' --logo ./logo.png   # list | options | get | update | set-default | delete
+cliptude media upload ./kress_cnbc.mp4 ./shots/*.png --folder jensen_followup   # list | upload | import; each file's @tag
+cliptude generate --template "News doc" --title "Why the board said no" --script-file script.txt --aroll '@kress_cnbc after "they refused to take any more questions"'
 cliptude avatars --section mine
 cliptude generate --template "My avatar weekly" --title "Episode one" --script-file script.txt --avatar 42
 cliptude generate --template "Finance vector weekly" --title "Why index funds win" --script-file script.txt
@@ -56,7 +59,9 @@ To revise a finished video, `editor` opens its timeline (item ids, times, text).
 
 To answer a copyright claim or credit Creative Commons footage, MCP `get_video_sources` lists where every visual in a finished video came from (times on screen, provider, author, license, link) plus the description credits, and `find_media_source` finds every video that used a link, YouTube channel or author.
 
-Brand kits and media: `list_brand_kits` lists the user's brand kits (one per channel: logo, colours, fonts; one is the default); `create_template` and `update_template` take `brand_kit_id` and `show_logo` (the logo is off by default). `list_media` lists the user's own images, clips and audio (their media library, shared with the editor's uploads), with a `url` to use in a plan or `edit_timeline`.
+Brand kits and media: `list_brand_kits` lists the user's brand kits (one per channel: logo, colours, fonts; one is the default), and `create_brand_kit`, `update_brand_kit`, `set_default_brand_kit` and `delete_brand_kit` (CLI `brand-kit`) manage them; `create_template` and `update_template` take `brand_kit_id` and `show_logo` (the logo is off by default). `list_media` lists the user's own images, clips and audio (their media library, shared with the editor's uploads), with a `url` and an `@tag`. New files go in with `upload_to_library` (local, up to 50 at once), `start_library_upload` + `finish_library_upload` (from any host) or `import_media` (a public link); CLI `media upload` / `media import`. Limits: pictures 15 MB, clips 300 MB, audio 95 MB.
+
+A-roll and sponsors: `aroll` on `create_job`, `create_plan_job` and `estimate_credits` (CLI `--aroll`, repeatable) plays the user's own clip of someone speaking, or an audio recording on a waveform card, with its own sound at the end of the sentence holding a quoted line of the script; the narration pauses for it (up to 4 a video, 3 minutes each). `include_aroll` (CLI `--include-aroll`) has Cliptude find A-roll clips on YouTube itself. `sponsor` (CLI `--sponsor`) splices in a sponsor spot the same way, with optional cards (up to 2). After the build, `edit_timeline` `add_aroll` / `add_sponsor` add them.
 
 ### Agent-planned videos
 

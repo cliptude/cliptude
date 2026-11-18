@@ -1,5 +1,5 @@
 """Tiny CLI wrapping /api/v1: auth | pick | templates | template-create | template-update | template-options | looks |
-look-template | brand-kits | brand-kit | voices | voice-design | avatars | estimate | generate | editor | agent | render | script |
+look-template | brand-kits | brand-kit | media | voices | voice-design | avatars | estimate | generate | editor | agent | render | script |
 voiceover | continue | status | jobs | account | cancel | docs.
 
 Live formats: faceless_documentary, faceless_top_10, avatar_video, talking_head, vector_explainer (16:9 only)."""
@@ -269,6 +269,26 @@ def _brand_kit_fields_from_args(args) -> dict:
     return fields
 
 
+def _run_media(client: CliptudeClient, args) -> None:
+    cmd = args.media_cmd
+    if cmd == "list":
+        _print(client.list_media(folder=args.folder, kind=args.kind or None, limit=args.limit, offset=args.offset))
+    elif cmd == "upload":
+        if len(args.paths) > 50:
+            raise CliptudeApiError("Upload at most 50 files a run.")
+        if args.name and len(args.paths) != 1:
+            raise CliptudeApiError("--name names one file: upload one file with it.")
+        if args.name:
+            _print(client.upload_to_library(args.paths[0], folder=args.folder, name=args.name))
+            return
+        result = client.upload_many_to_library(args.paths, folder=args.folder)
+        _print(result)
+        if result.get("failed"):
+            raise SystemExit(1)
+    elif cmd == "import":
+        _print(client.import_media(url=args.url, folder=args.folder, name=args.name))
+
+
 def _run_brand_kit(client: CliptudeClient, args) -> None:
     cmd = args.bk_cmd
     if cmd == "list":
@@ -314,10 +334,53 @@ def _add_sponsor_args(parser: argparse.ArgumentParser) -> None:
                              "--no-sponsor-bumpers leaves them out)")
 
 
+def _add_aroll_args(parser: argparse.ArgumentParser, *, include: bool = True) -> None:
+    parser.add_argument(
+        "--aroll", action="append", default=[], metavar="SPEC",
+        help='Your own A-roll clip, played with its own sound (the narration pauses for it): a media-library video '
+             'or audio file and, optionally, where and what it says, e.g. '
+             '\'@kress_cnbc after "they refused to take any more questions"\' or '
+             '\'@phone_call halfway says "We will not reinstate him"\'. A quoted line must be in the script word for '
+             'word. JSON works too: \'{"media": "@clip", "after": "a line"}\'. Repeatable, up to 4; at most 3 '
+             'minutes each. Upload clips with `cliptude media upload`.')
+    if include:
+        parser.add_argument(
+            "--include-aroll", action=argparse.BooleanOptionalAction, default=None,
+            help="Cliptude's own A-roll inserts (Faceless Documentary): it finds 2-4 clips of people speaking on "
+                 "YouTube and splices them in with their sound. --no-include-aroll turns them off. Default: the "
+                 "template's setting.")
+
+
+def _aroll_from_args(args) -> list | None:
+    """--aroll SPEC values: '@clip <placement words>' or a JSON object."""
+    out = []
+    for spec in getattr(args, "aroll", None) or []:
+        spec = str(spec or "").strip()
+        if not spec:
+            continue
+        if spec.startswith("{"):
+            try:
+                item = json.loads(spec)
+            except ValueError as exc:
+                raise CliptudeApiError(f"--aroll is not valid JSON: {exc}") from exc
+            if not isinstance(item, dict):
+                raise CliptudeApiError("--aroll JSON must be an object, like {\"media\": \"@clip\", \"after\": \"a line\"}.")
+            out.append(item)
+            continue
+        media, _, where = spec.partition(" ")
+        out.append({"media": media, "placement": where.strip()} if where.strip() else media)
+    return out or None
+
+
 def _sponsor_kwargs(args) -> dict:
-    return {"sponsor": getattr(args, "sponsor", None) or None,
-            "sponsor_placement": getattr(args, "sponsor_placement", None) or None,
-            "sponsor_bumpers": getattr(args, "sponsor_bumpers", None)}
+    """The sponsor, A-roll and include-A-roll flags, shared by estimate, generate and plan-job."""
+    out = {"sponsor": getattr(args, "sponsor", None) or None,
+           "sponsor_placement": getattr(args, "sponsor_placement", None) or None,
+           "sponsor_bumpers": getattr(args, "sponsor_bumpers", None),
+           "aroll": _aroll_from_args(args)}
+    if getattr(args, "include_aroll", None) is not None:
+        out["include_aroll"] = args.include_aroll
+    return out
 
 
 def _add_voice_setting_args(parser: argparse.ArgumentParser) -> None:
@@ -673,6 +736,34 @@ def main(argv: list[str] | None = None) -> None:
     dcl = dc_sub.add_parser("list", help="Every docs page: slug, title, category")
     dcl.add_argument("--category", default="", help="Only this sidebar group (Getting Started, Guides, Editor, ...)")
     dcl.add_argument("--json", action="store_true", help="Print the JSON response")
+    md = sub.add_parser(
+        "media",
+        help="Your media library: list, upload files (clips, pictures, audio), import a public link",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  cliptude media list --folder jensen_followup\n"
+            "  cliptude media upload ./jensen.mp4 ./shots/*.png --folder jensen_followup\n"
+            "  cliptude media upload ./kress.mp4 --name kress_cnbc.mp4\n"
+            "  cliptude media import https://example.com/clip.mp4 --folder b_roll\n"
+            "Each file comes back with its @tag (kress_cnbc.mp4 -> @kress_cnbc) for --prompt, --aroll or --sponsor.\n"
+            "Limits: pictures 15 MB, clips 300 MB, audio 95 MB."
+        ),
+    )
+    md_sub = md.add_subparsers(dest="media_cmd", required=True)
+    mdl = md_sub.add_parser("list", help="List your media library (each file's url and @tag)")
+    mdl.add_argument("--folder", default=None, help="Only this folder ('' = files in no folder)")
+    mdl.add_argument("--kind", default="", choices=["", "image", "video", "audio"], help="Only this kind")
+    mdl.add_argument("--limit", type=int, default=50)
+    mdl.add_argument("--offset", type=int, default=0)
+    mdu = md_sub.add_parser("upload", help="Upload local files to your media library (up to 50 a run)")
+    mdu.add_argument("paths", nargs="+", help="Files: pictures, clips (MP4, MOV, WebM) or audio")
+    mdu.add_argument("--folder", default=None, help="Library folder for all of them (tag it as @folder_name)")
+    mdu.add_argument("--name", default=None, help="A name (its @tag) when you upload one file")
+    mdi = md_sub.add_parser("import", help="Download a public https link to a file into your media library")
+    mdi.add_argument("url")
+    mdi.add_argument("--folder", default=None, help="Library folder")
+    mdi.add_argument("--name", default=None, help="File name with extension (its @tag), needed when the link has none")
     bk = sub.add_parser(
         "brand-kit",
         help="Brand kits (one per channel): list, options, get, create, update, set-default, delete",
@@ -815,6 +906,7 @@ def main(argv: list[str] | None = None) -> None:
     _add_captions_arg(est, scope="this video")
     _add_job_look_arg(est)
     _add_sponsor_args(est)
+    _add_aroll_args(est)
     est.add_argument("--render-only", action="store_true", help="Plan job where you bring the voiceover, pictures, clips and graphics (with --output plan --voiceover-seconds)")
 
     g = sub.add_parser(
@@ -935,6 +1027,7 @@ def main(argv: list[str] | None = None) -> None:
     _add_captions_arg(g, scope="this video")
     _add_job_look_arg(g)
     _add_sponsor_args(g)
+    _add_aroll_args(g)
     g.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     sc = sub.add_parser(
@@ -1058,6 +1151,7 @@ def main(argv: list[str] | None = None) -> None:
     _add_captions_arg(pj, scope="this video")
     _add_job_look_arg(pj)
     _add_sponsor_args(pj)
+    _add_aroll_args(pj, include=False)
     pj.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     nr = sub.add_parser("narration", help="Numbered sentences and word timings of a plan_ready job")
@@ -1222,6 +1316,8 @@ def main(argv: list[str] | None = None) -> None:
             _print(client.list_brand_kits())
         elif args.cmd == "brand-kit":
             _run_brand_kit(client, args)
+        elif args.cmd == "media":
+            _run_media(client, args)
         elif args.cmd == "voice-design":
             _run_voice_design(client, args)
         elif args.cmd == "template-options":
