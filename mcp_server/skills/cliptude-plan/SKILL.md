@@ -11,10 +11,12 @@ you afterwards what it used and where it had to fall back. Its own planner does 
 nothing.
 
 Formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `vector_explainer` (of the five live formats, all
-but `talking_head`; every other format is retired). Not available in the desktop app yet. **Not for a template whose
-Look is a motion-graphics Look** (`neon-noir`, `paper-atlas`, `editorial-explainer`, `business-ledger`, `route-atlas`):
-Cliptude draws those from its component library, so `create_plan_job` refuses them (code `motion_graphics_look_plan`);
-make those videos with `create_job` (see the **cliptude** skill), or give the template a footage Look first. Videos are
+but `talking_head`; every other format is retired). Not available in the desktop app yet. **Not for an older
+template that still carries a motion-graphics Look** (none is offered any more; e.g. `neon-noir`, `paper-atlas`,
+`data-desk`): Cliptude draws those from its component library, so `create_plan_job` refuses them (code
+`motion_graphics_look_plan`); make those videos with `create_job` (see the **cliptude** skill), or give the template
+an offered Look first. A Look for a plan job comes from `list_looks` (the twelve offered Looks); any other slug is
+refused with code `look_hidden`, unless it is the template's own Look. Videos are
 16:9, avatars Avatar IV only, and captions are off by default (only when the user asks: `captions: true` on
 `create_plan_job` / the template, CLI `--captions`, or after the build `edit_timeline`
 `{"op": "set_captions", "enabled": true}`).
@@ -64,10 +66,25 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    colours and music now), `pricing`, `narration_audio` (`url` to listen to; `download` = the API path, CLI
    `cliptude download-voiceover <job>`). Listen to the hard words before you lock: the sentence text is a
    transcript of the audio, so a misspoken name often shows there as a different word. A wrong word needs a new
-   plan job (new narration) with `pronunciations`; locking cannot change the voice.
+   plan job (new narration) with `pronunciations`; locking cannot change the voice. A `sponsor` block means the
+   user tagged a sponsored segment (`sponsor` on `create_plan_job`): Cliptude splices it in between two sentences
+   after the build, so plan the narration as if it were not there (no shot, graphic, sound or caption for it).
+   An A-roll clip is the same (`aroll` on `create_plan_job`: the user's own clip of someone speaking, or an audio
+   recording, played with its own sound at the end of the sentence holding the line it names, e.g.
+   `{"media": "@kress_cnbc", "after": "they refused to take any more questions"}`): the narration should lead into
+   it, and you plan nothing for it (no shot, graphic, sound or caption). The clip must be in the user's media
+   library first (`upload_to_library`, or `start_library_upload` + `finish_library_upload` on a remote host): a
+   plan upload (`upload_plan_media`) is only for beats and cannot be A-roll.
 5. **Choose graphics.** `get_kind_catalog(format, compact=true)` for one line per graphic, then
    `get_kind_catalog(types=[...])` for the full entries you will use: description (when to use / not for),
-   `prop_schema` (required props), `media_slots`, durations, cap, and a preview video URL.
+   `prop_schema` (required props), `media_slots`, durations, cap, and a preview video URL. When the job or its
+   template has a Look, pass it: `get_kind_catalog(format, look="<slug>")` (`cliptude catalog --look <slug>`). Every
+   offered Look has a spec: it allows only its own boards plus a few neutral ones (`look_only_types` in the reply,
+   also in `get_narration` under `template`), and `look_note` (in the catalog and `get_narration`) says when to use
+   each of its boards: read it before you plan, it is the Look. `check_plan` refuses every other board on that Look
+   (`look_board_banned`), and the build moves or drops any that slip through. See "Look-only boards" below. Empire
+   Story: most shots are `stage_shot` (one prop, B&W photo card or metal word + pill on the dark stage); set
+   `look_sides` (`{"b": [subject], "a": [rival]}`).
 6. **Write the plan** (schema below), then `check_plan` and fix every error until `valid` is true. Checks are free,
    use no LLM, 60/minute. Plan the boards as carefully as the pictures: a premium board on every fact, date, number,
    place and person the narration states (see "A board for every fact"), about 5 graphics a minute, ~70% of them
@@ -149,7 +166,9 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
 11. **Hand over the rendered video.** The revised build is final: when it is ready Cliptude exports it itself
    (the video's first export is free). Poll `get_job` until `render.status` is `completed` (CLI `cliptude status`),
    then call `show_publish_kit`: the user gets the rendered video, thumbnails, titles, description, chapters and
-   tags in one view. Do not review the rebuild and do not ask the user to review it. If the first build needed
+   tags in one view. Tell the user every message in the job's `warnings` (`{code, message}`; e.g.
+   `sponsor_skipped` / `aroll_skipped`: the sponsored segment or A-roll clip could not be added, the video was finished without it and its seconds
+   were not charged; it can be added with `edit_timeline` `add_sponsor`). Do not review the rebuild and do not ask the user to review it. If the first build needed
    no change, skip step 10: `open_editor_project`, then `render_project`, then `show_publish_kit`.
    `render_project` returns 409 `quality_findings_open` while the first build still has `fix_in: "plan"`
    findings: fix them in the one revision. Pass `accept_quality_findings: true` only when the user says to ship
@@ -461,7 +480,8 @@ the presenter seconds you plan.
   `{"slot": "<slot>", "query": "…"}`, `{"slot": …, "person": "Full Name"}` (portrait search; only on portrait
   slots such as `portrait` or `personImageQuery`: an `images` slot takes `query` or `url`), or
   `{"slot": …, "url": "https://…", "fallback_query": "…"}`. A board with no picture found gets an AI still and
-  the report says so. A media item may also carry `intent` (one sentence describing the picture) and `era`, as on
+  the report says so (on a video with a Look: never an AI still; the shot holds a neighbour or becomes a graphic
+  drawn in code: the year, the number, a map of the place or a statement card). A media item may also carry `intent` (one sentence describing the picture) and `era`, as on
   beats. A `url` can be any public http(s) picture or clip; Cliptude downloads and keeps a copy.
 - **Rule: fill every picture slot.** For each graphic, read its `media_slots` and give each slot as many pictures
   as its `min` (a two-picture comparison takes two). `check_plan` refuses a plan that gives fewer
@@ -488,6 +508,20 @@ the presenter seconds you plan.
 - When full-frame boards cover more than ~65% of the runtime, `check_plan` warns (`board_share_high`) and names the
   boards that can sit over a picture; plate them, shorten them or turn some into overlays.
 
+### Look-only boards
+- Some boards are drawn for one Look alone (catalog entries with `look_only: true` and `looks`, the Looks they belong
+  to; `list_looks` gives each Look's `look_only_boards`), e.g. `stage_shot` (Empire Story and others),
+  `briefing_slide` (Claim Check), `article_highlight_push` (Patch Notes and others); the reply's `looks` is the source
+  of truth.
+  Use one only on a video with one of its Looks, as that Look's `look_note` says. Without the Look,
+  `get_kind_catalog` leaves them out and `check_plan` refuses them (`look_only_board`); on another Look it refuses them
+  as `look_board_banned`.
+- **`article_highlight_push` (the article board) takes only `claim`**: the fact as the narrator says it (`"claim": "GTA 6 was delayed to May 2026"`).
+  Never write a headline, outlet, date or paragraph yourself. `check_plan` searches for a real published article
+  that states it and stores it in `props.article` (keep it as returned), or refuses the board with `no_real_article`:
+  then put that line on another board (footage, `quote_caps_blur` for words said aloud, `stat_columns` for a figure).
+  A statement a company published (a press release, a blog post) counts as an article: claim = what it announced.
+
 ### Premium boards
 - Catalog entries with `premium: true` (about 210, mostly full-frame boards: maps, data charts, comparisons, lists,
   timelines, document and article boards) are the newest designs, ported from a premium motion library.
@@ -507,7 +541,22 @@ the presenter seconds you plan.
   (a film still with ratio, guides and shot type) and `checklist_reveal` (items ticked off; `style` check, myth or paper).
   Business-documentary boards: `sunburst_stat_cutout` (a person cut out in front of sunburst rays with their one
   figure slammed behind them, "20%"), `newspaper_keyword_macro` (three close-ups of old newsprint, the one word the
-  press used boxed each time) and `ink_splash_reveal` (the picture shown only inside black ink splashed on paper).
+  press used boxed each time), `ink_splash_reveal` (the picture shown only inside black ink splashed on paper) and
+  `metaphor_scene` (a business point as an object metaphor drawn from code props: `mode` balance, chain, split, stack,
+  multiply, dwarf, tear, drain, walk_past or vs, with `left`/`right` `{prop, label, value}`; its `prop_schema` lists
+  the prop ids, never an AI picture; `propStyle: "rim"` for dark Looks). `one_word_callout_overlay` and
+  `heading_subtext_overlay` take `titleStyle: "metal"` (brushed chrome) or `"emboss"` for a big word title.
+  Framing boards put real pictures or clips in a period frame: `film_strip_frame`, `crt_tv_frame`,
+  `floating_photo_card` (a named person), `vintage_slide_frame`, `photo_grid_wall`, `multi_screen_wall`. Diagram,
+  people, science, megaproject, essay, ranking and explainer boards are in the catalog with their own `use_when`.
+  Gaming: news and posts as screenshots (`article_highlight_push` with only a `claim`, `review_card_sweep`; on the
+  Looks that have them), `rolling_credits` (once, at
+  the very end). Evidence and sourcing: `source_credit_chip` (a small source, credit or "stock footage, not this
+  event" chip that rides any shot), `email_evidence_card`, `audio_evidence_card`, `removed_page_card`,
+  `store_listing_card`, `analytics_screen_card`, `video_call_frame` (a real interview clip in a call frame). Running
+  boards keep their state across the video: give each
+  `running_ledger` the same title and its new row (earlier rows are carried in), and each `chapter_progress_tracker`
+  overlay at a chapter turn (the chapter list and position carry over). Presenter videos: see "Speaker boards" below.
 - Each premium board carries its own timed sound cues (several hits matched to its motion). Leave its `sound` unset
   (or `"auto"`) to keep them, even when the plan lists `sfx`. Setting `sound` replaces them with your one sound and
   `"none"` silences it. Listing any `sfx` mutes the sounds Cliptude would add on its own, not your graphics' cues.
@@ -607,7 +656,9 @@ median 6 s) over ~56% of its runtime, with almost no text overlays. Plan the sam
 - Catalog entries with `speaker: true` (`type: "speaker"`, about 60, named `talking_head_*` plus
   `dual_metric_talking_head` and `framework_mind_map_talking_head`) keep the presenter on screen and animate a graphic
   with them: a bar chart, numbered list, receipt, calendar, mind map, chapter title, card collage and more. The
-  catalog lists them only for these two formats; elsewhere `check_plan` refuses one (`wrong_format`).
+  catalog lists them only for these two formats; elsewhere `check_plan` refuses one (`wrong_format`). Every Look
+  allows them there (a Look that curates its own, like `level-playbook`, keeps its list); they do not count against
+  the Look's own boards. `talking_head_subscribe_card` once, on the subscribe ask (the brand kit fills the channel).
 - Put each one **inside a full-screen presenter window** (start and end within it); Cliptude plays that window's
   presenter clip in the board. Outside one, or in a split window, `check_plan` refuses it (`speaker_outside_presenter`).
   They are the exception to "full-screen windows may not cover graphics".
@@ -812,8 +863,9 @@ Leave out any field you are happy with: `get_narration`'s `template.look` shows 
   except speaker boards, which must sit inside one. A split window's `collage_media` is up to three searched
   pictures beside the presenter, `{"query": "…", "intent": "…"}` each (no `url` or `keep` there yet); without it
   Cliptude picks the pictures from the narration. Each window costs its sentences plus ~0.7 s of padding.
-- Vector Explainer: every picture beat is drawn as a flat vector illustration (the template's or job's character,
-  colour or black-and-white style). Nothing is searched: write `media.intent` as what to draw (subject, action,
+- Vector Explainer: every picture beat is drawn as an illustration (the template's or job's character, colour or
+  black-and-white style, and art style: flat vector unless `vector_art_style` or the Look picks luminous, low poly 3D,
+  3D mannequin, paper diorama, clay or flat cartoon (`flat_cartoon`); `get_narration` shows it as `template.vector.art_style`). Nothing is searched: write `media.intent` as what to draw (subject, action,
   setting) and keep `query` a short label; `person` names are drawn as stylised figures. Alts and eras are not
   needed. Boards that show photos (any catalog entry with media slots) are not listed for this format and
   `check_plan` refuses them (`excluded_type`). `get_narration` returns the settings under `template.vector`.

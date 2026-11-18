@@ -1,6 +1,6 @@
 """Tiny CLI wrapping /api/v1: auth | pick | templates | template-create | template-update | template-options | looks |
-look-template | brand-kits | voices | voice-design | avatars | estimate | generate | editor | agent | render | script |
-voiceover | continue | status | jobs | account | cancel.
+look-template | brand-kits | brand-kit | voices | voice-design | avatars | estimate | generate | editor | agent | render | script |
+voiceover | continue | status | jobs | account | cancel | docs.
 
 Live formats: faceless_documentary, faceless_top_10, avatar_video, talking_head, vector_explainer (16:9 only)."""
 
@@ -71,15 +71,12 @@ def _reviewed(args, call, *, heading: str = "Review this video before it is crea
 
 
 def _rate_lines(review: dict) -> list[str]:
-    """The per-minute rate and the painted-Look add-on when there is one, for a job review."""
+    """The per-minute rate, for a job review."""
     credits = review.get("credits") or {}
     lines = []
     if credits.get("credits_per_minute"):
         lines.append(f"Credits per minute: {credits['credits_per_minute']}")
-    painted = credits.get("painted_look_credits_per_minute")
-    if painted:
-        lines.append(f"Painted Look add-on: +{painted} credits/min (AI-painted scenes; included above)")
-    # The Look itself is a review setting ("Look: Empire Story (empire-story), painted +20/min ..."), printed above.
+    # The Look itself is a review setting ("Look: Empire Story (empire-story)"), printed above.
     return lines
 
 
@@ -179,6 +176,150 @@ def _add_captions_arg(parser: argparse.ArgumentParser, *, scope: str) -> None:
                              "--no-captions turns them off. Omit to keep the template's.")
 
 
+def _add_job_look_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--look", default=None,
+                        help='A Look for this video only, overriding the template\'s: a slug from `cliptude looks` '
+                             '("none" = no Look). Only the Looks `cliptude looks` lists are accepted for a new choice '
+                             '(a no-longer-offered Look is refused with code look_hidden unless the template already has it).')
+    parser.add_argument("--brand-kit", type=int, default=None,
+                        help="A brand kit for this video only, overriding the template's (id from `cliptude brand-kit "
+                             "list`; 0 = your default kit): its colours, fonts, subscribe-card channel and logo.")
+
+
+def _add_new_brand_kit_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--new-brand-kit", default=None, metavar="JSON",
+                        help='Make a new brand kit and give it to the template in the same call: a JSON object (or '
+                             '@file.json) with name, channel_name, channel_handle, colors, fonts, logo_position and a '
+                             'logo as logo_path (a local file, uploaded first), logo_url or logo_media_id. '
+                             'Not with --brand-kit.')
+
+
+def _new_brand_kit_from_args(args) -> dict | None:
+    raw = getattr(args, "new_brand_kit", None)
+    if not raw:
+        return None
+    text = Path(raw[1:]).read_text(encoding="utf-8") if raw.startswith("@") else raw
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise CliptudeApiError(f"--new-brand-kit is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise CliptudeApiError("--new-brand-kit must be a JSON object.")
+    return data
+
+
+def _add_brand_kit_field_args(parser: argparse.ArgumentParser, *, update: bool) -> None:
+    parser.add_argument("--name", default=None, required=not update, help="The kit's name, usually the channel's")
+    parser.add_argument("--channel-name", default=None,
+                        help='Channel name on the subscribe card ("" clears it)')
+    parser.add_argument("--channel-handle", default=None,
+                        help='YouTube handle for the subscribe card, e.g. @northwindnotes ("" clears it)')
+    parser.add_argument("--color", action="append", default=None, metavar="HEX",
+                        help="A brand colour, #RRGGBB; repeat up to five times (first = main colour). "
+                             "Replaces all the kit's colours.")
+    parser.add_argument("--font", action="append", default=None, metavar="ROLE=FAMILY[:WEIGHT]",
+                        help="A font, e.g. title=Oswald:700 or body=Inter; roles title, subtitle, body, label. "
+                             "Repeatable; `cliptude brand-kit options` lists the families.")
+    parser.add_argument("--logo-position", default=None,
+                        choices=["auto", "top_left", "top_right", "bottom_left", "bottom_right", "none"])
+    parser.add_argument("--logo", default=None, metavar="PATH|URL",
+                        help="The logo: a local PNG/JPG/WebP file (uploaded) or a public https link (max 5 MB)")
+    parser.add_argument("--logo-media-id", default=None, help="An image already in your media library")
+    if update:
+        parser.add_argument("--remove-logo", action="store_true", help="Take the logo off the kit")
+    parser.add_argument("--default", action="store_true", help="Make it your default kit")
+
+
+def _fonts_from_args(values: list[str] | None) -> dict | None:
+    if not values:
+        return None
+    fonts: dict = {}
+    for item in values:
+        role, sep, rest = item.partition("=")
+        if not sep or not role.strip() or not rest.strip():
+            raise CliptudeApiError(f"--font {item!r}: use ROLE=FAMILY or ROLE=FAMILY:WEIGHT, e.g. title=Oswald:700.")
+        family, _, weight = rest.partition(":")
+        entry: dict = {"family": family.strip()}
+        if weight.strip():
+            try:
+                entry["weight"] = int(weight)
+            except ValueError as exc:
+                raise CliptudeApiError(f"--font {item!r}: the weight is a number such as 700.") from exc
+        fonts[role.strip()] = entry
+    return fonts
+
+
+def _brand_kit_fields_from_args(args) -> dict:
+    """create_brand_kit / update_brand_kit keyword arguments from the flags (None = not sent)."""
+    logo = (args.logo or "").strip()
+    is_url = logo.lower().startswith(("http://", "https://"))
+    fields = {
+        "channel_name": args.channel_name,
+        "channel_handle": args.channel_handle,
+        "colors": args.color,
+        "fonts": _fonts_from_args(args.font),
+        "logo_position": args.logo_position,
+        "logo_url": logo if is_url else None,
+        "logo_path": logo if logo and not is_url else None,
+        "logo_media_id": args.logo_media_id or None,
+        "is_default": True if args.default else None,
+    }
+    if getattr(args, "remove_logo", False):
+        fields["remove_logo"] = True
+    return fields
+
+
+def _run_brand_kit(client: CliptudeClient, args) -> None:
+    cmd = args.bk_cmd
+    if cmd == "list":
+        _print(client.list_brand_kits())
+    elif cmd == "options":
+        _print(client.brand_kit_options())
+    elif cmd == "get":
+        _print(client.get_brand_kit(args.kit_id))
+    elif cmd == "create":
+        _print(client.create_brand_kit(name=args.name, **_brand_kit_fields_from_args(args)))
+    elif cmd == "update":
+        fields = {k: v for k, v in _brand_kit_fields_from_args(args).items() if v is not None}
+        if args.name is not None:
+            fields["name"] = args.name
+        if not fields:
+            raise CliptudeApiError("Nothing to change: give --name, --channel-name, --channel-handle, --color, --font, "
+                                   "--logo-position, --logo, --logo-media-id, --remove-logo or --default.")
+        _print(client.update_brand_kit(args.kit_id, **fields))
+    elif cmd == "set-default":
+        _print(client.set_default_brand_kit(args.kit_id))
+    elif cmd == "delete":
+        if not args.yes:
+            if not sys.stdin.isatty():
+                raise CliptudeApiError("Deleting a brand kit cannot be undone: add --yes to confirm.")
+            kit = client.get_brand_kit(args.kit_id)
+            answer = input(f"Delete brand kit {kit.get('name', args.kit_id)!r}? Its logo stays in your media library. [y/N] ")
+            if answer.strip().lower() not in ("y", "yes"):
+                print("Not deleted.", file=sys.stderr)
+                return
+        _print(client.delete_brand_kit(args.kit_id))
+
+
+def _add_sponsor_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--sponsor", default=None,
+                        help="A media-library video (@nordvpn_ad or its file name) spliced in as a sponsored segment "
+                             "with its own sound: the narration pauses for it. At most 3 minutes.")
+    parser.add_argument("--sponsor-placement", default=None,
+                        help="Where: 'at 2:00', 'after the intro', 'halfway', 'before chapter 3', 'before the "
+                             "ending', 'at the start' or 'at the end' (snapped to a sentence end). Omit: Cliptude "
+                             "places it after the hook and first chapter.")
+    parser.add_argument("--sponsor-bumpers", action=argparse.BooleanOptionalAction, default=None,
+                        help="'A word from our sponsor' / 'Back to the story' cards around it (on by default; "
+                             "--no-sponsor-bumpers leaves them out)")
+
+
+def _sponsor_kwargs(args) -> dict:
+    return {"sponsor": getattr(args, "sponsor", None) or None,
+            "sponsor_placement": getattr(args, "sponsor_placement", None) or None,
+            "sponsor_bumpers": getattr(args, "sponsor_bumpers", None)}
+
+
 def _add_voice_setting_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--stability", type=float, default=None, help="0 to 1")
     parser.add_argument("--similarity-boost", type=float, default=None, help="0 to 1")
@@ -240,6 +381,39 @@ def _wait(fetch, status_of, *, interval: float = 10.0, timeout: float = 3600.0):
             return payload
         print(f"{status or 'pending'}...", file=sys.stderr)
         time.sleep(interval)
+
+
+def _run_docs(client: CliptudeClient, args) -> None:
+    """cliptude docs search|read|list: Markdown and plain text by default, --json for the API response."""
+    cmd = args.docs_cmd
+    if cmd == "search":
+        payload = client.search_docs(" ".join(args.query), limit=args.limit)
+        if args.json:
+            _print(payload)
+            return
+        for row in payload.get("results") or []:
+            heading = f" > {row['section']}" if row.get("section") and row["section"] != row.get("title") else ""
+            print(f"## {row.get('title')}{heading}\n{row.get('url')}  (read: cliptude docs read {row.get('slug')}"
+                  + (f' --section "{row["section"]}"' if heading else "") + f")\n\n{row.get('excerpt', '')}\n")
+        if not payload.get("results"):
+            print("No docs section matches. Try other words, or `cliptude docs list`.", file=sys.stderr)
+    elif cmd == "read":
+        payload = client.read_doc(args.slug, section=args.section or None, offset=args.offset, max_chars=args.max_chars)
+        if args.json:
+            _print(payload)
+            return
+        print(f"Source: {payload.get('url')}\n")
+        print(payload.get("content", ""))
+        if payload.get("next_offset") is not None:
+            print(f"\n[{payload['next_offset']} of {payload.get('total_chars')} characters shown; continue with "
+                  f"--offset {payload['next_offset']}]", file=sys.stderr)
+    else:
+        payload = client.list_docs(category=args.category or None)
+        if args.json:
+            _print(payload)
+            return
+        for row in payload.get("results") or []:
+            print(f"{row.get('slug'):<28} {row.get('title')}  [{row.get('category')}]")
 
 
 def _run_voice_design(client: CliptudeClient, args) -> None:
@@ -456,6 +630,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     _add_thumbnail_args(tc, scope="every video from this template")
     _add_branding_args(tc)
+    _add_new_brand_kit_arg(tc)
     _add_captions_arg(tc, scope="every video from this template")
 
     tu = sub.add_parser(
@@ -464,16 +639,17 @@ def main(argv: list[str] | None = None) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "example:\n"
-            '  cliptude template-update "TSMC doc" --look cold-case-board --brand-kit 3 --show-logo\n'
+            '  cliptude template-update "TSMC doc" --look empire-story --brand-kit 3 --show-logo\n'
             '  cliptude template-update "TSMC doc" --look ""   (removes the Look)'
         ),
     )
     tu.add_argument("template", help="Template name or UUID")
     tu.add_argument("--name", default=None, help="New name")
     _add_branding_args(tu)
+    _add_new_brand_kit_arg(tu)
     _add_captions_arg(tu, scope="every video from this template")
 
-    lk = sub.add_parser("looks", help="List the prebuilt Looks (formats, colours, painted +20 credits/min, motion graphics)")
+    lk = sub.add_parser("looks", help="List the offered Looks (formats, colours, boards, sample reel)")
     lk.add_argument("--topic", default="", help="The video's title or description: the Looks that fit it come first with suggested=true and a reason")
     lk.add_argument("--format", default="", help="Only suggest Looks that work with this format")
     lt = sub.add_parser("look-template", help="Save a Look as one of your templates; prints the template")
@@ -481,6 +657,50 @@ def main(argv: list[str] | None = None) -> None:
     lt.add_argument("--name", default="", help="Template name (default: the Look's name)")
     lt.add_argument("--format", default="", help="One of the Look's formats (default: its own)")
     sub.add_parser("brand-kits", help="List your brand kits (id for --brand-kit)")
+
+    dc = sub.add_parser("docs", help="Search and read the Cliptude docs as Markdown (no login needed)")
+    dc_sub = dc.add_subparsers(dest="docs_cmd", required=True)
+    dcs = dc_sub.add_parser("search", help="Docs sections that answer a question (title, section, url, excerpt)")
+    dcs.add_argument("query", nargs="+", help="The question or words to look for")
+    dcs.add_argument("--limit", type=int, default=8, help="How many sections (1-20)")
+    dcs.add_argument("--json", action="store_true", help="Print the JSON response")
+    dcr = dc_sub.add_parser("read", help="A docs page (or one section) as Markdown")
+    dcr.add_argument("slug", help="Page slug from `cliptude docs list` or search (credits, looks, api, ...)")
+    dcr.add_argument("--section", default="", help="Only this section heading and its subsections")
+    dcr.add_argument("--offset", type=int, default=0, help="Continue a long page from this character (next_offset)")
+    dcr.add_argument("--max-chars", type=int, default=20000, help="At most this many characters (500-20000)")
+    dcr.add_argument("--json", action="store_true", help="Print the JSON response")
+    dcl = dc_sub.add_parser("list", help="Every docs page: slug, title, category")
+    dcl.add_argument("--category", default="", help="Only this sidebar group (Getting Started, Guides, Editor, ...)")
+    dcl.add_argument("--json", action="store_true", help="Print the JSON response")
+    bk = sub.add_parser(
+        "brand-kit",
+        help="Brand kits (one per channel): list, options, get, create, update, set-default, delete",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            '  cliptude brand-kit create --name "Northwind Notes" --channel-handle @northwindnotes '
+            "--color '#1F6FEB' --color '#FFFFFF' --font title=Oswald:700 --logo ./logo.png\n"
+            "  cliptude brand-kit update 3 --logo https://example.com/logo.png --logo-position top_left\n"
+            "  cliptude brand-kit set-default 3\n"
+            "  cliptude brand-kit delete 3 --yes"
+        ),
+    )
+    bk_sub = bk.add_subparsers(dest="bk_cmd", required=True)
+    bk_sub.add_parser("list", help="List your brand kits")
+    bk_sub.add_parser("options", help="Fonts, weights, logo positions, colour format and limits")
+    bkg = bk_sub.add_parser("get", help="Show one brand kit")
+    bkg.add_argument("kit_id", type=int)
+    bkc = bk_sub.add_parser("create", help="Make a brand kit")
+    _add_brand_kit_field_args(bkc, update=False)
+    bku = bk_sub.add_parser("update", help="Change a brand kit (only the flags given)")
+    bku.add_argument("kit_id", type=int)
+    _add_brand_kit_field_args(bku, update=True)
+    bks = bk_sub.add_parser("set-default", help="Make a kit your default")
+    bks.add_argument("kit_id", type=int)
+    bkd = bk_sub.add_parser("delete", help="Delete a brand kit (its logo stays in your media library)")
+    bkd.add_argument("kit_id", type=int)
+    bkd.add_argument("--yes", action="store_true", help="Do not ask to confirm")
 
     vd = sub.add_parser(
         "voice-design",
@@ -593,6 +813,8 @@ def main(argv: list[str] | None = None) -> None:
     est.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
     est.add_argument("--vector-motion", default="", choices=["", "none", "video"], help="Vector Explainer: price stills (none) or AI clips (video)")
     _add_captions_arg(est, scope="this video")
+    _add_job_look_arg(est)
+    _add_sponsor_args(est)
     est.add_argument("--render-only", action="store_true", help="Plan job where you bring the voiceover, pictures, clips and graphics (with --output plan --voiceover-seconds)")
 
     g = sub.add_parser(
@@ -708,7 +930,11 @@ def main(argv: list[str] | None = None) -> None:
     _add_thumbnail_args(g, scope="this video")
     _add_pronunciations_arg(g)
     g.add_argument("--vector-motion", default="", choices=["", "none", "video"], help='Vector Explainer: "none" = stills with camera moves, "video" = AI clips. Default: the template\'s')
+    g.add_argument("--vector-art-style", default=None, choices=["", "flat", "luminous", "low_poly", "mannequin", "paper", "clay", "flat_cartoon"], help='Vector Explainer art style: flat, luminous (glowing, no outlines), low_poly (faceted 3D), mannequin (clay diorama), paper (layered cardstock) or clay (claymation); "" follows the Look. Default: the template\'s')
+    g.add_argument("--vector-image-model", default="", choices=["", "gpt_image", "grok"], help='Vector Explainer image model: gpt_image (more detail) or grok (simpler, cheaper). Default: the template\'s')
     _add_captions_arg(g, scope="this video")
+    _add_job_look_arg(g)
+    _add_sponsor_args(g)
     g.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     sc = sub.add_parser(
@@ -827,7 +1053,11 @@ def main(argv: list[str] | None = None) -> None:
     _add_thumbnail_args(pj, scope="this video")
     _add_pronunciations_arg(pj)
     pj.add_argument("--vector-motion", default="", choices=["", "none", "video"], help='Vector Explainer: "none" = stills with camera moves, "video" = AI clips. Default: the template\'s')
+    pj.add_argument("--vector-art-style", default=None, choices=["", "flat", "luminous", "low_poly", "mannequin", "paper", "clay", "flat_cartoon"], help='Vector Explainer art style: flat, luminous (glowing, no outlines), low_poly (faceted 3D), mannequin (clay diorama), paper (layered cardstock) or clay (claymation); "" follows the Look. Default: the template\'s')
+    pj.add_argument("--vector-image-model", default="", choices=["", "gpt_image", "grok"], help='Vector Explainer image model: gpt_image (more detail) or grok (simpler, cheaper). Default: the template\'s')
     _add_captions_arg(pj, scope="this video")
+    _add_job_look_arg(pj)
+    _add_sponsor_args(pj)
     pj.add_argument("--vector-character", default="", help='Vector Explainer: character id from `cliptude vector-characters`, or "none". Default: the template\'s')
 
     nr = sub.add_parser("narration", help="Numbered sentences and word timings of a plan_ready job")
@@ -839,6 +1069,7 @@ def main(argv: list[str] | None = None) -> None:
     cat.add_argument("--compact", action="store_true", help="One summary line per graphic")
     cat.add_argument("--types", default="", help="Comma-separated types/styles for full entries")
     cat.add_argument("--premium", action="store_true", help="Only the premium boards")
+    cat.add_argument("--look", default="", help="The job's Look slug: a Look with a spec lists only its own boards, with look_note on when to use them; without --look the look-only boards are left out")
 
     for name, text in (("plan-check", "Validate a plan file (nothing stored)"), ("plan-lock", "Validate and lock a plan file")):
         pc = sub.add_parser(name, help=text)
@@ -966,22 +1197,31 @@ def main(argv: list[str] | None = None) -> None:
             thumbnail = _thumbnail_from_args(args)
             if thumbnail:
                 settings["thumbnail"] = thumbnail
+            new_kit = _new_brand_kit_from_args(args)
             _print(client.create_template(name=args.name, format=args.format, settings=settings,
                                           brand_kit_id=args.brand_kit, show_logo=args.show_logo, look=args.look or None,
-                                          captions=args.captions))
+                                          captions=args.captions,
+                                          **({"brand_kit": new_kit} if new_kit is not None else {})))
         elif args.cmd == "template-update":
+            new_kit = _new_brand_kit_from_args(args)
             if (args.name is None and args.look is None and args.brand_kit is None and args.show_logo is None
-                    and args.captions is None):
-                raise CliptudeApiError("Give --name, --look, --brand-kit, --show-logo / --no-show-logo or --captions / --no-captions.")
+                    and args.captions is None and new_kit is None):
+                raise CliptudeApiError("Give --name, --look, --brand-kit, --new-brand-kit, --show-logo / --no-show-logo "
+                                       "or --captions / --no-captions.")
             _print(client.update_template(_resolve_template_id(client, args.template), name=args.name,
                                           brand_kit_id=args.brand_kit, show_logo=args.show_logo, look=args.look,
-                                          captions=args.captions))
+                                          captions=args.captions,
+                                          **({"brand_kit": new_kit} if new_kit is not None else {})))
         elif args.cmd == "looks":
             _print(client.list_looks(topic=args.topic or None, format=args.format or None))
+        elif args.cmd == "docs":
+            _run_docs(client, args)
         elif args.cmd == "look-template":
             _print(client.save_look_as_template(args.slug, name=args.name or None, format=args.format or None))
         elif args.cmd == "brand-kits":
             _print(client.list_brand_kits())
+        elif args.cmd == "brand-kit":
+            _run_brand_kit(client, args)
         elif args.cmd == "voice-design":
             _run_voice_design(client, args)
         elif args.cmd == "template-options":
@@ -1022,6 +1262,9 @@ def main(argv: list[str] | None = None) -> None:
                 render_only=args.render_only or None,
                 vector_reveal_mode=args.vector_motion or None,
                 captions=args.captions,
+                look=args.look,
+                brand_kit_id=args.brand_kit,
+                **_sponsor_kwargs(args),
             ))
         elif args.cmd == "generate":
             script = args.script
@@ -1071,8 +1314,13 @@ def main(argv: list[str] | None = None) -> None:
                 thumbnail=_thumbnail_from_args(args),
                 vector_character_id=args.vector_character or None,
                 vector_reveal_mode=args.vector_motion or None,
+                vector_art_style=args.vector_art_style,
+                vector_image_model=args.vector_image_model or None,
                 pronunciations=_pronunciations_from_args(args),
                 captions=args.captions,
+                look=args.look,
+                brand_kit_id=args.brand_kit,
+                **_sponsor_kwargs(args),
             ))
         elif args.cmd == "script":
             if not (args.prompt or "").strip():
@@ -1124,8 +1372,13 @@ def main(argv: list[str] | None = None) -> None:
                 thumbnail=_thumbnail_from_args(args),
                 vector_character_id=args.vector_character or None,
                 vector_reveal_mode=args.vector_motion or None,
+                vector_art_style=args.vector_art_style,
+                vector_image_model=args.vector_image_model or None,
                 pronunciations=_pronunciations_from_args(args),
                 captions=args.captions,
+                look=args.look,
+                brand_kit_id=args.brand_kit,
+                **_sponsor_kwargs(args),
             ))
         elif args.cmd == "narration":
             _print(client.get_narration(args.job_id))
@@ -1133,7 +1386,7 @@ def main(argv: list[str] | None = None) -> None:
             types = [t.strip() for t in (args.types or "").split(",") if t.strip()]
             _print(client.get_kind_catalog(
                 format=args.format or None, theme=args.theme or None, compact=args.compact, types=types or None,
-                premium=args.premium,
+                premium=args.premium, look=args.look or None,
             ))
         elif args.cmd in ("plan-check", "plan-lock"):
             plan = json.loads(Path(args.plan_file).read_text(encoding="utf-8"))

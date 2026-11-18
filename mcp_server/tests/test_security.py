@@ -270,10 +270,15 @@ class AnnotationsAndUntrustedTextTests(TestCase):
             "save_look_as_template",
             # Designed voices: settings, remix (previews and replacing the voice) and delete.
             "update_designed_voice_settings", "remix_designed_voice", "save_remixed_voice", "delete_designed_voice",
+            # Brand kits: create, change, default, delete, and the logo upload.
+            "create_brand_kit", "update_brand_kit", "set_default_brand_kit", "delete_brand_kit",
+            "start_brand_upload", "finish_brand_upload",
+            # Media library uploads: a file kept in the library (signed upload, local paths, a public link).
+            "start_library_upload", "finish_library_upload", "upload_to_library", "import_media",
         }
         destructive = {"delete_vector_character", "abort_media_upload", "cancel_job", "cancel_agent_run",
                        "lock_plan", "run_agent", "edit_timeline", "restore_editor_version", "save_remixed_voice",
-                       "delete_designed_voice"}
+                       "delete_designed_voice", "delete_brand_kit"}
         for name, tool in self.tools.items():
             ann = tool.annotations
             self.assertIsNotNone(ann, name)

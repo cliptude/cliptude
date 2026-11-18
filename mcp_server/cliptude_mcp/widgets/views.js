@@ -310,10 +310,6 @@ var Views = (function () {
     add("Already paid", credits.credits_already_paid);
     add("Full video price", credits.full_video_price);
     if (credits.credits_per_minute) add("Credits per minute", credits.credits_per_minute);
-    // A painted Look (AI-painted scenes on Faceless Documentary) is already inside the rate; shown on its own.
-    if (credits.painted_look_credits_per_minute) {
-      add("Painted Look add-on", "+" + num(credits.painted_look_credits_per_minute) + " credits/min (included above)", "warn");
-    }
     if (lookRow && lookRow.value && lookRow.value !== "None") add("Look", String(lookRow.value));
     add("Available", credits.credits_available);
     var enough = credits.enough_credits;

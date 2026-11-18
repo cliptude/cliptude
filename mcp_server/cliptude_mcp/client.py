@@ -314,6 +314,77 @@ def merge_visual_direction(prompt: str | None, visual_direction: str | None) -> 
     return text or None
 
 
+def merge_sponsor(prompt: str | None, sponsor: str | None, placement: str | None = None,
+                  bumpers: bool | None = None) -> str | None:
+    """The prompt with a sponsor sentence ("Sponsor: @nordvpn_ad after the intro.") for ``sponsor``: a media-library
+    video spliced in as a sponsored segment with its own sound (the server reads the sentence,
+    videos/sponsor_segments.py, and refuses a placement it cannot read when sent as the API's own params)."""
+    import re as _re
+
+    raw = str(sponsor or "").strip().lstrip("@")
+    text = (prompt or "").strip()
+    if not raw:
+        return text or None
+    token = _re.sub(r"[^0-9a-z]+", "_", _re.sub(r"\.[A-Za-z0-9]{2,4}$", "", raw).lower()).strip("_")
+    if not token:
+        raise CliptudeApiError("sponsor must name a media-library video, like @nordvpn_ad.")
+    if f"@{token}" in text.lower() and _re.search(r"\bsponsor", text, _re.I):
+        return text
+    where = " ".join(str(placement or "").split()).strip().rstrip(".")
+    if _re.fullmatch(r"(?i)auto(matic)?|anywhere|", where):
+        where = ""
+    sentence = f"Sponsor: @{token}" + (f" {where}" if where else "") + (", no bumpers" if bumpers is False else "") + "."
+    return f"{text}\n\n{sentence}".strip() if text else sentence
+
+
+MAX_AROLLS = 4
+
+
+def merge_aroll(prompt: str | None, aroll: Any) -> str | None:
+    """The prompt with one "A-roll: @clip after "<a line of the script>"." sentence per ``aroll`` item: the user's own
+    clip of someone speaking, spliced in between two sentences with its own sound (the narration pauses for it).
+    Items: "@clip" or {"media": "@clip", "placement": 'after "a line"'} (or "after": "a line"). The server reads the
+    sentence (videos/sponsor_segments.py) and refuses a line the script does not say."""
+    import re as _re
+
+    text = (prompt or "").strip()
+    items = aroll if isinstance(aroll, (list, tuple)) else ([aroll] if aroll else [])
+    if len(items) > MAX_AROLLS:
+        raise CliptudeApiError(f"A video can have at most {MAX_AROLLS} A-roll clips; you sent {len(items)}.")
+    sentences = []
+    for item in items:
+        if isinstance(item, dict):
+            raw = str(item.get("media") or item.get("file") or item.get("token") or "")
+            where = str(item.get("placement") or "")
+            if not where and item.get("after"):
+                where = f'after "{item["after"]}"'
+            if not where and item.get("before"):
+                where = f'before "{item["before"]}"'
+            says = str(item.get("says") or item.get("transcript") or "").strip()
+            if says:
+                where = f'{where} says "{says}"'.strip()
+        else:
+            raw, where = str(item or ""), ""
+        raw = raw.strip().lstrip("@")
+        token = _re.sub(r"[^0-9a-z]+", "_", _re.sub(r"\.[A-Za-z0-9]{2,4}$", "", raw).lower()).strip("_")
+        if not token:
+            raise CliptudeApiError("Each aroll item names a media-library video, like @kress_interview.")
+        if f"@{token}" in text.lower() and _re.search(r"\ba[- ]?roll", text, _re.I):
+            continue
+        # . ! ? inside a quoted line would end the tag's sentence early on the server; the line matches without them.
+        where = _re.sub(r'(["“])([^"“”]*)(["”])',
+                        lambda q: q.group(1) + " ".join(_re.sub(r"[.!?…\n]+", " ", q.group(2)).split()) + q.group(3),
+                        where)
+        where = " ".join(where.split()).strip().rstrip(".")
+        if _re.fullmatch(r"(?i)auto(matic)?|anywhere|", where):
+            where = ""
+        sentences.append(f"A-roll: @{token}" + (f" {where}" if where else "") + ".")
+    if not sentences:
+        return text or None
+    joined = "\n".join(sentences)
+    return f"{text}\n\n{joined}".strip() if text else joined
+
+
 def _review_job_fields(review_token: str | None, acknowledge: list[str] | None, review_only: bool | None,
                        *, as_strings: bool = False) -> dict[str, Any]:
     """The job review: Cliptude answers a job without a review_token with the review (HTTP 428)."""
@@ -491,11 +562,24 @@ class CliptudeClient:
     def get_template(self, template_id: str) -> Any:
         return self.request("GET", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}")
 
+    def _inline_brand_kit(self, brand_kit: dict[str, Any] | None, brand_kit_id: int | None) -> dict[str, Any] | None:
+        """A new kit sent with a template; a local ``logo_path`` in it is uploaded first."""
+        if brand_kit is None:
+            return None
+        if brand_kit_id is not None:
+            raise CliptudeApiError("Give brand_kit_id (an existing kit) or brand_kit (a new one), not both.")
+        kit = dict(brand_kit)
+        logo_path = kit.pop("logo_path", None)
+        return self._brand_kit_body(kit, logo_path)
+
     def create_template(self, *, name: str, format: str, settings: dict[str, Any],
                         brand_kit_id: int | None = None, show_logo: bool | None = None,
-                        look: str | None = None, captions: bool | None = None) -> Any:
-        """Create a ready-to-use template from settings (no create wizard); optional brand kit, logo, Look and
-        whole-video captions (off by default)."""
+                        look: str | None = None, captions: bool | None = None,
+                        brand_kit: dict[str, Any] | None = None) -> Any:
+        """Create a ready-to-use template from settings (no create wizard); optional brand kit (an existing one by
+        id, or ``brand_kit``: a new kit made and attached in the same call), logo, Look and whole-video captions
+        (off by default)."""
+        new_kit = self._inline_brand_kit(brand_kit, brand_kit_id)
         settings = dict(settings or {})
         if captions is not None:
             settings["captions_enabled"] = bool(captions)
@@ -504,15 +588,20 @@ class CliptudeClient:
             body["look"] = look
         if brand_kit_id is not None:
             body["brand_kit_id"] = brand_kit_id or None
+        if new_kit is not None:
+            body["brand_kit"] = new_kit
         if show_logo is not None:
             body["show_logo"] = bool(show_logo)
-        return self.request("POST", "/api/v1/templates", json_body=body)
+        # A new kit's logo_url is downloaded during the call.
+        return self.request("POST", "/api/v1/templates", json_body=body,
+                            **({"timeout": max(self.timeout, 60.0)} if new_kit is not None else {}))
 
     def update_template(self, template_id: str, *, name: str | None = None, brand_kit_id: int | None = None,
                         show_logo: bool | None = None, look: str | None = None,
-                        captions: bool | None = None) -> Any:
-        """Rename a template, set its brand kit (0 = the user's default kit), its logo switch, its Look
-        ('' removes the Look) or its whole-video captions."""
+                        captions: bool | None = None, brand_kit: dict[str, Any] | None = None) -> Any:
+        """Rename a template, set its brand kit (0 = the user's default kit, or ``brand_kit``: a new kit made and
+        attached in the same call), its logo switch, its Look ('' removes the Look) or its whole-video captions."""
+        new_kit = self._inline_brand_kit(brand_kit, brand_kit_id)
         body: dict[str, Any] = {}
         if captions is not None:
             body["captions"] = bool(captions)
@@ -522,6 +611,8 @@ class CliptudeClient:
             body["name"] = name
         if brand_kit_id is not None:
             body["brand_kit_id"] = brand_kit_id or None
+        if new_kit is not None:
+            body["brand_kit"] = new_kit
         if show_logo is not None:
             body["show_logo"] = bool(show_logo)
         return self.request("PATCH", f"/api/v1/templates/{_uuid_seg(template_id, 'template_id')}", json_body=body)
@@ -550,6 +641,184 @@ class CliptudeClient:
     def list_brand_kits(self) -> Any:
         """The user's brand kits (one per channel): logo, colours, fonts; one is the default."""
         return self.request("GET", "/api/v1/brand-kits")
+
+    def _public_get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        """GET a public endpoint (the docs): sends the session when there is one, works without signing in."""
+        if self.connection_error:
+            raise CliptudeApiError(self.connection_error)
+        if self.api_key:
+            return self.request("GET", path, params=params)
+        headers = {"Accept": "application/json", **django_proxy_headers(self.base_url)}
+        if self.client_kind:
+            headers["X-Cliptude-Client"] = self.client_kind
+        try:
+            resp = httpx.get(f"{self.base_url}{path}", headers=headers, params=params, timeout=self.timeout)
+        except httpx.HTTPError as exc:
+            raise CliptudeApiError(str(exc)) from exc
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {"error": resp.text}
+        if resp.status_code >= 400:
+            message = payload.get("error") if isinstance(payload, dict) else str(payload)
+            raise CliptudeApiError(message or f"HTTP {resp.status_code}", status=resp.status_code, payload=payload)
+        return payload
+
+    def list_docs(self, *, category: str | None = None) -> Any:
+        """Every Cliptude docs page: slug, title, url, category, summary and its main section headings."""
+        return self._public_get("/api/v1/docs", {"category": category} if category else None)
+
+    def search_docs(self, query: str, *, limit: int = 8) -> Any:
+        """Docs sections ranked for a question: page title, section heading, url and a ~600-character excerpt."""
+        query = " ".join(str(query or "").split())
+        if not query:
+            raise CliptudeApiError("query is required.", status=400)
+        return self._public_get("/api/v1/docs/search", {"q": query[:300], "limit": max(1, min(int(limit), 20))})
+
+    def read_doc(self, slug: str, *, section: str | None = None, offset: int = 0, max_chars: int = 20000) -> Any:
+        """One docs page as Markdown (or one heading's section), up to max_chars from offset; next_offset pages on."""
+        text = str(slug or "").strip().strip("/")
+        text = re.sub(r"^(https?://[^/]+)?/?docs/", "", text).split("#", 1)[0].strip("/") or "overview"
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,80}", text.lower()):
+            raise CliptudeApiError("slug must be a docs page slug from list_docs or search_docs, e.g. credits.",
+                                   status=400)
+        params: dict[str, Any] = {"offset": max(0, int(offset)), "max_chars": max(500, min(int(max_chars), 20000))}
+        if section and section.strip():
+            params["section"] = section.strip()[:200]
+        return self._public_get(f"/api/v1/docs/{quote(text.lower(), safe='')}", params)
+
+    def brand_kit_options(self) -> Any:
+        """Fonts, weights, logo positions, colour format and limits a brand kit may use."""
+        return self.request("GET", "/api/v1/brand-kits/options")
+
+    def get_brand_kit(self, kit_id: int | str) -> Any:
+        return self.request("GET", f"/api/v1/brand-kits/{_int_seg(kit_id, 'kit_id')}")
+
+    def _brand_kit_body(self, fields: dict[str, Any], logo_path: str | Path | None) -> dict[str, Any]:
+        body = {k: v for k, v in fields.items() if v is not None}
+        if logo_path:
+            if body.get("logo_url") or body.get("logo_media_id"):
+                raise CliptudeApiError("Give one logo: logo_path, logo_url or logo_media_id.")
+            body["logo_media_id"] = self.upload_brand_logo(logo_path)["media_id"]
+        return body
+
+    def create_brand_kit(self, *, name: str, logo_path: str | Path | None = None, **fields: Any) -> Any:
+        """A new brand kit: name plus any of channel_name, channel_handle, colors, fonts, logo_position,
+        logo_media_id, logo_url, is_default. ``logo_path`` (a local file) is uploaded first."""
+        body = self._brand_kit_body({"name": name, **fields}, logo_path)
+        return self.request("POST", "/api/v1/brand-kits", json_body=body, timeout=max(self.timeout, 60.0))
+
+    def update_brand_kit(self, kit_id: int | str, *, logo_path: str | Path | None = None, **fields: Any) -> Any:
+        """Change only the fields given (None = unchanged); ``logo_path`` is uploaded and becomes the logo."""
+        body = self._brand_kit_body(fields, logo_path)
+        if not body:
+            raise CliptudeApiError("Nothing to change: give a field to update.")
+        return self.request("PATCH", f"/api/v1/brand-kits/{_int_seg(kit_id, 'kit_id')}", json_body=body,
+                            timeout=max(self.timeout, 60.0))
+
+    def set_default_brand_kit(self, kit_id: int | str) -> Any:
+        return self.request("POST", f"/api/v1/brand-kits/{_int_seg(kit_id, 'kit_id')}/default")
+
+    def delete_brand_kit(self, kit_id: int | str) -> Any:
+        return self.request("DELETE", f"/api/v1/brand-kits/{_int_seg(kit_id, 'kit_id')}")
+
+    def start_brand_upload(self, *, filename: str, size: int, content_type: str | None = None) -> dict[str, Any]:
+        """Signed PUT URLs for a logo (PNG, JPG or WebP, up to 5 MB), for a host that sends the bytes itself."""
+        return self._start_signed_upload("/api/v1/uploads/brand", filename=filename, size=size, content_type=content_type)
+
+    def finish_brand_upload(self, *, key: str, upload_id: str, kit_id: int | str | None = None) -> Any:
+        """Returns {media_id, url, ...}; with kit_id the logo goes on that kit at once (brand_kit in the result)."""
+        body: dict[str, Any] = {"key": key, "upload_id": upload_id}
+        if kit_id not in (None, ""):
+            body["kit_id"] = int(_int_seg(kit_id, "kit_id"))
+        return self.request("POST", "/api/v1/uploads/brand/complete", json_body=body, timeout=max(self.timeout, 60.0))
+
+    def abort_brand_upload(self, *, key: str, upload_id: str) -> Any:
+        return self.request("POST", "/api/v1/uploads/brand/abort", json_body={"key": key, "upload_id": upload_id})
+
+    def upload_brand_logo(self, path: str | Path, *, kit_id: int | str | None = None) -> Any:
+        """Upload a local logo file through the signed-URL flow; returns {media_id, url, ...}."""
+        path = self._local_file(path, "logo_path")
+        if not path.is_file():
+            raise CliptudeApiError(f"Logo file not found: {path}")
+        init = self.request("POST", "/api/v1/uploads/brand/init", json_body={
+            "filename": path.name,
+            "size": path.stat().st_size,
+            "content_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        })
+        body = {"key": (init or {}).get("key"), "upload_id": (init or {}).get("upload_id")}
+        try:
+            self._upload_parts(path, init, "/api/v1/uploads/brand/sign-parts", "logo")
+            return self.finish_brand_upload(key=body["key"], upload_id=body["upload_id"], kit_id=kit_id)
+        except Exception:
+            try:
+                self.request("POST", "/api/v1/uploads/brand/abort", json_body=body)
+            except Exception:
+                pass
+            raise
+
+    # --- media library uploads (pictures, clips, audio; videos/library_upload.py) -------------------------------
+
+    def start_library_upload(self, *, filename: str, size: int, content_type: str | None = None) -> dict[str, Any]:
+        """Signed PUT URLs for one media-library file (picture up to 15 MB, clip up to 300 MB, audio up to 95 MB),
+        for a host that sends the bytes itself."""
+        return self._start_signed_upload("/api/v1/uploads/library", filename=filename, size=size,
+                                         content_type=content_type)
+
+    def finish_library_upload(self, *, key: str, upload_id: str, folder: str | None = None,
+                              name: str | None = None) -> Any:
+        """Returns the file as list_media shows it, with its media_id and @tag."""
+        body: dict[str, Any] = {"key": key, "upload_id": upload_id}
+        if folder:
+            body["folder"] = folder
+        if name:
+            body["name"] = name
+        return self.request("POST", "/api/v1/uploads/library/complete", json_body=body,
+                            timeout=max(self.timeout, 180.0))
+
+    def abort_library_upload(self, *, key: str, upload_id: str) -> Any:
+        return self.request("POST", "/api/v1/uploads/library/abort", json_body={"key": key, "upload_id": upload_id})
+
+    def upload_to_library(self, path: str | Path, *, folder: str | None = None, name: str | None = None) -> Any:
+        """Upload one local file to the media library through the signed-URL flow; returns {media_id, tag, url, ...}."""
+        path = self._local_file(path, "path")
+        if not path.is_file():
+            raise CliptudeApiError(f"File not found: {path}")
+        init = self.request("POST", "/api/v1/uploads/library/init", json_body={
+            "filename": path.name,
+            "size": path.stat().st_size,
+            "content_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        })
+        body = {"key": (init or {}).get("key"), "upload_id": (init or {}).get("upload_id")}
+        try:
+            self._upload_parts(path, init, "/api/v1/uploads/library/sign-parts", path.name)
+            return self.finish_library_upload(key=body["key"], upload_id=body["upload_id"], folder=folder, name=name)
+        except Exception:
+            try:
+                self.request("POST", "/api/v1/uploads/library/abort", json_body=body)
+            except Exception:
+                pass
+            raise
+
+    def upload_many_to_library(self, paths: list[str | Path], *, folder: str | None = None) -> dict[str, Any]:
+        """Upload several local files (one at a time; a failure does not stop the rest). Returns
+        {uploaded: [...], failed: [{path, error}]}."""
+        uploaded, failed = [], []
+        for p in paths:
+            try:
+                uploaded.append(self.upload_to_library(p, folder=folder))
+            except Exception as exc:  # one bad file must not lose the others
+                failed.append({"path": str(p), "error": str(exc)})
+        return {"uploaded": uploaded, "failed": failed}
+
+    def import_media(self, *, url: str, folder: str | None = None, name: str | None = None) -> Any:
+        """Download a public https link (picture, clip or audio) into the media library."""
+        body: dict[str, Any] = {"url": url}
+        if folder:
+            body["folder"] = folder
+        if name:
+            body["name"] = name
+        return self.request("POST", "/api/v1/media/import", json_body=body, timeout=max(self.timeout, 180.0))
 
     def list_media(self, *, folder: str | None = None, kind: str | None = None, limit: int = 50,
                    offset: int = 0) -> Any:
@@ -644,16 +913,26 @@ class CliptudeClient:
         thumbnail: dict[str, str] | None = None,
         vector_character_id: str | None = None,
         vector_reveal_mode: str | None = None,
+        vector_art_style: str | None = None,
+        vector_image_model: str | None = None,
         pronunciations: list[dict[str, str]] | None = None,
         visual_direction: str | None = None,
         captions: bool | None = None,
         look: str | None = None,
+        brand_kit_id: int | None = None,
         review_token: str | None = None,
         acknowledge: list[str] | None = None,
         review_only: bool | None = None,
+        sponsor: str | None = None,
+        sponsor_placement: str | None = None,
+        sponsor_bumpers: bool | None = None,
+        aroll: Any = None,
+        include_aroll: bool | None = None,
     ) -> Any:
         if voiceover_path and voiceover_url:
             raise CliptudeApiError("Give voiceover_path or voiceover_url, not both.")
+        # A sponsored segment and A-roll clips are sentences in the description, the same on every path.
+        prompt = merge_aroll(merge_sponsor(prompt, sponsor, sponsor_placement, sponsor_bumpers), aroll)
         # visual_direction is deprecated: the description (prompt) carries the visual direction. Older callers still
         # send it, so it is appended to the prompt here, the same on every path (JSON, voiceover upload, talking head).
         prompt = merge_visual_direction(prompt, visual_direction)
@@ -725,6 +1004,7 @@ class CliptudeClient:
                 thumbnail=thumbnail,
                 captions=captions,
                 look=look,
+                brand_kit_id=brand_kit_id,
                 review=_review_job_fields(review_token, acknowledge, review_only),
             )
         if vo_path:
@@ -739,10 +1019,14 @@ class CliptudeClient:
                 **_thumbnail_job_field(thumbnail, as_string=True),
                 **({"vector_character_id": str(vector_character_id)} if vector_character_id else {}),
                 **({"vector_reveal_mode": str(vector_reveal_mode)} if vector_reveal_mode else {}),
+                **({"vector_art_style": str(vector_art_style)} if vector_art_style else {}),
+                **({"vector_image_model": str(vector_image_model)} if vector_image_model else {}),
                 **({"pronunciations": json.dumps(pronunciations)} if pronunciations is not None else {}),
                 **({"visual_direction": visual_direction} if visual_direction else {}),
                 **({"captions": "true" if captions else "false"} if captions is not None else {}),
                 **({"look": str(look).strip() or "none"} if look is not None else {}),
+                **({"brand_kit_id": str(int(brand_kit_id))} if brand_kit_id is not None else {}),
+                **({"include_aroll": "true" if include_aroll else "false"} if include_aroll is not None else {}),
                 **({"prompt": prompt} if prompt else {}),
                 **_review_job_fields(review_token, acknowledge, review_only, as_strings=True),
             }
@@ -769,6 +1053,8 @@ class CliptudeClient:
             body["voiceover_url"] = str(voiceover_url).strip()
         if render_only:
             body["render_only"] = True
+        if include_aroll is not None:
+            body["include_aroll"] = bool(include_aroll)
         body.update(_avatar_job_fields(
             avatar_intro_only, avatar_ai_footage,
             avatar_profile_id=avatar_profile_id, avatar_engine=avatar_engine,
@@ -779,6 +1065,10 @@ class CliptudeClient:
             body["vector_character_id"] = str(vector_character_id)
         if vector_reveal_mode:
             body["vector_reveal_mode"] = str(vector_reveal_mode)
+        if vector_art_style is not None:
+            body["vector_art_style"] = str(vector_art_style)
+        if vector_image_model:
+            body["vector_image_model"] = str(vector_image_model)
         if pronunciations is not None:
             body["pronunciations"] = pronunciations
         if visual_direction:
@@ -787,6 +1077,9 @@ class CliptudeClient:
             body["captions"] = bool(captions)
         if look is not None:
             body["look"] = str(look).strip()
+        if brand_kit_id is not None:
+            # The job's own brand kit (0 = the default kit); omitted = the template's.
+            body["brand_kit_id"] = int(brand_kit_id)
         body.update(_review_job_fields(review_token, acknowledge, review_only))
         return self.request("POST", "/api/v1/jobs", json_body=body)
 
@@ -888,6 +1181,7 @@ class CliptudeClient:
         thumbnail: dict[str, str] | None = None,
         captions: bool | None = None,
         look: str | None = None,
+        brand_kit_id: int | None = None,
         review: dict[str, Any] | None = None,
     ) -> Any:
         review = review or {}
@@ -897,6 +1191,9 @@ class CliptudeClient:
         if look is not None:
             captions_field["look"] = str(look).strip()
             captions_str["look"] = str(look).strip() or "none"
+        if brand_kit_id is not None:
+            captions_field["brand_kit_id"] = int(brand_kit_id)
+            captions_str["brand_kit_id"] = str(int(brand_kit_id))
         review_strings = {k: (",".join(v) if isinstance(v, list) else ("true" if v is True else v))
                           for k, v in review.items()}
         motion_extra = _motion_control_job_fields(
@@ -1209,10 +1506,12 @@ class CliptudeClient:
         compact: bool = False,
         types: list[str] | None = None,
         premium: bool = False,
+        look: str | None = None,
     ) -> Any:
         """Every graphic an agent can place. compact: one summary line each; types: full entries for those;
-        premium: only the premium boards."""
-        params = {k: v for k, v in (("format", format), ("theme", theme)) if v}
+        premium: only the premium boards; look: the job's Look slug (a Look with a spec lists only its own boards,
+        and check_plan refuses the others)."""
+        params = {k: v for k, v in (("format", format), ("theme", theme), ("look", look)) if v}
         if compact:
             params["compact"] = "1"
         if premium:
@@ -1449,13 +1748,24 @@ class CliptudeClient:
         vector_reveal_mode: str | None = None,
         captions: bool | None = None,
         look: str | None = None,
+        sponsor: str | None = None,
+        sponsor_placement: str | None = None,
+        sponsor_bumpers: bool | None = None,
+        brand_kit_id: int | None = None,
+        aroll: Any = None,
+        include_aroll: bool | None = None,
     ) -> Any:
         """Credits a job would need; creates nothing."""
+        prompt = merge_aroll(merge_sponsor(prompt, sponsor, sponsor_placement, sponsor_bumpers), aroll)
         body: dict[str, Any] = {"template_id": template_id}
+        if include_aroll is not None:
+            body["include_aroll"] = bool(include_aroll)
         if captions is not None:
             body["captions"] = bool(captions)
         if look is not None:
             body["look"] = str(look).strip()
+        if brand_kit_id is not None:
+            body["brand_kit_id"] = int(brand_kit_id)
         if render_only:
             body["render_only"] = True
         for key, value in (

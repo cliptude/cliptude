@@ -19,7 +19,7 @@ If the user only gave a topic or title, **do not** pass that title as `--prompt`
 
 Live formats: `faceless_documentary`, `faceless_top_10`, `avatar_video`, `talking_head`, `vector_explainer` (16:9 only; every other format is retired). Avatars are Avatar IV only. Captions are off by default; turn them on only when the user asks, with `--captions` on `generate` / `plan-job` / the template, or after the build with `cliptude edit` and `{"op": "set_captions", "enabled": true}`.
 
-To direct every visual yourself (theme, colours, graphics, text, timing and the search query or URL behind every shot) on a Faceless Documentary, Faceless Top 10, Avatar Video or Vector Explainer template (not one with a motion-graphics Look such as `neon-noir` or `route-atlas`: those use `generate`), follow **cliptude-plan**: `cliptude plan-job` / `create_plan_job`, then check, lock and continue the plan, review the build with `cliptude plan-review` / `get_plan_review` (revise on the same job if needed), and render once; Cliptude only voices, sources and renders it.
+To direct every visual yourself (theme, colours, graphics, text, timing and the search query or URL behind every shot) on a Faceless Documentary, Faceless Top 10, Avatar Video or Vector Explainer template (not an older one that still carries a motion-graphics Look: those use `generate`), follow **cliptude-plan**: `cliptude plan-job` / `create_plan_job`, then check, lock and continue the plan, review the build with `cliptude plan-review` / `get_plan_review` (revise on the same job if needed), and render once; Cliptude only voices, sources and renders it.
 
 Then generate with a saved template name (prompt, script, voiceover, or talking-head — pick one):
 
