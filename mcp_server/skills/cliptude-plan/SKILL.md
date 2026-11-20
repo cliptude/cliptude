@@ -15,7 +15,7 @@ but `talking_head`; every other format is retired). Not available in the desktop
 template that still carries a motion-graphics Look** (none is offered any more; e.g. `neon-noir`, `paper-atlas`,
 `data-desk`): Cliptude draws those from its component library, so `create_plan_job` refuses them (code
 `motion_graphics_look_plan`); make those videos with `create_job` (see the **cliptude** skill), or give the template
-an offered Look first. A Look for a plan job comes from `list_looks` (the twelve offered Looks); any other slug is
+an offered Look first. A Look for a plan job comes from `list_looks` (the offered Looks); any other slug is
 refused with code `look_hidden`, unless it is the template's own Look. Videos are
 16:9, avatars Avatar IV only, and captions are off by default (only when the user asks: `captions: true` on
 `create_plan_job` / the template, CLI `--captions`, or after the build `edit_timeline`
@@ -783,14 +783,15 @@ the intent is used beside them and never changes them.
 slant_right, inset_wiggle`, or a look such as `bokeh_overlay`, `retro_film_overlay`, `smoke_fog_overlay` (an invalid
 value's error hint lists them all).
 `treatment`: `kenBurns, grain, flicker8mm, grayscaleIn, paper, dust, lightLeak, godRays, smoke, lensFlare,
-scanLine, cctv, colorChange, footageReveal`, or `"none"`. Weather: `rain, snow, embers, fireflies, leaves,
+softSparkles, scanLine, cctv, colorChange, footageReveal`, or `"none"`. `softSparkles` is a few slow white glints
+for a magical, celebratory or night moment (the old `sparkles` is gone and is refused). Weather: `rain, snow, embers, fireflies, leaves,
 stars`, sparse particles over the picture, on at most two beats a video and never two in a row; use one only
 where the narration is about that weather, fire or night sky. A treatment listed in the template's
 `excluded_film_treatments` is refused (`excluded_treatment`).
 - A beat gets a treatment **only when it sets `treatment`**; Cliptude adds none (no grain, smoke, light leak or
   colour change of its own). The theme's colour grade still applies to every picture.
 - `camera` unset: a beat that plays your `url` or a file you uploaded (`keep` from `upload_plan_media`) holds still
-  (a finished clip, capture or screenshot is shown as sent); any other beat, a kept file an earlier build found
+  (a clip or capture as sent; a screenshot whole, on a stage Look as a stage_shot card; media `screenshot` true/false overrides); any other beat, a kept file an earlier build found
   included, gets a plain slow move (zoom or pan, never an overlay or frame). `"camera": "none"` holds any beat still.
 - `clip_effect`: one CapCut-style look or camera move on the beat's picture, a `kind` from the catalog's
   `clip_effects` (or `"none"`). Looks recolour or texture it (`vhs_tape`, `film_reel`, `old_hollywood`, `comic`,

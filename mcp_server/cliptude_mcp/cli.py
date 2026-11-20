@@ -19,6 +19,21 @@ def _print(payload) -> None:
     sys.stdout.write("\n")
 
 
+def _screenshot_kw(args) -> dict:
+    """{"screenshot": True/False} when --screenshot / --no-screenshot was given, else {} (the call is unchanged)."""
+    value = getattr(args, "screenshot", None)
+    return {} if value is None else {"screenshot": value}
+
+
+def _add_screenshot_flag(parser) -> None:
+    """--screenshot / --no-screenshot: say whether a picture is a screenshot (shown whole and still); default: measured."""
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--screenshot", dest="screenshot", action="store_const", const=True, default=None,
+                       help="The picture is a screenshot of a post, thread, article or app screen: shown whole and still")
+    group.add_argument("--no-screenshot", dest="screenshot", action="store_const", const=False,
+                       help="The picture is a photo: cropped and moved like any picture, even if it looks like a screenshot")
+
+
 def _add_review_args(parser) -> None:
     parser.add_argument("--review-token", default="", help="Token from the job review (shown when you run without it)")
     parser.add_argument(
@@ -279,14 +294,14 @@ def _run_media(client: CliptudeClient, args) -> None:
         if args.name and len(args.paths) != 1:
             raise CliptudeApiError("--name names one file: upload one file with it.")
         if args.name:
-            _print(client.upload_to_library(args.paths[0], folder=args.folder, name=args.name))
+            _print(client.upload_to_library(args.paths[0], folder=args.folder, name=args.name, **_screenshot_kw(args)))
             return
-        result = client.upload_many_to_library(args.paths, folder=args.folder)
+        result = client.upload_many_to_library(args.paths, folder=args.folder, **_screenshot_kw(args))
         _print(result)
         if result.get("failed"):
             raise SystemExit(1)
     elif cmd == "import":
-        _print(client.import_media(url=args.url, folder=args.folder, name=args.name))
+        _print(client.import_media(url=args.url, folder=args.folder, name=args.name, **_screenshot_kw(args)))
 
 
 def _run_brand_kit(client: CliptudeClient, args) -> None:
@@ -760,10 +775,12 @@ def main(argv: list[str] | None = None) -> None:
     mdu.add_argument("paths", nargs="+", help="Files: pictures, clips (MP4, MOV, WebM) or audio")
     mdu.add_argument("--folder", default=None, help="Library folder for all of them (tag it as @folder_name)")
     mdu.add_argument("--name", default=None, help="A name (its @tag) when you upload one file")
+    _add_screenshot_flag(mdu)
     mdi = md_sub.add_parser("import", help="Download a public https link to a file into your media library")
     mdi.add_argument("url")
     mdi.add_argument("--folder", default=None, help="Library folder")
     mdi.add_argument("--name", default=None, help="File name with extension (its @tag), needed when the link has none")
+    _add_screenshot_flag(mdi)
     bk = sub.add_parser(
         "brand-kit",
         help="Brand kits (one per channel): list, options, get, create, update, set-default, delete",
@@ -1192,6 +1209,7 @@ def main(argv: list[str] | None = None) -> None:
     um.add_argument("path", help="Local JPG/PNG/WEBP/GIF (up to 15 MB) or MP4/MOV/WEBM/M4V (up to 300 MB)")
     um.add_argument("--split-shots", action="store_true",
                     help="Also cut a long source into 3-12 s clips on its cuts, each checked and kept (prints their keep ids)")
+    _add_screenshot_flag(um)
 
     ed = sub.add_parser("editor", help="Open the timeline editor project for a completed job (prints the timeline)")
     ed.add_argument("job_id")
@@ -1511,7 +1529,7 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == "plan-report":
             _print(client.get_plan_report(args.job_id))
         elif args.cmd == "upload-media":
-            _print(client.upload_plan_media(args.job_id, args.path, split_shots=args.split_shots))
+            _print(client.upload_plan_media(args.job_id, args.path, split_shots=args.split_shots, **_screenshot_kw(args)))
         elif args.cmd == "download-voiceover":
             dest = Path(args.out)
             client.download_voiceover_file(args.job_id, dest)

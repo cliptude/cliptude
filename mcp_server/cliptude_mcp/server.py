@@ -28,6 +28,11 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 _SERVER_MODE = {"remote": False}
 
 
+# One sentence for every tool that takes the screenshot flag (videos/screenshots.py on the server).
+SCREENSHOT_FLAG_DESC = ("true: this picture is a screenshot of a post, thread, article or app screen, shown whole and "
+                        "still (a stage_shot card on stage Looks); false: a photo, cropped and moved like any picture; "
+                        "omit to let Cliptude measure it (the upload result says which: screenshot.source).")
+
 def _remote() -> bool:
     return bool(_SERVER_MODE["remote"])
 
@@ -869,7 +874,8 @@ def build_server(*, with_http_auth: bool = False):
         upload_id: Annotated[str | None, Field(description="upload_id from start_library_upload (one file)")] = None,
         folder: Annotated[str | None, Field(max_length=80, description="Library folder to keep them in (e.g. jensen_followup); a description tags the whole folder as @folder_name.")] = None,
         name: Annotated[str | None, Field(max_length=200, description="A name for one file (its @tag); omit to keep the file's name.")] = None,
-        uploads: Annotated[list[dict[str, Any]] | None, Field(max_length=50, description="Several uploads at once (up to 50): [{\"key\": ..., \"upload_id\": ..., \"name\"?: ...}, ...] from start_library_upload's uploads.")] = None,
+        uploads: Annotated[list[dict[str, Any]] | None, Field(max_length=50, description="Several uploads at once (up to 50): [{\"key\": ..., \"upload_id\": ..., \"name\"?: ..., \"screenshot\"?: true|false}, ...] from start_library_upload's uploads.")] = None,
+        screenshot: Annotated[bool | None, Field(description=SCREENSHOT_FLAG_DESC)] = None,
     ) -> dict[str, Any]:
         """Close library uploads (one, or up to 50 with uploads). Cliptude checks each file really is a picture, clip or audio file and keeps it in the media library, exactly like an upload on cliptude.com/videos/media/. Returns {media_id, tag, name, folder, kind, url} for one file, or {uploaded: [...], failed: [...]} for several: use tag in a create_job description, as aroll (A-roll with its own sound) or sponsor, or media_id in edit_timeline add_aroll / add_sponsor."""
         try:
@@ -883,13 +889,15 @@ def build_server(*, with_http_auth: bool = False):
                     try:
                         done.append(client.finish_library_upload(key=str(item.get("key") or ""),
                                                                  upload_id=str(item.get("upload_id") or ""),
-                                                                 folder=folder, name=item.get("name")))
+                                                                 folder=folder, name=item.get("name"),
+                                                                 screenshot=item.get("screenshot", screenshot)))
                     except Exception as exc:  # one bad file must not lose the others
                         failed.append({"index": i, "key": item.get("key"), "error": str(exc)})
                 return {"uploaded": done, "failed": failed}
             if not key or not upload_id:
                 return {"error": "Give key and upload_id (one file), or uploads (several)."}
-            return client.finish_library_upload(key=key, upload_id=upload_id, folder=folder, name=name)
+            return client.finish_library_upload(key=key, upload_id=upload_id, folder=folder, name=name,
+                                                screenshot=screenshot)
         except Exception as exc:
             return _err(exc)
 
@@ -901,13 +909,14 @@ def build_server(*, with_http_auth: bool = False):
     def upload_to_library(
         paths: Annotated[list[str], Field(min_length=1, max_length=50, description="Local files to upload, up to 50 a call: pictures (up to 15 MB), clips (up to 300 MB), audio (up to 95 MB). Stdio / local MCP only: on a remote host use start_library_upload + finish_library_upload (both take a list of files), or import_media for a public link.")],
         folder: Annotated[str | None, Field(max_length=80, description="Library folder for all of them (e.g. jensen_followup).")] = None,
+        screenshot: Annotated[bool | None, Field(description=SCREENSHOT_FLAG_DESC)] = None,
     ) -> dict[str, Any]:
         """Upload one or many local files to the user's media library (each checked like a media-page upload; one failure does not stop the rest). Returns {uploaded: [{media_id, tag, name, kind, url}], failed: [{path, error}]}."""
         refused = _local_path_refused(remote, ("paths", " ".join(paths or [])))
         if refused:
             return refused
         try:
-            return _client().upload_many_to_library(paths, folder=folder)
+            return _client().upload_many_to_library(paths, folder=folder, screenshot=screenshot)
         except Exception as exc:
             return _err(exc)
 
@@ -920,10 +929,11 @@ def build_server(*, with_http_auth: bool = False):
         url: Annotated[str, Field(min_length=12, description="Public https link to a picture, clip or audio file (not a web page or a YouTube link). Only send media the user may use.")],
         folder: Annotated[str | None, Field(max_length=80, description="Library folder to keep it in.")] = None,
         name: Annotated[str | None, Field(max_length=200, description="File name with extension (its @tag), e.g. kress_interview.mp4; needed when the link does not end in one.")] = None,
+        screenshot: Annotated[bool | None, Field(description=SCREENSHOT_FLAG_DESC)] = None,
     ) -> dict[str, Any]:
         """Download a file from a public https link into the user's media library (same size limits and checks as an upload). Returns {media_id, tag, name, folder, kind, url}."""
         try:
-            return _client().import_media(url=url, folder=folder, name=name)
+            return _client().import_media(url=url, folder=folder, name=name, screenshot=screenshot)
         except Exception as exc:
             return _err(exc)
 
@@ -1849,13 +1859,14 @@ def build_server(*, with_http_auth: bool = False):
             Field(description="Local picture (JPG/PNG/WEBP/GIF, up to 15 MB) or clip (MP4/MOV/WEBM/M4V, up to 300 MB). Stdio / local MCP only: on a remote host (mcp.cliptude.com) use start_media_upload + finish_media_upload, which work from any agent that can run curl."),
         ],
         split_shots: Annotated[bool, Field(description="For a long source clip (a trailer, featurette, interview): also cut it into clips of 3-12 s that start and end on its cuts, each checked, measured and kept like an upload, with near-black and white-flash parts left out. Returns shots=[{keep, from_s, seconds, notes?}]. Use it instead of cutting clips yourself.")] = False,
+        screenshot: Annotated[bool | None, Field(description=SCREENSHOT_FLAG_DESC)] = None,
     ) -> dict[str, Any]:
         """Send a picture or clip you found yourself to a plan job. The file goes straight to Cliptude's storage on signed URLs (no storage keys needed) and is checked to be a real picture or video, and for nudity and gore (refused). Returns {keep, file, media_type, size, notes?}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot, with start_s/end_s on a beat to play only part of a clip. notes say where a clip runs into a title or logo card or a weapon aimed at someone (trim it with start_s/end_s as they say), and what the build review will report on the file (a channel watermark, an end screen, captions): use another file then. A render-only job makes no checks (no notes, no refusals): your agent checks every file."""
         refused = _local_path_refused(remote, ("path", path))
         if refused:
             return refused
         try:
-            return _client().upload_plan_media(job_id, path, split_shots=split_shots)
+            return _client().upload_plan_media(job_id, path, split_shots=split_shots, screenshot=screenshot)
         except Exception as exc:
             return _err(exc)
 
@@ -1886,10 +1897,12 @@ def build_server(*, with_http_auth: bool = False):
         key: Annotated[str, Field(min_length=1, description="key from start_media_upload")],
         upload_id: Annotated[str, Field(min_length=1, description="upload_id from start_media_upload")],
         split_shots: Annotated[bool, Field(description="For a long source clip (a trailer, featurette, interview): also cut it into clips of 3-12 s that start and end on its cuts, each checked, measured and kept like an upload, with near-black and white-flash parts left out. Returns shots=[{keep, from_s, seconds, notes?}]. Use it instead of cutting clips yourself.")] = False,
+        screenshot: Annotated[bool | None, Field(description=SCREENSHOT_FLAG_DESC)] = None,
     ) -> dict[str, Any]:
-        """Close an upload after every part is PUT. Cliptude checks it is a real picture or video (nudity and gore are refused) and returns {keep, file, media_type, size, notes?}: put {"keep": "<id>"} as a beat's media or a graphic's picture slot (start_s/end_s on a beat to play part of a clip). notes say where a clip runs into a title or logo card or a weapon aimed at someone: trim it as they say. A render-only job makes no checks (no notes, no refusals): your agent checks every file."""
+        """Close an upload after every part is PUT. Cliptude checks it is a real picture or video (nudity and gore are refused) and returns {keep, file, media_type, size, notes?, screenshot?}: screenshot (aspect, shown_as) marks a post or article capture, which the build and edit_timeline show whole and still (put it on the line that reads it). Put {"keep": "<id>"} as a beat's media or a graphic's picture slot (start_s/end_s on a beat to play part of a clip). notes say where a clip runs into a title or logo card or a weapon aimed at someone: trim it as they say. A render-only job makes no checks (no notes, no refusals): your agent checks every file."""
         try:
-            return _client().finish_media_upload(job_id, key=key, upload_id=upload_id, split_shots=split_shots)
+            return _client().finish_media_upload(job_id, key=key, upload_id=upload_id, split_shots=split_shots,
+                                                 screenshot=screenshot)
         except Exception as exc:
             return _err(exc)
 
@@ -2088,7 +2101,7 @@ def build_server(*, with_http_auth: bool = False):
                 "catalog prop_schema); {op:'set_type', item_id, animation_type, props?} (another design, same timing); "
                 "{op:'set_picture', item_id, keep|url} (a graphic's picture slot, or a clip's or image's file); "
                 "{op:'mute_cues', item_id} (silence a graphic's own sound cues); {op:'add_graphic', animation_type, "
-                "start_s, end_s, props, keep?|url?}; {op:'add_clip', keep|url, start_s, end_s, from_s?} (footage layer); "
+                "start_s, end_s, props, keep?|url?}; {op:'add_clip', keep|url, start_s, end_s, from_s?, label?, focus?, screenshot?} (footage layer; a screenshot of a post or article (measured, or screenshot true; false opts out; add_graphic and set_picture take it too) is shown whole and still: on a stage Look as a stage_shot card with label as its pill and focus top|center|bottom for a long one, else full frame uncropped; fit:'cover' opts out); "
                 "{op:'set_transition', from_id, to_id, kind, direction?, duration_s?} (the join between two clips; "
                 "kind 'none' removes it); {op:'set_captions', enabled:true|false} (captions are off by default on every "
                 "video; this shows or hides them all); {op:'set_caption_style', style:{color, activeColor, appearedColor, "

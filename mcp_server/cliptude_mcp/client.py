@@ -768,20 +768,24 @@ class CliptudeClient:
                                          content_type=content_type)
 
     def finish_library_upload(self, *, key: str, upload_id: str, folder: str | None = None,
-                              name: str | None = None) -> Any:
-        """Returns the file as list_media shows it, with its media_id and @tag."""
+                              name: str | None = None, screenshot: bool | None = None) -> Any:
+        """Returns the file as list_media shows it, with its media_id and @tag. screenshot: True / False says
+        whether a picture is a screenshot (shown whole and still); None lets Cliptude measure it."""
         body: dict[str, Any] = {"key": key, "upload_id": upload_id}
         if folder:
             body["folder"] = folder
         if name:
             body["name"] = name
+        if screenshot is not None:
+            body["screenshot"] = bool(screenshot)
         return self.request("POST", "/api/v1/uploads/library/complete", json_body=body,
                             timeout=max(self.timeout, 180.0))
 
     def abort_library_upload(self, *, key: str, upload_id: str) -> Any:
         return self.request("POST", "/api/v1/uploads/library/abort", json_body={"key": key, "upload_id": upload_id})
 
-    def upload_to_library(self, path: str | Path, *, folder: str | None = None, name: str | None = None) -> Any:
+    def upload_to_library(self, path: str | Path, *, folder: str | None = None, name: str | None = None,
+                          screenshot: bool | None = None) -> Any:
         """Upload one local file to the media library through the signed-URL flow; returns {media_id, tag, url, ...}."""
         path = self._local_file(path, "path")
         if not path.is_file():
@@ -794,7 +798,8 @@ class CliptudeClient:
         body = {"key": (init or {}).get("key"), "upload_id": (init or {}).get("upload_id")}
         try:
             self._upload_parts(path, init, "/api/v1/uploads/library/sign-parts", path.name)
-            return self.finish_library_upload(key=body["key"], upload_id=body["upload_id"], folder=folder, name=name)
+            return self.finish_library_upload(key=body["key"], upload_id=body["upload_id"], folder=folder, name=name,
+                                              screenshot=screenshot)
         except Exception:
             try:
                 self.request("POST", "/api/v1/uploads/library/abort", json_body=body)
@@ -802,20 +807,24 @@ class CliptudeClient:
                 pass
             raise
 
-    def upload_many_to_library(self, paths: list[str | Path], *, folder: str | None = None) -> dict[str, Any]:
+    def upload_many_to_library(self, paths: list[str | Path], *, folder: str | None = None,
+                               screenshot: bool | None = None) -> dict[str, Any]:
         """Upload several local files (one at a time; a failure does not stop the rest). Returns
         {uploaded: [...], failed: [{path, error}]}."""
         uploaded, failed = [], []
         for p in paths:
             try:
-                uploaded.append(self.upload_to_library(p, folder=folder))
+                uploaded.append(self.upload_to_library(p, folder=folder, screenshot=screenshot))
             except Exception as exc:  # one bad file must not lose the others
                 failed.append({"path": str(p), "error": str(exc)})
         return {"uploaded": uploaded, "failed": failed}
 
-    def import_media(self, *, url: str, folder: str | None = None, name: str | None = None) -> Any:
+    def import_media(self, *, url: str, folder: str | None = None, name: str | None = None,
+                     screenshot: bool | None = None) -> Any:
         """Download a public https link (picture, clip or audio) into the media library."""
         body: dict[str, Any] = {"url": url}
+        if screenshot is not None:
+            body["screenshot"] = bool(screenshot)
         if folder:
             body["folder"] = folder
         if name:
@@ -1412,7 +1421,8 @@ class CliptudeClient:
 
     # Agent-planned videos -------------------------------------------------------------------------
 
-    def upload_plan_media(self, job_id: str, path: str | Path, *, split_shots: bool = False) -> Any:
+    def upload_plan_media(self, job_id: str, path: str | Path, *, split_shots: bool = False,
+                          screenshot: bool | None = None) -> Any:
         """Send a picture or clip you found to a plan job; returns {keep, file, media_type, size} for media.keep.
 
         split_shots: a long source (a trailer, a featurette) is also cut into clips on its cuts, each checked and
@@ -1434,7 +1444,8 @@ class CliptudeClient:
         try:
             self._upload_parts(path, init, f"{base}/sign-parts", "media")
             return self.request(
-                "POST", f"{base}/complete", json_body={**body, **({"split_shots": True} if split_shots else {})},
+                "POST", f"{base}/complete", json_body={**body, **({"split_shots": True} if split_shots else {}),
+                                                       **({} if screenshot is None else {"screenshot": bool(screenshot)})},
                 timeout=_complete_timeout(self.timeout, split_shots),
             )
         except Exception as exc:
@@ -1477,8 +1488,10 @@ class CliptudeClient:
         """Signed PUT URLs for a picture or clip of a plan job, for a host that sends the bytes itself."""
         return self._start_signed_upload(f"/api/v1/jobs/{_uuid_seg(job_id)}/media", filename=filename, size=size, content_type=content_type)
 
-    def finish_media_upload(self, job_id: str, *, key: str, upload_id: str, split_shots: bool = False) -> Any:
-        body = {"key": key, "upload_id": upload_id, **({"split_shots": True} if split_shots else {})}
+    def finish_media_upload(self, job_id: str, *, key: str, upload_id: str, split_shots: bool = False,
+                            screenshot: bool | None = None) -> Any:
+        body = {"key": key, "upload_id": upload_id, **({"split_shots": True} if split_shots else {}),
+                **({} if screenshot is None else {"screenshot": bool(screenshot)})}
         return self.request("POST", f"/api/v1/jobs/{_uuid_seg(job_id)}/media/complete", json_body=body,
                             timeout=_complete_timeout(self.timeout, split_shots))
 
