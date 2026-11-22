@@ -918,7 +918,7 @@ def main(argv: list[str] | None = None) -> None:
     est.add_argument("--avatar-intro-only", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar-ai-footage", action=argparse.BooleanOptionalAction, default=None)
     est.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    est.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
+    est.add_argument("--avatar-engine", default="", choices=["", "6", "iv"], help="Avatar Video: 6 (Avatar 6, the only engine; iv is read as 6). Default: the template's")
     est.add_argument("--vector-motion", default="", choices=["", "none", "video"], help="Vector Explainer: price stills (none) or AI clips (video)")
     _add_captions_arg(est, scope="this video")
     _add_job_look_arg(est)
@@ -989,7 +989,7 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     g.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    g.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
+    g.add_argument("--avatar-engine", default="", choices=["", "6", "iv"], help="Avatar Video: 6 (Avatar 6, the only engine; iv is read as 6). Default: the template's")
     g.add_argument(
         "--disable-animations",
         action=argparse.BooleanOptionalAction,
@@ -1158,7 +1158,7 @@ def main(argv: list[str] | None = None) -> None:
     pj.add_argument("--voiceover-url", default="", help="Public https link to the narration audio; Cliptude downloads it")
     pj.add_argument("--duration", default="", help="Wizard duration bucket, e.g. 6-8")
     pj.add_argument("--avatar", type=int, default=None, help="Avatar Video: avatar id from `cliptude avatars`. Default: the template's avatar")
-    pj.add_argument("--avatar-engine", default="", choices=["", "iv"], help="Avatar Video: iv (Avatar IV, the only engine). Default: the template's")
+    pj.add_argument("--avatar-engine", default="", choices=["", "6", "iv"], help="Avatar Video: 6 (Avatar 6, the only engine; iv is read as 6). Default: the template's")
     pj.add_argument("--render-only", action="store_true", help="You bring everything (needs --voiceover); Cliptude only builds and renders, at the render-only rate")
     _add_thumbnail_args(pj, scope="this video")
     _add_pronunciations_arg(pj)

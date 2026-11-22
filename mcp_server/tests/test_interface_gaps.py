@@ -61,11 +61,12 @@ class McpSurfaceTests(TestCase):
         self.assertIn("set_captions", tools["edit_timeline"].input_schema["properties"]["operations"]["description"])
         self.assertIn("motion_graphics_look_plan", server.instructions)
         self.assertIn("motion_graphics_look_plan", tools["create_plan_job"].description)
-        # Nov 18 2026: only the twelve offered Looks (videos/look_offer.py) are named; a hidden one is refused for a
+        # Nov 18 2026 (count dropped Nov 22): only the offered Looks (videos/look_offer.py) are named; a hidden one is refused for a
         # new template or job (look_hidden) and never offered, motion-graphics and Vector Explainer Looks included.
         self.assertIn("look_hidden", server.instructions)
         looks = tools["list_looks"].description
-        self.assertIn("twelve offered Looks", looks)
+        self.assertIn("The offered Looks", looks)
+        self.assertNotIn("twelve", looks)
         self.assertIn("look_hidden", looks)
         for hidden in ("data-desk", "neon-noir", "editorial-explainer", "cosy-cosmos", "what-if-tale",
                        "Field Dossier", "Cold Case Board", "twenty"):

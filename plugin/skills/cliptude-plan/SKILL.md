@@ -17,7 +17,7 @@ template that still carries a motion-graphics Look** (none is offered any more; 
 `motion_graphics_look_plan`); make those videos with `create_job` (see the **cliptude** skill), or give the template
 an offered Look first. A Look for a plan job comes from `list_looks` (the offered Looks); any other slug is
 refused with code `look_hidden`, unless it is the template's own Look. Videos are
-16:9, avatars Avatar IV only, and captions are off by default (only when the user asks: `captions: true` on
+16:9, avatars Avatar 6 only, and captions are off by default (only when the user asks: `captions: true` on
 `create_plan_job` / the template, CLI `--captions`, or after the build `edit_timeline`
 `{"op": "set_captions", "enabled": true}`).
 
@@ -48,6 +48,8 @@ the visuals ("just make it"). Product videos too: `draft_product_script(..., pla
    video starts generating it can't be cancelled. Then call again
    with `review_token`; for each `acknowledgements_required` item (`no_general_web_content`, `no_video_footage`,
    `no_motion_graphics`, `no_music`, `no_sound_effects`, `no_transitions`) explain what it costs and pass it in `acknowledge` only after the user approves it.
+   A 409 `duplicate_title` means a job with this title is already running (its `job_id` is in the answer): nothing
+   was created or charged. Follow that job; never retry or change the title unless the user asks for a second video.
    `create_plan_job` / `cliptude plan-job` with exactly one of: `script` (the default: narration you
    researched and wrote, voiced as is), `prompt` (a brief, only when the user asks Cliptude to write the narration;
    never the bare title), or `voiceover_path` (audio you already have). Omit `prompt` when you send a script or a
